@@ -1,4 +1,4 @@
-import mech from "sasl-anonymous";
+import mech from "./mechanism.js";
 
 /**
  * [XEP-0175: Best Practices for Use of SASL ANONYMOUS](https://xmpp.org/extensions/xep-0175.html)
