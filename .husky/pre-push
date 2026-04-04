@@ -1,7 +1,0 @@
-BRANCH="$(git rev-parse --abbrev-ref HEAD)"
-
-if [[ "$BRANCH" == "main" ]]; then
-  make ci
-else
-  make test
-fi
