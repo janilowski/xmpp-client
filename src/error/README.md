@@ -2,9 +2,7 @@
 
 XMPP error abstraction for JavaScript.
 
-## Install
-
-`npm install @xmpp/error`
+This module is part of this repository's internal package set.
 
 ## Usage
 

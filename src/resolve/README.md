@@ -4,11 +4,7 @@ XMPP connection methods resolution for JavaScript
 
 `@xmpp/resolve` retrieves and sorts possible XMPP endpoints using DNS and HTTP Web Host Metadata.
 
-## Install
-
-```
-npm install @xmpp/resolve
-```
+This module is part of this repository's internal package set.
 
 ## Usage
 

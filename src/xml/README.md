@@ -1,10 +1,6 @@
 # xml
 
-## Install
-
-Note, if you're using `@xmpp/client` or `@xmpp/component`, you don't need to install `@xmpp/xml`.
-
-`npm install @xmpp/xml`
+This module is part of this repository's internal package set.
 
 ```js
 import xml from "@xmpp/xml";
@@ -64,7 +60,7 @@ const message = (
 );
 ```
 
-Requires a preprocessor such as [TypeScript](https://www.typescriptlang.org/) or [Babel](http://babeljs.io/) with [@babel/plugin-transform-react-jsx](https://babeljs.io/docs/en/next/babel-plugin-transform-react-jsx.html).
+Requires a JSX-capable preprocessor such as [TypeScript](https://www.typescriptlang.org/).
 
 ## Reading
 

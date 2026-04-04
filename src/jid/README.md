@@ -10,9 +10,7 @@ XMPP identifiers (JID) for JavaScript
 
 https://en.wikipedia.org/wiki/XMPP#Decentralization_and_addressing
 
-## Install
-
-`npm install @xmpp/jid`
+This module is part of this repository's internal package set.
 
 ## Usage
 

@@ -4,11 +4,7 @@ Middleware for `@xmpp/client` and `@xmpp/component`.
 
 Supports Node.js and browsers.
 
-## Install
-
-```sh
-npm install @xmpp/middleware
-```
+This module is part of this repository's internal package set.
 
 ## Usage
 

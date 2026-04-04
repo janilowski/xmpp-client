@@ -4,9 +4,7 @@ Prints logs and debug information to the console for an entity.
 
 ⚠️ debug makes a best effort to replace sensitive information with `<hidden xmlns="xmpp.js"/>` but be careful not to share secrets when sharing logs.
 
-## Install
-
-`npm install @xmpp/debug`
+This module is part of this repository's internal package set.
 
 ## Example
 

@@ -2,33 +2,16 @@
 
 An XMPP client is an entity that connects to an XMPP server.
 
-`@xmpp/client` package includes a minimal set of features to connect and authenticate securely and reliably.
+`@xmpp/client` includes a minimal set of features to connect and authenticate securely and reliably.
 
 It supports Node.js, browsers and React Native. See [below](#transports) for differences.
 
-## Install
-
-`npm install @xmpp/client @xmpp/debug`
+This module is part of this repository's internal package set.
 
 ## Setup
 
 ```js
 import { client, xml, jid } from "@xmpp/client";
-```
-
-or
-
-```html
-<script
-  src="https://unpkg.com/@xmpp/client@VERSION/dist/xmpp.min.js"
-  crossorigin
-></script>
-```
-
-Replace `VERSION` with the desired version number.
-
-```js
-const { client, xml, jid } = window.XMPP;
 ```
 
 ## Example
@@ -85,26 +68,26 @@ await xmpp.start();
 
 ## xml
 
-See [xml package](/packages/xml)
+See [xml module](/src/xml)
 
 ## jid
 
-See [jid package](/packages/jid)
+See [jid module](/src/jid)
 
 ## client
 
 - `options` <`Object`>
   - `service` `<string>` The service to connect to, accepts an URI or a domain.
-    - `domain` lookup and connect to the most secure endpoint using [@xmpp/resolve](/packages/resolve)
-    - `xmpp://hostname:port` plain TCP, may be upgraded to TLS by [@xmpp/starttls](/packages/starttls)
+    - `domain` lookup and connect to the most secure endpoint using [@xmpp/resolve](/src/resolve)
+    - `xmpp://hostname:port` plain TCP, may be upgraded to TLS by starttls
     - `xmpps://hostname:port` direct TLS
     - `ws://hostname:port/path` plain WebSocket
     - `wss://hostname:port/path` secure WebSocket
   - `domain` `<string>` Optional domain of the service, if omitted will use the hostname from `service`. Useful when the service domain is different than the service hostname.
   - `lang` `<string>` Optional language tag for the stream, sets the `xml:lang` attribute on the stream per [RFC 6120 Section 4.7.4](https://xmpp.org/rfcs/rfc6120.html#streams-attr-xmllang). Useful for servers that use this attribute to determine the language for error messages.
-  - `resource` `<string`> Optional resource for [resource binding](/packages/resource-binding)
-  - `username` `<string>` Optional username for [sasl](/packages/sasl)
-  - `password` `<string>` Optional password for [sasl](/packages/sasl)
+  - `resource` `<string`> Optional resource for [resource binding](/src/resource-binding)
+  - `username` `<string>` Optional username for [sasl](/src/sasl)
+  - `password` `<string>` Optional password for [sasl](/src/sasl)
   - `timeout` `<number` Number of miliseconds to wait before timing out (default is `2000`)
 
 Returns an [xmpp](#xmpp) object.
@@ -150,7 +133,7 @@ xmpp.on("status", (status) => {
 
 ### Event `error`
 
-Emitted when an error occurs. For connection errors, `xmpp` will reconnect on its own using [@xmpp/reconnect](/packages/reconnect) however a listener MUST be attached to avoid uncaught exceptions.
+Emitted when an error occurs. For connection errors, `xmpp` will reconnect on its own using [@xmpp/reconnect](/src/reconnect) however a listener MUST be attached to avoid uncaught exceptions.
 
 - `<Error>`
 
@@ -164,7 +147,7 @@ xmpp.on("error", (error) => {
 
 Emitted when a stanza is received and parsed.
 
-- [`<Element>`](/packages/xml)
+- [`<Element>`](/src/xml)
 
 ```js
 // Simple echo bot example
@@ -183,7 +166,7 @@ xmpp.on("stanza", (stanza) => {
 
 Emitted when connected, authenticated and ready to receive/send stanzas.
 
-- [`<Jid>`](/packages/jid)
+- [`<Jid>`](/src/jid)
 
 ```js
 xmpp.on("online", (address) => {
@@ -284,7 +267,7 @@ This method returns false if there is no connection.
 
 ### xmpp.reconnect
 
-See [@xmpp/reconnect](/packages/reconnect).
+See [@xmpp/reconnect](/src/reconnect).
 
 ## Transports
 
@@ -292,20 +275,20 @@ XMPP supports multiple transports, this table list `@xmpp/client` supported and 
 
 |            transport             | protocols  | Node.js | Browser | React Native | Bun | Deno |
 | :------------------------------: | :--------: | :-----: | :-----: | :----------: | :-: | :--: |
-| [WebSocket](/packages/websocket) | `ws(s)://` |   ✔    |   ✔    |      ✔      | ✔  |  ✔  |
-|       [TCP](/packages/tcp)       | `xmpp://`  |   ✔    |    ✗    |      ✗       | ✔  |  ✔  |
-|       [TLS](/packages/tls)       | `xmpps://` |   ✔    |    ✗    |      ✗       | ✔  |  ✔  |
+| [WebSocket](/src/websocket) | `ws(s)://` |   ✔    |   ✔    |      ✔      | ✔  |  ✔  |
+|            TCP            | `xmpp://`  |   ✔    |    ✗    |      ✗       | ✔  |  ✔  |
+|            TLS            | `xmpps://` |   ✔    |    ✗    |      ✗       | ✔  |  ✔  |
 
 ## Authentication
 
 Multiple authentication mechanisms are supported.
-PLAIN should only be used over secure WebSocket (`wss://)`, direct TLS (`xmpps:`) or a TCP (`xmpp:`) connection upgraded to TLS via [STARTTLS](/packages/starttls)
+PLAIN should only be used over secure WebSocket (`wss://)`, direct TLS (`xmpps:`) or a TCP (`xmpp:`) connection upgraded to TLS via STARTTLS.
 
 |                   SASL                    | Node.js | Browser | React Native | Bun | Deno |
 | :---------------------------------------: | :-----: | :-----: | :----------: | --- | ---- |
-|   [ANONYMOUS](/packages/sasl-anonymous)   |   ✔    |   ✔    |      ✔      | ✔  | ✔   |
-|       [PLAIN](/packages/sasl-plain)       |   ✔    |   ✔    |      ✔      | ✔  | ✔   |
-| [SCRAM-SHA-1](/packages/sasl-scram-sha-1) |   ✔    |    ☐    |      ✗       | ✔  | ✔   |
+|   [ANONYMOUS](/src/sasl-anonymous)   |   ✔    |   ✔    |      ✔      | ✔  | ✔   |
+|       [PLAIN](/src/sasl-plain)       |   ✔    |   ✔    |      ✔      | ✔  | ✔   |
+|             SCRAM-SHA-1              |   ✔    |    ☐    |      ✗       | ✔  | ✔   |
 
 - ☐ : Optional
 - ✗ : Unavailable
