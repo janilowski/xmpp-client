@@ -30,8 +30,8 @@ async function resolveSrv(domain, { service, protocol }) {
 
   try {
     records = await dns.resolveSrv(`_${service}._${protocol}.${domain}`);
-  } catch (err) {
-    if (IGNORE_CODES.has(err.code)) return [];
+  } catch (error) {
+    if (IGNORE_CODES.has(error.code)) return [];
   }
 
   return records.map((record) => {

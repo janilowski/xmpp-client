@@ -1,3 +1,5 @@
+import { afterEach, beforeEach, expect, test } from "bun:test";
+
 import { component, xml, jid } from "../packages/component/index.js";
 import debug from "../packages/debug/index.js";
 import server from "../server/index.js";

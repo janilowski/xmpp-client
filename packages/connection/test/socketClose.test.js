@@ -1,8 +1,8 @@
 import { EventEmitter } from "@xmpp/events";
+import { test, expect, spyOn } from "bun:test";
 
 import Connection from "../index.js";
 
-import { test, expect, spyOn } from "bun:test";
 test("calls _detachSocket and _status", () => {
   expect.assertions(3);
   const conn = new Connection();

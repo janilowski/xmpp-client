@@ -20,8 +20,8 @@ function component(options) {
       await (typeof password === "function"
         ? password((creds) => entity.authenticate(id, creds))
         : entity.authenticate(id, password));
-    } catch (err) {
-      entity.emit("error", err);
+    } catch (error) {
+      entity.emit("error", error);
     }
   });
 

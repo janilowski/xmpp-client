@@ -2,7 +2,6 @@ import { tick } from "@xmpp/events";
 import { mockClient } from "@xmpp/test";
 import { datetime } from "@xmpp/time";
 import { Element } from "@xmpp/xml";
-
 import { test, expect, spyOn } from "bun:test";
 const mechanism = "HT-SHA-256-NONE";
 

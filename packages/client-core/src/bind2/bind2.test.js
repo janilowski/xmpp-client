@@ -45,7 +45,7 @@ test("with string tag", async () => {
 });
 
 test("with function resource returning string", async () => {
-  // eslint-disable-next-line unicorn/consistent-function-scoping
+   
   function resource() {
     return "1k2k3";
   }
@@ -80,7 +80,7 @@ test("with function resource throwing", async () => {
 });
 
 test("with function resource returning resolved promise", async () => {
-  // eslint-disable-next-line unicorn/consistent-function-scoping
+   
   async function resource() {
     return "1k2k3";
   }

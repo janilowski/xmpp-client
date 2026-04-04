@@ -7,8 +7,8 @@ test("rejects with TimeoutError if socket doesn't close", (done) => {
   const conn = new Connection();
   conn.socket = new EventEmitter();
   conn.socket.end = () => {};
-  conn._closeSocket().catch((err) => {
-    expect(err.name).toBe("TimeoutError");
+  conn._closeSocket().catch((error) => {
+    expect(error.name).toBe("TimeoutError");
     done();
   });
   expect(conn.status).toBe("disconnecting");
@@ -42,8 +42,8 @@ test("rejects if socket.end throws", (done) => {
     throw error;
   };
 
-  conn._closeSocket().catch((err) => {
-    expect(err).toBe(error);
+  conn._closeSocket().catch((error_) => {
+    expect(error_).toBe(error);
     done();
   });
 });

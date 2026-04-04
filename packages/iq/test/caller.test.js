@@ -42,8 +42,8 @@ test("removes the handler if sending failed", async () => {
 
   try {
     await promise;
-  } catch (err) {
-    expect(err).toBe(error);
+  } catch (error_) {
+    expect(error_).toBe(error);
     expect(iqCaller.handlers.size).toBe(0);
   }
 });
@@ -85,8 +85,8 @@ test("rejects with a StanzaError for error reply", async () => {
 
   try {
     await promiseRequest;
-  } catch (err) {
-    expect(err).toEqual(StanzaError.fromElement(errorElement));
+  } catch (error) {
+    expect(error).toEqual(StanzaError.fromElement(errorElement));
   }
 });
 
@@ -105,8 +105,8 @@ test("rejects with a TimeoutError if no answer is received within timeout", asyn
 
   try {
     await promise;
-  } catch (err) {
-    expect(err.name).toBe("TimeoutError");
+  } catch (error) {
+    expect(error.name).toBe("TimeoutError");
     expect(iqCaller.handlers.size).toBe(0);
   }
 });

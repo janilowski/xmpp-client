@@ -1,6 +1,6 @@
-import { test, beforeEach, afterEach } from "node:test";
 import { readFileSync } from "node:fs";
 
+import { afterEach, beforeEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 
 import { jid } from "./packages/client/index.js";
@@ -34,7 +34,7 @@ afterEach(async () => {
   await xmpp?.stop();
 });
 
-test("client ws://", async (t) => {
+test("client ws://", async () => {
   xmpp = window.XMPP.client({
     credentials,
     service,
@@ -42,5 +42,5 @@ test("client ws://", async (t) => {
   debug(xmpp);
 
   const address = await xmpp.start();
-  t.assert.strictEqual(address.bare().toString(), JID);
+  expect(address.bare().toString()).toBe(JID);
 });

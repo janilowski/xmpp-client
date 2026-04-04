@@ -135,8 +135,8 @@ class Connection extends EventEmitter {
       const { domain, lang } = this.options;
       await this.connect(service);
       await this.open({ domain, lang });
-    } catch (err) {
-      this.emit("error", err);
+    } catch (error_) {
+      this.emit("error", error_);
     }
   }
 
@@ -198,14 +198,14 @@ class Connection extends EventEmitter {
 
     try {
       el = await this._closeStream();
-    } catch (err) {
-      this.#onStreamClosed(err);
+    } catch (error) {
+      this.#onStreamClosed(error);
     }
 
     try {
       await this._closeSocket();
-    } catch (err) {
-      this.#onSocketClosed(true, err);
+    } catch (error) {
+      this.#onSocketClosed(true, error);
     }
 
     return el;
@@ -406,8 +406,8 @@ class Connection extends EventEmitter {
       [...hooks].map(async ([handler]) => {
         try {
           await handler(...args);
-        } catch (err) {
-          this.emit("error", err);
+        } catch (error) {
+          this.emit("error", error);
         }
       }),
     );

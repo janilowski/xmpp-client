@@ -71,10 +71,10 @@ export default function resolve({ entity }) {
 
     try {
       await fallbackConnect(entity, uris);
-    } catch (err) {
+    } catch (error) {
       await entity.disconnect();
       entity._status("disconnect");
-      throw err;
+      throw error;
     }
   };
 }

@@ -1,10 +1,10 @@
 import { EventEmitter } from "@xmpp/events";
 import xml from "@xmpp/xml";
+import { test, expect, mock, spyOn } from "bun:test";
 
 import ConnectionWebSocket from "../lib/Connection.js";
 import Socket from "../lib/Socket.js";
 
-import { test, expect, mock, spyOn } from "bun:test";
 test("send()", async () => {
   const connection = new ConnectionWebSocket();
   connection.socket = new Socket();

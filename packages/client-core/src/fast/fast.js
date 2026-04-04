@@ -27,22 +27,22 @@ export default function fast({ sasl2, entity }) {
     async save(token) {
       try {
         await this.saveToken(token);
-      } catch (err) {
-        entity.emit("error", err);
+      } catch (error) {
+        entity.emit("error", error);
       }
     },
     async fetch() {
       try {
         return this.fetchToken();
-      } catch (err) {
-        entity.emit("error", err);
+      } catch (error) {
+        entity.emit("error", error);
       }
     },
     async delete() {
       try {
         await this.deleteToken();
-      } catch (err) {
-        entity.emit("error", err);
+      } catch (error) {
+        entity.emit("error", error);
       }
     },
     saslFactory,
@@ -83,14 +83,14 @@ export default function fast({ sasl2, entity }) {
           features,
         });
         return true;
-      } catch (err) {
+      } catch (error) {
         if (
-          err instanceof SASLError &&
-          ["not-authorized", "credentials-expired"].includes(err.condition)
+          error instanceof SASLError &&
+          ["not-authorized", "credentials-expired"].includes(error.condition)
         ) {
           return onInvalidToken();
         }
-        entity.emit("error", err);
+        entity.emit("error", error);
         return false;
       }
 

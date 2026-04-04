@@ -71,8 +71,8 @@ function iqHandler(entity) {
     let reply;
     try {
       reply = await next();
-    } catch (err) {
-      entity.emit("error", err);
+    } catch (error) {
+      entity.emit("error", error);
       reply = buildError("cancel", "internal-server-error");
     }
 

@@ -1,9 +1,8 @@
-#!/usr/bin/env node
-/* eslint-disable no-console */
+ 
 
 import server from "./index.js";
 
-// eslint-disable-next-line unicorn/no-unreadable-array-destructuring
+ 
 const [, , method, ...args] = process.argv;
 
 const commands = {

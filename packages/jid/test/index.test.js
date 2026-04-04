@@ -1,6 +1,7 @@
+import { test, expect, spyOn } from "bun:test";
+
 import jid, { equal, JID } from "../index.js";
 
-import { test, expect, spyOn } from "bun:test";
 test("equal calls equals on the first argument with the second argument", () => {
   const A = jid("foo");
   const B = jid("bar");

@@ -1,4 +1,4 @@
-/* eslint-disable no-console */
+ 
 
 import { resolve } from "@xmpp/resolve";
 

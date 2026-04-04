@@ -14,7 +14,7 @@ function errorHandler(entity) {
   return (ctx, next) => {
     next()
       .then((reply) => reply && entity.send(reply))
-      .catch((err) => entity.emit("error", err));
+      .catch((error) => entity.emit("error", error));
   };
 }
 

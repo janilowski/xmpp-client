@@ -1,8 +1,8 @@
 import xml from "@xmpp/xml";
+import { test, expect, spyOn } from "bun:test";
 
 import Connection from "../index.js";
 
-import { test, expect, spyOn } from "bun:test";
 test("#_streamError", async () => {
   const conn = new Connection();
 

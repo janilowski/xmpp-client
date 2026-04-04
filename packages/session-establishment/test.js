@@ -34,7 +34,7 @@ test("optional", async () => {
 
   const promiseSend = promise(entity, "send");
 
-  await timeout(promiseSend, 0).catch((err) => {
-    expect(err.name).toBe("TimeoutError");
+  await timeout(promiseSend, 0).catch((error) => {
+    expect(error.name).toBe("TimeoutError");
   });
 });

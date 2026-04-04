@@ -1,4 +1,5 @@
 import { promise } from "@xmpp/events";
+import { afterEach, beforeEach, expect, test } from "bun:test";
 
 import { client, xml, jid } from "../packages/client/index.js";
 import debug from "../packages/debug/index.js";

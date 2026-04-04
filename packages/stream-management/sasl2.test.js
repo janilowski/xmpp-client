@@ -19,7 +19,7 @@ test("resume", async () => {
   sm.outbound = 45;
   sm.inbound = 54;
 
-  // eslint-disable-next-line unicorn/no-await-expression-member
+   
   const element_resume = (await entity.catchOutgoing()).getChild("resume");
   element_resume.parent = null;
   expect(element_resume).toEqual(
@@ -57,7 +57,7 @@ test("Client failed to resume stream", async () => {
   sm.outbound = 45;
   sm.inbound = 54;
 
-  // eslint-disable-next-line unicorn/no-await-expression-member
+   
   const element_resume = (await entity.catchOutgoing()).getChild("resume");
   element_resume.parent = null;
   expect(element_resume).toEqual(

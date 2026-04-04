@@ -1,9 +1,9 @@
 import { EventEmitter, promise, TimeoutError } from "@xmpp/events";
 import { xml } from "@xmpp/test";
+import { test, expect, spyOn } from "bun:test";
 
 import Connection from "../index.js";
 
-import { test, expect, spyOn } from "bun:test";
 test("resets properties on socket close event", () => {
   const conn = new Connection();
   conn._attachSocket(new EventEmitter());

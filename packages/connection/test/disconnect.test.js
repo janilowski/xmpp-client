@@ -1,6 +1,7 @@
+import { test, expect, spyOn } from "bun:test";
+
 import Connection from "../index.js";
 
-import { test, expect, spyOn } from "bun:test";
 test("disconnect", async () => {
   const conn = new Connection();
 

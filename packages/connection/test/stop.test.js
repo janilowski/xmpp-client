@@ -1,8 +1,8 @@
 import { EventEmitter } from "@xmpp/events";
+import { test, expect, mock, spyOn } from "bun:test";
 
 import Connection from "../index.js";
 
-import { test, expect, mock, spyOn } from "bun:test";
 test("stop", async () => {
   const conn = new Connection();
 

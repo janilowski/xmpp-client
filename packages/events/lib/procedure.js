@@ -13,8 +13,8 @@ export default function procedure(entity, stanza = null, handler) {
     async function listener(element) {
       try {
         await handler(element, done);
-      } catch (err) {
-        onError(err);
+      } catch (error) {
+        onError(error);
       }
     }
 

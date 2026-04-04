@@ -1,4 +1,4 @@
-/* eslint-disable no-console, n/no-extraneous-import*/
+/* eslint-disable n/no-extraneous-import*/
 
 import { component, xml } from "@xmpp/component";
 import debug from "@xmpp/debug";

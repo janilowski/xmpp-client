@@ -49,9 +49,9 @@ class IQCaller {
     try {
       await this.entity.send(stanza);
       await timeoutPromise(deferred.promise, timeout);
-    } catch (err) {
+    } catch (error) {
       this.handlers.delete(stanza.attrs.id);
-      throw err;
+      throw error;
     }
 
     return deferred.promise;

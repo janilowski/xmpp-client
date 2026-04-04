@@ -69,16 +69,16 @@ async function kill(signal = "SIGTERM") {
   const pid = await getPid();
   try {
     process.kill(pid, signal);
-  } catch (err) {
-    if (err.code !== "ESRCH") throw err;
+  } catch (error) {
+    if (error.code !== "ESRCH") throw error;
   }
 }
 
 async function getPid() {
   try {
     return await fs.readFile(PID_PATH, "utf8");
-  } catch (err) {
-    if (err.code !== "ENOENT") throw err;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
     return "";
   }
 }

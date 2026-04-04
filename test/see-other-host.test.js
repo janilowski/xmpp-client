@@ -1,5 +1,7 @@
 import net from "node:net";
 
+import { afterEach, beforeEach, expect, test } from "bun:test";
+
 import { client, jid } from "../packages/client/index.js";
 import debug from "../packages/debug/index.js";
 import server from "../server/index.js";
