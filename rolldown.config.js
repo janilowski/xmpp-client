@@ -16,7 +16,6 @@ export default defineConfig([
       file: "dist/xmpp.min.js",
       format: "iife",
       sourcemap: true,
-      compact: true,
       minify: true,
       name: "XMPP",
     },
