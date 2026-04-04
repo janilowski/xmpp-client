@@ -4,11 +4,12 @@ import xml from "@xmpp/xml";
 import ConnectionWebSocket from "../lib/Connection.js";
 import Socket from "../lib/Socket.js";
 
+import { test, expect, mock, spyOn } from "bun:test";
 test("send()", async () => {
   const connection = new ConnectionWebSocket();
   connection.socket = new Socket();
   connection.socket.socket = {
-    send: jest.fn(),
+    send: mock(),
   };
   connection.root = xml("root");
 
@@ -54,7 +55,7 @@ test("WebSocket error", () => {
 test("socket close", () => {
   expect.assertions(3);
   const socket = new Socket();
-  const spy_detachSocket = jest.spyOn(socket, "_detachSocket");
+  const spy_detachSocket = spyOn(socket, "_detachSocket");
 
   const sock = new EventEmitter();
   sock.addEventListener = sock.addListener;
@@ -74,9 +75,9 @@ test("sendMany", async () => {
   const conn = new ConnectionWebSocket();
   conn.socket = new Socket();
   conn.socket.socket = {
-    send: jest.fn(),
+    send: mock(),
   };
-  const spy_write = jest.spyOn(conn.socket, "write");
+  const spy_write = spyOn(conn.socket, "write");
   conn.root = xml("root");
 
   const foo = xml("presence");

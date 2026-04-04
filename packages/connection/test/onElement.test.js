@@ -2,6 +2,7 @@ import xml from "@xmpp/xml";
 
 import Connection from "../index.js";
 
+import { test, expect, spyOn } from "bun:test";
 test("#_onElement", (done) => {
   expect.assertions(2);
   const foo = <foo />;
@@ -28,7 +29,7 @@ test("#_onElement stream:error", (done) => {
     application,
   ]);
   const conn = new Connection();
-  jest.spyOn(conn, "disconnect").mockImplementation(() => {
+  spyOn(conn, "disconnect").mockImplementation(() => {
     done();
     return Promise.resolve();
   });

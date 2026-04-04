@@ -2,36 +2,36 @@
 
 setup:
 	node packages/xmpp.js/script.js
-	npm install
-	cd packages/xmpp.js/ && npm run prepublish
+	bun install
+	cd packages/xmpp.js/ && bun run prepublish
 	make bundle
 
 lint:
-	npx eslint --cache .
+	bunx eslint --cache .
 
 format:
-	npx eslint --cache --fix .
+	bunx eslint --cache --fix .
 
 test:
-	cd packages/xmpp.js/ && npm run prepublish
-	npm install
+	cd packages/xmpp.js/ && bun run prepublish
+	bun install
 	make bundle
-	npx jest
+	bunx jest
 	make lint
 	make bundlesize
 
 ci:
-	npm install
+	bun install
 	make unit
 	make lint
 	make restart
-	npx lerna run prepublish
+	bunx lerna run prepublish
 	make bundle
 	make e2e
 	make bundlesize
 
 unit:
-	npm run test
+	bun run test
 
 e2e:
 	$(warning e2e tests require prosody >= 0.13 and luarocks)
@@ -39,7 +39,7 @@ e2e:
 	cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2_bind2 > /dev/null
 	cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2_sm > /dev/null
 	cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2_fast > /dev/null
-	npm run e2e
+	bun run e2e
 	node --test browser.test.js
 
 clean:
@@ -51,7 +51,7 @@ clean:
 	rm -f server/prosody.pid
 	rm -rf server/modules
 	rm -rf server/.cache
-	npx lerna clean --yes
+	bunx lerna clean --yes
 	rm -rf node_modules/
 	rm -f packages/*/dist/*.js
 	rm -f lerna-debug.log
@@ -69,11 +69,11 @@ bundlesize:
 	node test/bundlesize.js
 
 bundle:
-	npx rollup -c rollup.config.js
+	bunx rollup -c rollup.config.js
 
 size:
 	make bundle
 	make bundlesize
 
 ncu:
-	ncu -u && npx lerna exec ncu -u
+	ncu -u && bunx lerna exec ncu -u

@@ -1,13 +1,13 @@
 import Connection from "../index.js";
 
+import { test, expect, spyOn } from "bun:test";
 test("disconnect", async () => {
   const conn = new Connection();
 
   const el = {};
-  const spy_closeStream = jest
-    .spyOn(conn, "_closeStream")
+  const spy_closeStream = spyOn(conn, "_closeStream")
     .mockImplementation(async () => el);
-  const spy_closeSocket = jest.spyOn(conn, "_closeSocket");
+  const spy_closeSocket = spyOn(conn, "_closeSocket");
 
   expect(await conn.disconnect()).toBe(el);
 
@@ -18,12 +18,11 @@ test("disconnect", async () => {
 test("disconnect with _closeStream rejection", async () => {
   const conn = new Connection();
 
-  const spy_closeStream = jest
-    .spyOn(conn, "_closeStream")
+  const spy_closeStream = spyOn(conn, "_closeStream")
     .mockImplementation(() => {
       return Promise.reject();
     });
-  const spy_closeSocket = jest.spyOn(conn, "_closeSocket");
+  const spy_closeSocket = spyOn(conn, "_closeSocket");
 
   await conn.disconnect();
 
@@ -34,9 +33,8 @@ test("disconnect with _closeStream rejection", async () => {
 test("disconnect with _closeSocket rejection", async () => {
   const conn = new Connection();
 
-  const spy_closeStream = jest.spyOn(conn, "_closeStream");
-  const spy_closeSocket = jest
-    .spyOn(conn, "_closeSocket")
+  const spy_closeStream = spyOn(conn, "_closeStream");
+  const spy_closeSocket = spyOn(conn, "_closeSocket")
     .mockImplementation(() => {
       return Promise.reject();
     });
@@ -50,13 +48,11 @@ test("disconnect with _closeSocket rejection", async () => {
 test("disconnect with _closeStream and _closeSocket rejections", async () => {
   const conn = new Connection();
 
-  const spy_closeStream = jest
-    .spyOn(conn, "_closeStream")
+  const spy_closeStream = spyOn(conn, "_closeStream")
     .mockImplementation(() => {
       return Promise.reject();
     });
-  const spy_closeSocket = jest
-    .spyOn(conn, "_closeSocket")
+  const spy_closeSocket = spyOn(conn, "_closeSocket")
     .mockImplementation(() => {
       return Promise.reject();
     });

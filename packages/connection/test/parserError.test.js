@@ -2,6 +2,7 @@ import { EventEmitter } from "@xmpp/events";
 
 import Connection from "../index.js";
 
+import { test, expect, spyOn } from "bun:test";
 test("calls _detachParser, sends a bad-format stream error and emit an error", async () => {
   expect.assertions(4);
 
@@ -9,8 +10,8 @@ test("calls _detachParser, sends a bad-format stream error and emit an error", a
   const parser = new EventEmitter();
   conn._attachParser(parser);
 
-  const spy_detachParser = jest.spyOn(conn, "_detachParser");
-  const spy_streamError = jest.spyOn(conn, "_streamError");
+  const spy_detachParser = spyOn(conn, "_detachParser");
+  const spy_streamError = spyOn(conn, "_streamError");
 
   const error = new Error("foo");
 

@@ -2,11 +2,12 @@ import xml from "@xmpp/xml";
 
 import Connection from "../index.js";
 
+import { test, expect, spyOn } from "bun:test";
 test("#_streamError", async () => {
   const conn = new Connection();
 
-  const spy_disconnect = jest.spyOn(conn, "disconnect");
-  const spy_send = jest.spyOn(conn, "send");
+  const spy_disconnect = spyOn(conn, "disconnect");
+  const spy_send = spyOn(conn, "send");
 
   await conn._streamError("foo-bar");
 

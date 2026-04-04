@@ -3,12 +3,13 @@ import { mockClient } from "@xmpp/test";
 import { datetime } from "@xmpp/time";
 import { Element } from "@xmpp/xml";
 
+import { test, expect, spyOn } from "bun:test";
 const mechanism = "HT-SHA-256-NONE";
 
 test("requests and saves token if server advertises fast", async () => {
   const { entity, fast } = mockClient();
 
-  const spy_saveToken = jest.spyOn(fast, "saveToken");
+  const spy_saveToken = spyOn(fast, "saveToken");
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -90,7 +91,7 @@ async function setupFast() {
 
 test("deletes the token if server replies with not-authorized", async () => {
   const entity = await setupFast();
-  const spy_deleteToken = jest.spyOn(entity.fast, "deleteToken");
+  const spy_deleteToken = spyOn(entity.fast, "deleteToken");
 
   expect(spy_deleteToken).not.toHaveBeenCalled();
   entity.mockInput(
@@ -104,7 +105,7 @@ test("deletes the token if server replies with not-authorized", async () => {
 
 test("deletes the token if server replies with credentials-expired", async () => {
   const entity = await setupFast();
-  const spy_deleteToken = jest.spyOn(entity.fast, "deleteToken");
+  const spy_deleteToken = spyOn(entity.fast, "deleteToken");
 
   // credentials-expired
   expect(spy_deleteToken).not.toHaveBeenCalled();

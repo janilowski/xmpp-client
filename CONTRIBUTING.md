@@ -2,7 +2,7 @@
 
 ## Setup
 
-npm >= 7 is required for development - update with `npm install -g npm`
+bun is required for development - update with `bun upgrade`
 
 ```sh
 git clone git@github.com:xmppjs/xmpp.js.git # Replace with your fork

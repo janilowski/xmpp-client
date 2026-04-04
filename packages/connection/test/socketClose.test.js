@@ -2,6 +2,7 @@ import { EventEmitter } from "@xmpp/events";
 
 import Connection from "../index.js";
 
+import { test, expect, spyOn } from "bun:test";
 test("calls _detachSocket and _status", () => {
   expect.assertions(3);
   const conn = new Connection();
@@ -14,7 +15,7 @@ test("calls _detachSocket and _status", () => {
     expect(reason).toBe(evt);
   };
 
-  const spy_detachSocket = jest.spyOn(conn, "_detachSocket");
+  const spy_detachSocket = spyOn(conn, "_detachSocket");
 
   sock.emit("close", true, evt);
 

@@ -1,9 +1,10 @@
 import jid, { equal, JID } from "../index.js";
 
+import { test, expect, spyOn } from "bun:test";
 test("equal calls equals on the first argument with the second argument", () => {
   const A = jid("foo");
   const B = jid("bar");
-  const spy_equals = jest.spyOn(A, "equals");
+  const spy_equals = spyOn(A, "equals");
   equal(A, B);
   expect(spy_equals).toHaveBeenCalledWith(B);
 });

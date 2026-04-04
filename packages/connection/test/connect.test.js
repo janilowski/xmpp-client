@@ -41,7 +41,7 @@ test("rejects if an error is emitted before connected", async () => {
 
   try {
     await conn.connect("url");
-    expect.fail();
+    throw new Error("Expected conn.connect() to reject");
   } catch (err) {
     expect(err).toBe(error);
   }

@@ -2,16 +2,16 @@ import { EventEmitter } from "@xmpp/events";
 
 import Connection from "../index.js";
 
+import { test, expect, mock, spyOn } from "bun:test";
 test("stop", async () => {
   const conn = new Connection();
 
   const close_el = {};
-  const spy_disconnect = jest
-    .spyOn(conn, "disconnect")
+  const spy_disconnect = spyOn(conn, "disconnect")
     .mockImplementation(async () => {
       return close_el;
     });
-  const spy_status = jest.spyOn(conn, "_status");
+  const spy_status = spyOn(conn, "_status");
 
   conn.status = "online";
 
@@ -29,7 +29,7 @@ test("socket closes after timeout", (done) => {
   conn.timeout = 100;
 
   const socket = new EventEmitter();
-  socket.end = jest.fn(async () => {
+  socket.end = mock(async () => {
     // Mock receiving "close" event after timeout
     setTimeout(() => {
       socket.emit("close");
