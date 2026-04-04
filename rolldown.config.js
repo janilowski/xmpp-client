@@ -1,4 +1,3 @@
-import terser from "@rollup/plugin-terser";
 import { defineConfig } from "rolldown";
 
 export default defineConfig([
@@ -18,8 +17,8 @@ export default defineConfig([
       format: "iife",
       sourcemap: true,
       compact: true,
+      minify: true,
       name: "XMPP",
     },
-    plugins: [terser()],
   },
 ]);
