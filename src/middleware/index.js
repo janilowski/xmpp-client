@@ -1,4 +1,4 @@
-import compose from "koa-compose";
+import compose from "./compose.js";
 
 import IncomingContext from "./lib/IncomingContext.js";
 import OutgoingContext from "./lib/OutgoingContext.js";

@@ -10,7 +10,7 @@ installer_plugin_path = lfs.currentdir() .. "/modules";
 
 modules_enabled = {
   "roster";
-  "saslauth";
+  -- "saslauth";
   "tls";
   "dialback";
   "disco";
