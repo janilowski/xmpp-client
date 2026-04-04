@@ -1,15 +1,7 @@
 {
   "name": "xmpp-client",
   "version": "0.0.0",
-  "private": true,
-  "type": "module",
   "main": "./src/index.js",
-  "exports": {
-    ".": "./src/index.js",
-    "./xml": "./src/xml/index.js",
-    "./xml/jsx-runtime": "./src/xml/jsx-runtime.js",
-    "./xml/jsx-dev-runtime": "./src/xml/jsx-dev-runtime.js"
-  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bun": "^1.3.11",
@@ -31,6 +23,20 @@
     "selfsigned": "^5.5.0",
     "typescript": "^6.0.2"
   },
+  "exports": {
+    ".": "./src/index.js",
+    "./xml": "./src/xml/index.js",
+    "./xml/jsx-runtime": "./src/xml/jsx-runtime.js",
+    "./xml/jsx-dev-runtime": "./src/xml/jsx-dev-runtime.js"
+  },
+  "engines": {
+    "node": ">= 22.11"
+  },
+  "lint-staged": {
+    "*.{js,ts,mjs}": "eslint --cache --fix",
+    "*.{json,md,html,css,yaml,yml}": "prettier --write"
+  },
+  "private": true,
   "scripts": {
     "test:unit": "bun test ./src/**/*.test.js ./src/sasl/test.js ./src/sasl2/test.js ./src/client/test.js ./src/reconnect/test.js ./src/error/test.js ./src/debug/test.js ./src/resource-binding/test.js",
     "test": "bun run test:unit",
@@ -51,11 +57,12 @@
     "lint": "eslint --cache .",
     "lint:fix": "eslint --cache --fix ."
   },
-  "engines": {
-    "node": ">= 22.11"
-  },
-  "lint-staged": {
-    "*.{js,ts,mjs}": "eslint --cache --fix",
-    "*.{json,md,html,css,yaml,yml}": "prettier --write"
+  "type": "module",
+  "dependencies": {
+    "koa-compose": "^4.1.0",
+    "ltx": "^3.1.2",
+    "sasl-anonymous": "^0.1.0",
+    "sasl-plain": "^0.1.0",
+    "saslmechanisms": "^0.1.1"
   }
 }
