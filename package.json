@@ -59,7 +59,6 @@
   },
   "type": "module",
   "dependencies": {
-    "ltx": "^3.1.2",
-    "sasl-plain": "^0.1.0"
+    "ltx": "^3.1.2"
   }
 }

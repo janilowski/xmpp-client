@@ -1,4 +1,4 @@
-import mech from "sasl-plain";
+import mech from "./mechanism.js";
 
 export default function saslPlain(sasl) {
   sasl.use(mech);
