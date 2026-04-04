@@ -61,7 +61,6 @@
   "dependencies": {
     "ltx": "^3.1.2",
     "sasl-anonymous": "^0.1.0",
-    "sasl-plain": "^0.1.0",
-    "saslmechanisms": "^0.1.1"
+    "sasl-plain": "^0.1.0"
   }
 }

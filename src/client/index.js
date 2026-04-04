@@ -12,7 +12,7 @@ import _resourceBinding from "../resource-binding/index.js";
 import _streamManagement from "../stream-management/index.js";
 import _bind2 from "../client-core/src/bind2/bind2.js";
 import _fast from "../client-core/src/fast/fast.js";
-import SASLFactory from "saslmechanisms";
+import SASLFactory from "../sasl/factory.js";
 import plain from "../sasl-plain/index.js";
 import anonymous from "../sasl-anonymous/index.js";
 import htsha256none from "../sasl-ht-sha-256-none/index.js";

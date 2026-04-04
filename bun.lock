@@ -7,7 +7,6 @@
         "ltx": "^3.1.2",
         "sasl-anonymous": "^0.1.0",
         "sasl-plain": "^0.1.0",
-        "saslmechanisms": "^0.1.1",
       },
       "devDependencies": {
         "@eslint/js": "^10.0.1",
@@ -636,8 +635,6 @@
     "sasl-anonymous": ["sasl-anonymous@0.1.0", "", {}, "sha512-x+0sdsV0Gie2EexxAUsx6ZoB+X6OCthlNBvAQncQxreEWQJByAPntj0EAgTlJc2kZicoc+yFzeR6cl8VfsQGfA=="],
 
     "sasl-plain": ["sasl-plain@0.1.0", "", {}, "sha512-X8mCSfR8y0NryTu0tuVyr4IS2jBunBgyG+3a0gEEkd0nlHGiyqJhlc4EIkzmSwaa7F8S4yo+LS6Cu5qxRkJrmg=="],
-
-    "saslmechanisms": ["saslmechanisms@0.1.1", "", {}, "sha512-pVlvK5ysevz8MzybRnDIa2YMxn0OJ7b9lDiWhMoaKPoJ7YkAg/7YtNjUgaYzElkwHxsw8dBMhaEn7UP6zxEwPg=="],
 
     "saxes": ["saxes@6.0.0", "", { "dependencies": { "xmlchars": "^2.2.0" } }, "sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA=="],
 
