@@ -5,7 +5,7 @@ test("SASL", () => {
     hideSensitive(<auth xmlns="urn:ietf:params:xml:ns:xmpp-sasl">foo</auth>),
   ).toEqual(
     <auth xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
-      <hidden xmlns="xmpp.js" />
+      <hidden xmlns="xmpp-client" />
     </auth>,
   );
 
@@ -15,7 +15,7 @@ test("SASL", () => {
     ),
   ).toEqual(
     <challenge xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
-      <hidden xmlns="xmpp.js" />
+      <hidden xmlns="xmpp-client" />
     </challenge>,
   );
 
@@ -25,7 +25,7 @@ test("SASL", () => {
     ),
   ).toEqual(
     <response xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
-      <hidden xmlns="xmpp.js" />
+      <hidden xmlns="xmpp-client" />
     </response>,
   );
 
@@ -35,7 +35,7 @@ test("SASL", () => {
     ),
   ).toEqual(
     <success xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
-      <hidden xmlns="xmpp.js" />
+      <hidden xmlns="xmpp-client" />
     </success>,
   );
 });
@@ -52,7 +52,7 @@ test("SASL2", () => {
   ).toEqual(
     <authenticate xmlns="urn:xmpp:sasl:2" mechanism="SCRAM-SHA-1-PLUS">
       <initial-response>
-        <hidden xmlns="xmpp.js" />
+        <hidden xmlns="xmpp-client" />
       </initial-response>
     </authenticate>,
   );
@@ -65,7 +65,7 @@ test("SASL2", () => {
     ),
   ).toEqual(
     <challenge xmlns="urn:xmpp:sasl:2">
-      <hidden xmlns="xmpp.js" />
+      <hidden xmlns="xmpp-client" />
     </challenge>,
   );
 
@@ -77,7 +77,7 @@ test("SASL2", () => {
     ),
   ).toEqual(
     <response xmlns="urn:xmpp:sasl:2">
-      <hidden xmlns="xmpp.js" />
+      <hidden xmlns="xmpp-client" />
     </response>,
   );
 
@@ -90,7 +90,7 @@ test("SASL2", () => {
   ).toEqual(
     <continue xmlns="urn:xmpp:sasl:2">
       <additional-data>
-        <hidden xmlns="xmpp.js" />
+        <hidden xmlns="xmpp-client" />
       </additional-data>
     </continue>,
   );
@@ -101,7 +101,7 @@ test("component handshake", () => {
     hideSensitive(<handshake xmlns="jabber:component:accept">foo</handshake>),
   ).toEqual(
     <handshake xmlns="jabber:component:accept">
-      <hidden xmlns="xmpp.js" />
+      <hidden xmlns="xmpp-client" />
     </handshake>,
   );
 });

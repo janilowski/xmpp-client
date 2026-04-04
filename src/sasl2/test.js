@@ -62,8 +62,8 @@ test("with function credentials", async () => {
   const mech = "PLAIN";
   const userAgent = (
     <user-agent id="foo">
-      <software>xmpp.js</software>
-      <device>Sonny's Laptop</device>
+      <software>xmpp-client</software>
+      <device>Janek's Laptop</device>
     </user-agent>
   );
 

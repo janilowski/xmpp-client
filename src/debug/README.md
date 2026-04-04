@@ -2,7 +2,7 @@
 
 Prints logs and debug information to the console for an entity.
 
-⚠️ debug makes a best effort to replace sensitive information with `<hidden xmlns="xmpp.js"/>` but be careful not to share secrets when sharing logs.
+⚠️ debug makes a best effort to replace sensitive information with `<hidden xmlns="xmpp-client"/>` but be careful not to share secrets when sharing logs.
 
 This module is part of this repository's internal package set.
 
@@ -40,19 +40,19 @@ IN
 status open <open version="1.0" xmlns="urn:ietf:params:xml:ns:xmpp-framing" xml:lang="en" id="5217eba8-57d3-4477-947b-76b9e4abe85b" from="localhost"/>
 OUT
  <auth xmlns="urn:ietf:params:xml:ns:xmpp-sasl" mechanism="SCRAM-SHA-1">
-    <hidden xmlns="xmpp.js"/>
+    <hidden xmlns="xmpp-client"/>
   </auth>
 IN
  <challenge xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
-    <hidden xmlns="xmpp.js"/>
+    <hidden xmlns="xmpp-client"/>
   </challenge>
 OUT
  <response xmlns="urn:ietf:params:xml:ns:xmpp-sasl" mechanism="SCRAM-SHA-1">
-    <hidden xmlns="xmpp.js"/>
+    <hidden xmlns="xmpp-client"/>
   </response>
 IN
  <success xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
-    <hidden xmlns="xmpp.js"/>
+    <hidden xmlns="xmpp-client"/>
   </success>
 status opening
 IN

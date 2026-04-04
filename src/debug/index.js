@@ -29,7 +29,7 @@ function isSensitive(element) {
 function hide(element) {
   if (element) {
     element.children = [];
-    element.append(xml("hidden", { xmlns: "xmpp.js" }));
+    element.append(xml("hidden", { xmlns: "xmpp-client" }));
   }
 }
 
@@ -41,7 +41,7 @@ export function hideSensitive(element) {
   } else if (element.getNS() === NS_SASL2) {
     hide(element.getChild("additional-data"));
     const token = element.getChild("token", NS_FAST);
-    token && (token.attrs.token = "hidden by xmpp.js");
+    token && (token.attrs.token = "hidden by xmpp-client");
   }
 
   return element;

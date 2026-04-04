@@ -25,7 +25,7 @@ resolve("jabberfr.org", options).then(console.log).catch(console.error);
   {
     address: "93.113.206.189",
     family: 4,
-    name: "xmppjs.org",
+    name: "xmpp-client.org",
     port: 5222,
     priority: 5,
     weight: 0,
@@ -33,7 +33,7 @@ resolve("jabberfr.org", options).then(console.log).catch(console.error);
   {
     address: "2a03:75c0:39:3458::1",
     family: 6,
-    name: "xmppjs.org",
+    name: "xmpp-client.org",
     port: 5222,
     priority: 5,
     weight: 0,
@@ -42,11 +42,11 @@ resolve("jabberfr.org", options).then(console.log).catch(console.error);
   { address: "2a03:75c0:39:3458::1", family: 6 },
   {
     attribute: "_xmpp-client-websocket",
-    uri: "wss://xmppjs.org:443/websocket",
+    uri: "wss://xmpp-client.org:443/websocket",
   },
   {
     attribute: "_xmpp-client-xbosh",
-    uri: "https://xmppjs.org:443/bosh",
+    uri: "https://xmpp-client.org:443/bosh",
   },
 ];
 ```

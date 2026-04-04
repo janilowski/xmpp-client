@@ -10,7 +10,7 @@ import { xml } from "@xmpp/component";
 
 ## Writing
 
-There's 2 methods for writing XML with xmpp.js
+There's 2 methods for writing XML with xmpp-client
 
 ### factory
 

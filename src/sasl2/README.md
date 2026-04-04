@@ -61,7 +61,7 @@ async function getUserAgent() {
   }
   // https://xmpp.org/extensions/xep-0388.html#initiation
   return xml("user-agent", { id }, [
-    xml("software", {}, "xmpp.js"),
+    xml("software", {}, "xmpp-client"),
     xml("device", {}, "Sonny's laptop"),
   ]);
 }

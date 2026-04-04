@@ -7,10 +7,11 @@ test("stop", async () => {
   const conn = new Connection();
 
   const close_el = {};
-  const spy_disconnect = spyOn(conn, "disconnect")
-    .mockImplementation(async () => {
+  const spy_disconnect = spyOn(conn, "disconnect").mockImplementation(
+    async () => {
       return close_el;
-    });
+    },
+  );
   const spy_status = spyOn(conn, "_status");
 
   conn.status = "online";

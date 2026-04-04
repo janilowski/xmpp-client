@@ -14,7 +14,7 @@ const domain = "localhost";
 const JID = jid(username, domain).toString();
 const service = "ws://localhost:5280/xmpp-websocket";
 
-const xmppjs = readFileSync("./dist/xmpp.js", {
+const xmppclient = readFileSync("./dist/xmpp-client", {
   encoding: "utf8",
 });
 
@@ -25,7 +25,7 @@ beforeEach(async () => {
   ({ window } = new JSDOM(``, { runScripts: "dangerously" }));
   const { document } = window;
   const scriptEl = document.createElement("script");
-  scriptEl.textContent = xmppjs;
+  scriptEl.textContent = xmppclient;
   document.body.append(scriptEl);
   await server.restart();
 });

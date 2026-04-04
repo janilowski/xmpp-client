@@ -12,7 +12,7 @@ assignees: ""
 A clear and concise description of what the bug is.
 
 **Logs**
-Share logs using https://github.com/xmppjs/xmpp.js/tree/main/packages/debug
+Share logs using https://github.com/xmppjs/xmpp-client/tree/main/packages/debug
 
 **Environment**
-As much as possible information about the environment running xmpp.js
+As much as possible information about the environment running xmpp-client

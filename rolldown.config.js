@@ -4,7 +4,7 @@ export default defineConfig([
   {
     input: "src/client/index.js",
     output: {
-      file: "dist/xmpp.js",
+      file: "dist/xmpp-client",
       format: "iife",
       sourcemap: true,
       name: "XMPP",
