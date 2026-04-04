@@ -5,7 +5,7 @@ import child_process from "node:child_process";
 import net from "node:net";
 
 // eslint-disable-next-line n/no-extraneous-import
-import { promise, delay } from "@xmpp/events";
+import { promise, delay } from "../src/events/index.js";
 
 import { makeSelfSignedCertificate } from "../test/helpers.js";
 

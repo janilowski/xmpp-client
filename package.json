@@ -1,6 +1,15 @@
 {
+  "name": "xmpp.js",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./xml": "./src/xml/index.js",
+    "./xml/jsx-runtime": "./src/xml/jsx-runtime.js",
+    "./xml/jsx-dev-runtime": "./src/xml/jsx-dev-runtime.js"
+  },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bun": "^1.3.11",
@@ -23,10 +32,10 @@
     "typescript": "^6.0.2"
   },
   "scripts": {
-    "test:unit": "bun test packages/*/test/*.test.js",
+    "test:unit": "bun test ./src/**/*.test.js ./src/sasl/test.js ./src/sasl2/test.js ./src/client/test.js ./src/reconnect/test.js ./src/error/test.js ./src/debug/test.js ./src/resource-binding/test.js",
     "test": "bun run test:unit",
     "test:e2e": "NODE_TLS_REJECT_UNAUTHORIZED=0 bun test --timeout 20000 --max-concurrency 1 test/*.test.js",
-    "test:browser": "bun --test browser.test.js",
+    "test:browser": "bun test browser.test.js",
     "prosody:setup": "cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2 >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_bind2 >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_sm >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_fast >/dev/null",
     "server:start": "./server/ctl.js start",
     "server:stop": "./server/ctl.js stop",
@@ -35,7 +44,7 @@
     "size": "bun run build && bun run bundlesize",
     "test:all": "bun run test:unit && bun run lint && bun run bundlesize",
     "ci": "bun install && bun run test:unit && bun run lint && bun run server:restart && bun run build && bun run prosody:setup && bun run test:e2e && bun run test:browser && bun run bundlesize",
-    "clean": "bun run server:stop ; rm -f server/localhost.key server/localhost.crt server/prosody.err server/prosody.log server/prosody.pid lerna-debug.log ; rm -rf server/modules server/.cache node_modules packages/*/dist/*.js",
+    "clean": "bun run server:stop ; rm -f server/localhost.key server/localhost.crt server/prosody.err server/prosody.log server/prosody.pid lerna-debug.log ; rm -rf server/modules server/.cache node_modules dist",
     "preversion": "bun run build",
     "typecheck": "tsc --noEmit",
     "build": "rolldown -c",
@@ -45,9 +54,6 @@
   "engines": {
     "node": ">= 22.11"
   },
-  "workspaces": [
-    "packages/*"
-  ],
   "lint-staged": {
     "*.{js,ts,mjs}": "eslint --cache --fix",
     "*.{json,md,html,css,yaml,yml}": "prettier --write"

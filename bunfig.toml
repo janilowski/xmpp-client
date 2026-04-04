@@ -1,2 +1,2 @@
 jsx = "react-jsx"
-jsxImportSource = "@xmpp/xml"
+jsxImportSource = "xmpp.js/xml"

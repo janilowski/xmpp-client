@@ -1,15 +1,16 @@
 import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
 
-import { client } from "../packages/client/index.js";
-import { promise } from "../packages/events/index.js";
-import { datetime } from "../packages/time/index.js";
-import debug from "../packages/debug/index.js";
+import { client } from "../src/client/index.js";
+import { promise } from "../src/events/index.js";
+import { datetime } from "../src/util/time.js";
+import debug from "../src/debug/index.js";
 import server from "../server/index.js";
 
 const username = "client";
 const password = "foobar";
 const credentials = { username, password };
 const domain = "localhost";
+const service = "ws://localhost:5280/xmpp-websocket";
 
 let xmpp;
 
@@ -27,7 +28,7 @@ afterAll(async () => {
 });
 
 test("client ack stanzas", async () => {
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   const promise_ack = promise(xmpp.streamManagement, "ack");
@@ -43,7 +44,7 @@ test("client ack stanzas", async () => {
 });
 
 test("client fail stanzas", async () => {
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   const promise_fail = promise(xmpp.streamManagement, "fail");
@@ -64,7 +65,7 @@ test("client fail stanzas", async () => {
 });
 
 test("client retry stanzas", async () => {
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   const promise_ack = promise(xmpp.streamManagement, "ack");
@@ -87,7 +88,7 @@ test("client retry stanzas", async () => {
 });
 
 test("client reconnects when server fails to ack stanza", async () => {
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   xmpp.streamManagement.timeout = 10;
   xmpp.streamManagement.requestAckInterval = 5;
   xmpp.streamManagement.debounceAckRequest = 1;

@@ -1,0 +1,16 @@
+import { client } from "../../src/client/index.js";
+import Connection from "../../src/connection/index.js";
+
+import context from "./context.js";
+
+export default function mockClient(options) {
+  const xmpp = client(options);
+  xmpp.send = Connection.prototype.send;
+  xmpp.sendMany = async (stanzas) => {
+    for (const stanza of stanzas) {
+      await xmpp.send(stanza);
+    }
+  };
+  const ctx = context(xmpp);
+  return Object.assign(xmpp, ctx);
+}

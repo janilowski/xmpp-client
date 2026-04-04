@@ -1,14 +1,15 @@
-import { promise } from "@xmpp/events";
+import { promise } from "../src/events/index.js";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
-import { client, xml, jid } from "../packages/client/index.js";
-import debug from "../packages/debug/index.js";
+import { client, xml, jid } from "../src/client/index.js";
+import debug from "../src/debug/index.js";
 import server from "../server/index.js";
 
 const username = "client";
 const password = "foobar";
 const credentials = { username, password };
 const domain = "localhost";
+const service = "ws://localhost:5280/xmpp-websocket";
 const JID = jid(username, domain).toString();
 
 let xmpp;
@@ -25,7 +26,7 @@ afterEach(async () => {
 test("client", async () => {
   expect.assertions(6);
 
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   xmpp.on("connect", () => {
@@ -50,7 +51,7 @@ test("bad credentials", async () => {
   expect.assertions(6);
 
   xmpp = client({
-    service: domain,
+    service,
     credentials: { ...credentials, password: "nope" },
   });
   debug(xmpp);
@@ -82,7 +83,7 @@ test("reconnects when server restarts gracefully", (done) => {
   expect.assertions(2);
   let c = 0;
 
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   xmpp.on("error", () => {});
@@ -104,7 +105,7 @@ test("reconnects when server restarts non-gracefully", (done) => {
   expect.assertions(2);
   let c = 0;
 
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   xmpp.on("error", () => {});
@@ -125,7 +126,7 @@ test("reconnects when server restarts non-gracefully", (done) => {
 test("does not reconnect when stop is called", (done) => {
   expect.assertions(2);
 
-  xmpp = client({ service: domain, credentials });
+  xmpp = client({ service, credentials });
   debug(xmpp);
 
   xmpp.on("online", async () => {
@@ -146,7 +147,7 @@ test("does not reconnect when stop is called", (done) => {
 });
 
 test("statuses", async () => {
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   let statuses = [xmpp.status];
@@ -186,7 +187,7 @@ test("statuses", async () => {
 test("anonymous authentication", (done) => {
   expect.assertions(2);
 
-  xmpp = client({ service: domain, domain: "anon." + domain });
+  xmpp = client({ service, domain: "anon." + domain });
   debug(xmpp);
 
   xmpp.on("online", async () => {
@@ -207,7 +208,7 @@ test("anonymous authentication", (done) => {
 });
 
 test("auto", async () => {
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
   const address = await xmpp.start();
   expect(address.bare().toString()).toBe(JID);
@@ -238,7 +239,7 @@ test("ws IPv6", async () => {
 test("ws domain", async () => {
   xmpp = client({
     credentials,
-    service: "ws://localhost:5280/xmpp-websocket",
+    service,
   });
   debug(xmpp);
   const address = await xmpp.start();
@@ -274,56 +275,6 @@ test("wss domain", async () => {
     credentials,
     service: "wss://localhost:5281/xmpp-websocket",
   });
-  debug(xmpp);
-  const address = await xmpp.start();
-  expect(address.bare().toString()).toBe(JID);
-});
-
-test("xmpp IPv4", async () => {
-  xmpp = client({
-    credentials,
-    service: "xmpp://127.0.0.1:5222",
-    domain,
-  });
-  debug(xmpp);
-  const address = await xmpp.start();
-  expect(address.bare().toString()).toBe(JID);
-});
-
-test("xmpp IPv6", async () => {
-  xmpp = client({ credentials, service: "xmpp://[::1]:5222", domain });
-  debug(xmpp);
-  const address = await xmpp.start();
-  expect(address.bare().toString()).toBe(JID);
-});
-
-test("xmpp domain", async () => {
-  xmpp = client({ credentials, service: "xmpp://localhost:5222" });
-  debug(xmpp);
-  const address = await xmpp.start();
-  expect(address.bare().toString()).toBe(JID);
-});
-
-test("xmpps IPv4", async () => {
-  xmpp = client({
-    credentials,
-    service: "xmpps://127.0.0.1:5223",
-    domain,
-  });
-  debug(xmpp);
-  const address = await xmpp.start();
-  expect(address.bare().toString()).toBe(JID);
-});
-
-test("xmpps IPv6", async () => {
-  xmpp = client({ credentials, service: "xmpps://[::1]:5223", domain });
-  debug(xmpp);
-  const address = await xmpp.start();
-  expect(address.bare().toString()).toBe(JID);
-});
-
-test("xmpps domain", async () => {
-  xmpp = client({ credentials, service: "xmpps://localhost:5223" });
   debug(xmpp);
   const address = await xmpp.start();
   expect(address.bare().toString()).toBe(JID);

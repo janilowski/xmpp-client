@@ -2,18 +2,18 @@ import { defineConfig } from "rolldown";
 
 export default defineConfig([
   {
-    input: "packages/client/index.js",
+    input: "src/client/index.js",
     output: {
-      file: "packages/client/dist/xmpp.js",
+      file: "dist/xmpp.js",
       format: "iife",
       sourcemap: true,
       name: "XMPP",
     },
   },
   {
-    input: "packages/client/index.js",
+    input: "src/client/index.js",
     output: {
-      file: "packages/client/dist/xmpp.min.js",
+      file: "dist/xmpp.min.js",
       format: "iife",
       sourcemap: true,
       compact: true,

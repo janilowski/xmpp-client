@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 
-import { client, jid } from "../packages/client/index.js";
-import debug from "../packages/debug/index.js";
+import { client, jid } from "../src/client/index.js";
+import debug from "../src/debug/index.js";
 import server from "../server/index.js";
 
 const NS_SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
@@ -14,6 +14,7 @@ const username = "client";
 const password = "foobar";
 const credentials = { username, password };
 const domain = "localhost";
+const service = "ws://localhost:5280/xmpp-websocket";
 const JID = jid(username, domain).toString();
 
 let xmpp;
@@ -35,7 +36,7 @@ test("client online with sasl and resource binding", async () => {
   await server.enableModules(["saslauth"]);
   await server.restart();
 
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   xmpp.on("nonza", (element) => {
@@ -62,7 +63,7 @@ test("client online with sasl2 and bind2", async () => {
   await server.enableModules(["sasl2", "sasl2_bind2"]);
   await server.restart();
 
-  xmpp = client({ credentials, service: domain });
+  xmpp = client({ credentials, service });
   debug(xmpp);
 
   xmpp.on("nonza", (element) => {
@@ -97,7 +98,7 @@ test("client online with sasl2 and fast", async () => {
 
   xmpp = client({
     ...credentials,
-    service: "ws://localhost:5280/xmpp-websocket",
+    service,
   });
 
   // Get token

@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import { JSDOM } from "jsdom";
 
-import { jid } from "./packages/client/index.js";
-import debug from "./packages/debug/index.js";
+import { jid } from "./src/client/index.js";
+import debug from "./src/debug/index.js";
 import server from "./server/index.js";
 
 const username = "client";
@@ -14,7 +14,7 @@ const domain = "localhost";
 const JID = jid(username, domain).toString();
 const service = "ws://localhost:5280/xmpp-websocket";
 
-const xmppjs = readFileSync("./packages/client/dist/xmpp.js", {
+const xmppjs = readFileSync("./dist/xmpp.js", {
   encoding: "utf8",
 });
 
