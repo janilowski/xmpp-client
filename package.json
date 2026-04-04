@@ -25,7 +25,6 @@
     "jest": "^30.2.0",
     "jest-extended": "^7.0.0",
     "jsdom": "^27.3.0",
-    "lerna": "^9.0.3",
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
     "rolldown": "^1.0.0-rc.13",
@@ -34,11 +33,24 @@
     "typescript": "^6.0.2"
   },
   "scripts": {
-    "test": "bun test packages/*/test/*.test.js",
-    "e2e": "NODE_TLS_REJECT_UNAUTHORIZED=0 node ./node_modules/.bin/jest --forceExit --runInBand --config e2e.config.cjs",
-    "preversion": "make bundle",
+    "test:unit": "bun test packages/*/test/*.test.js",
+    "test": "bun run test:unit",
+    "test:e2e": "NODE_TLS_REJECT_UNAUTHORIZED=0 bun test --timeout 20000 --max-concurrency 1 test/*.test.js",
+    "test:browser": "node --test browser.test.js",
+    "prosody:setup": "cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2 >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_bind2 >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_sm >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_fast >/dev/null",
+    "server:start": "./server/ctl.js start",
+    "server:stop": "./server/ctl.js stop",
+    "server:restart": "./server/ctl.js restart",
+    "bundlesize": "node test/bundlesize.js",
+    "size": "bun run build && bun run bundlesize",
+    "test:all": "bun run test:unit && bun run lint && bun run bundlesize",
+    "ci": "bun install && bun run test:unit && bun run lint && bun run server:restart && bun run build && bun run prosody:setup && bun run test:e2e && bun run test:browser && bun run bundlesize",
+    "clean": "bun run server:stop ; rm -f server/localhost.key server/localhost.crt server/prosody.err server/prosody.log server/prosody.pid lerna-debug.log ; rm -rf server/modules server/.cache node_modules packages/*/dist/*.js",
+    "preversion": "bun run build",
     "typecheck": "tsc --noEmit",
-    "build": "rolldown -c"
+    "build": "rolldown -c",
+    "lint": "eslint --cache .",
+    "lint:fix": "eslint --cache --fix ."
   },
   "engines": {
     "node": ">= 22.11"

@@ -49,5 +49,5 @@ As such, simple XMPP semantics shouldn't be replaced with JavaScript APIs when a
 
 ```sh
 cd xmpp.js
-npx lerna publish
+bunx lerna publish # this is an old command that will soon be replaced by a different release system
 ```

@@ -13,7 +13,4 @@ server/.cache
 !.editorconfig
 !.gitignore
 
-npm-debug.log
-lerna-debug.log
-
 .eslintcache
