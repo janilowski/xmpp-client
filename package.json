@@ -2,13 +2,8 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@babel/core": "^7.28.5",
     "@babel/plugin-transform-modules-commonjs": "^7.27.1",
     "@babel/plugin-transform-react-jsx": "^7.27.1",
-    "@babel/plugin-transform-runtime": "^7.28.5",
-    "@babel/preset-env": "^7.28.5",
-    "@babel/runtime": "^7.28.4",
-    "@rollup/plugin-babel": "^6.1.0",
     "@rollup/plugin-commonjs": "^29.0.0",
     "@rollup/plugin-node-resolve": "^16.0.3",
     "@rollup/plugin-terser": "^1.0.0",
@@ -54,6 +49,5 @@
   "lint-staged": {
     "*.{js,cjs,mjs}": "eslint --cache --fix",
     "*.{json,md,html,css,yaml,yml}": "prettier --write"
-  },
-  "browserslist": "defaults"
+  }
 }
