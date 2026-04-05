@@ -1,7 +1,12 @@
 {
   "name": "xmpp-client",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "main": "./src/index.js",
+  "license": "ISC",
+  "repository": {
+    "url": "https://github.com/janilowski/xmpp-client"
+  },
+  "description": "An XMPP client library for the modern web.",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/bun": "^1.3.11",
@@ -36,7 +41,6 @@
     "*.{js,ts,mjs}": "eslint --cache --fix",
     "*.{json,md,html,css,yaml,yml}": "prettier --write"
   },
-  "private": true,
   "scripts": {
     "test:unit": "bun test ./src/**/*.test.js ./src/sasl/test.js ./src/sasl2/test.js ./src/client/test.js ./src/reconnect/test.js ./src/error/test.js ./src/debug/test.js ./src/resource-binding/test.js",
     "test": "bun run test:unit",
