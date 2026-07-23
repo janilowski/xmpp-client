@@ -1,49 +1,65 @@
 # xmpp-client
 
-> An XMPP client library for the modern web.
+> A small XMPP client library for the modern web.
 
-[XMPP](https://xmpp.org/about-xmpp/technology-overview/) is the Extensible Messaging and Presence Protocol, a set of open technologies for instant messaging, presence, multi-party chat, voice and video calls, collaboration, lightweight middleware, content syndication, and generalized routing of XML data.
+This is an active, browser-focused fork of
+[`xmpp.js`](https://github.com/xmppjs/xmpp.js). Its first goal is reliable XMPP
+Core compliance, followed by carefully selected XMPP extensions needed by a
+useful web client.
 
-`xmpp-client` is a JavaScript library to use XMPP in a web browser.
+The project is in early development and is not yet published as a stable
+release.
 
-## Getting started
+## Install
+
+```sh
+bun add @janilowski/xmpp-client
+```
+
+## Use
+
+```ts
+import { client, xml } from "@janilowski/xmpp-client";
+
+const xmpp = client({
+  service: "wss://example.com/xmpp-websocket",
+  domain: "example.com",
+  username: "romeo",
+  password: "secret",
+});
+
+xmpp.on("error", console.error);
+xmpp.on("online", async (address) => {
+  console.log(`online as ${address}`);
+  await xmpp.send(xml("presence"));
+});
+
+await xmpp.start();
+```
+
+For a classic browser script, use `dist/xmpp.js` or the minified
+`dist/xmpp.min.js`; both expose the `XMPP` global.
+
+## Develop
 
 ```sh
 bun install
 bun run build
 ````
 
-## goals
+The project uses Bun for development, TypeScript for its public API boundary,
+and Rolldown for ESM and classic browser bundles. The inherited implementation
+is still predominantly JavaScript and is being migrated incrementally.
 
-### client only
+## Scope
 
-This project is focused on the web client use case.
+- browser clients over WebSocket
+- XMPP Core compliance before broader extension support
+- a small, auditable dependency and bundle footprint
+- ESM-first packaging with TypeScript declarations and JSX support for XML
 
-The goal is to provide a library that application developers can use to build their own XMPP UI in the browser (or perhaps as an app using technologies like React Native).
+The minified browser bundle is continuously checked against a 13 KB
+Brotli-compressed budget.
 
-### standards compliance
-
-This fork is meant to push the client towards stronger XMPP standards compliance. The aim is to first comply with all "core" requirements.
-
-### modern
-
-This project uses modern JavaScript dev tooling and targets modern environments.
-
-It is ESM-first, uses Bun for development, Rolldown for bundling, and is being moved toward a simple internal architecture of a single, small package (instead of a large monorepo with lots of packages that sometimes have more lines in `package.json`s than actual code)
-
-### small
-
-Bundle size is constantly measured during development. The current goal is to keep it under 13 KB (gzipped).
-
-This project aims to stay lean, avoid unnecessary dependencies, and keep the default browser client bundle as small as reasonably possible.
-
-## Status
-
-This is an active fork of `xmpp.js` with a narrower scope:
-
-* browser client only
-* standards-focused direction
-* modernized tooling
-* lower architectural and dependency overhead
-
-I'm currently developing this myself (Jan Iłowski) in my spare time, trying to do the best job I can. Please contribute to this project too if you can!
+This project is maintained by Jan Iłowski in his spare time. Contributions are
+welcome.

@@ -12,7 +12,9 @@ assignees: ""
 A clear and concise description of what the bug is.
 
 **Logs**
-Share logs using https://github.com/xmppjs/xmpp-client/tree/main/packages/debug
+Share relevant client and browser-console logs. Remove passwords, tokens, and
+other private data before posting them.
 
 **Environment**
-As much as possible information about the environment running xmpp-client
+Include the library version, browser and version, operating system, XMPP server,
+and the connection URL scheme (`ws:` or `wss:`).
