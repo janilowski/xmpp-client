@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "allowJs": false,
+    "skipLibCheck": false,
+    "types": []
+  },
+  "files": ["public-api.test.ts"],
+  "include": []
+}

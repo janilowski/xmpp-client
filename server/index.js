@@ -4,13 +4,11 @@ import fs from "node:fs/promises";
 import child_process from "node:child_process";
 import net from "node:net";
 
-// eslint-disable-next-line n/no-extraneous-import
 import { promise, delay } from "../src/events/index.js";
 
 import { makeSelfSignedCertificate } from "../test/helpers.js";
 
-const __dirname = "./server";
-// const __dirname = import.meta.dirname;
+const __dirname = path.resolve("server");
 
 const exec = promisify(child_process.exec);
 
@@ -27,46 +25,61 @@ function clean() {
   ).catch(() => {});
 }
 
-function isPortOpen() {
+async function isPortOpen() {
   const sock = new net.Socket();
-  sock.connect({ port: PROSODY_PORT });
-  return promise(sock, "connect")
-    .then(() => {
-      sock.end();
-      sock.destroy();
-      return true;
-    })
-    .catch(() => false);
+  sock.connect({ host: "127.0.0.1", port: PROSODY_PORT });
+
+  try {
+    await promise(sock, "connect", "error", 1000);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    sock.destroy();
+  }
 }
 
-async function waitPortOpen() {
-  if (await isPortOpen()) {
+async function waitForPort(open, timeout = 10_000) {
+  const deadline = Date.now() + timeout;
+
+  while ((await isPortOpen()) !== open) {
+    if (Date.now() >= deadline) {
+      const state = open ? "open" : "close";
+      throw new Error(`Prosody port ${PROSODY_PORT} did not ${state} in time.`);
+    }
+
+    await delay(100);
+  }
+}
+
+function waitPortOpen() {
+  return waitForPort(true);
+}
+
+async function ensureCertificate() {
+  const certificatePath = path.join(__dirname, "certs/localhost.crt");
+  const keyPath = path.join(__dirname, "certs/localhost.key");
+
+  try {
+    await Promise.all([fs.access(certificatePath), fs.access(keyPath)]);
     return;
+  } catch {
+    // Generate the test certificate below.
   }
 
-  await delay(1000);
-  return waitPortOpen();
-}
-
-async function makeCertificate() {
   const pem = await makeSelfSignedCertificate();
   await Promise.all([
-    fs.writeFile(path.join(__dirname, "certs/localhost.crt"), pem.cert),
-    fs.writeFile(path.join(__dirname, "certs/localhost.key"), pem.private),
+    fs.writeFile(certificatePath, pem.cert),
+    fs.writeFile(keyPath, pem.private),
   ]);
 }
 
-async function waitPortClose() {
-  if (!(await isPortOpen())) {
-    return;
-  }
-
-  await delay(1000);
-  return waitPortClose();
+function waitPortClose() {
+  return waitForPort(false);
 }
 
 async function kill(signal = "SIGTERM") {
-  const pid = await getPid();
+  const pid = Number(await getPid());
   try {
     process.kill(pid, signal);
   } catch (error) {
@@ -76,7 +89,7 @@ async function kill(signal = "SIGTERM") {
 
 async function getPid() {
   try {
-    return await fs.readFile(PID_PATH, "utf8");
+    return (await fs.readFile(PID_PATH, "utf8")).trim();
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
     return "";
@@ -84,19 +97,18 @@ async function getPid() {
 }
 
 async function _start() {
-  const opening = waitPortOpen();
-
-  makeCertificate();
+  await ensureCertificate();
 
   await exec("prosody -D", {
     cwd: DATA_PATH,
     env: {
       ...process.env,
-      PROSODY_CONFIG: "prosody.cfg.lua",
+      PROSODY_CONFIG: CFG_PATH,
+      PROSODY_TEST_DIR: DATA_PATH,
     },
   });
 
-  return opening;
+  return waitPortOpen();
 }
 
 async function start() {
@@ -106,13 +118,13 @@ async function start() {
 }
 
 async function stop(signal) {
-  if (!(await isPortOpen())) {
+  if (!(await getPid())) {
     return clean();
   }
 
-  const closing = waitPortClose();
   await kill(signal);
-  return closing;
+  await waitPortClose();
+  return clean();
 }
 
 async function restart(signal) {

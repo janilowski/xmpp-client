@@ -12,7 +12,7 @@ import _resourceBinding from "../resource-binding/index.js";
 import _streamManagement from "../stream-management/index.js";
 import _bind2 from "../client-core/src/bind2/bind2.js";
 import _fast from "../client-core/src/fast/fast.js";
-import SASLFactory from "../sasl/factory.js";
+import SASLMechanismRegistry from "../sasl/registry.js";
 import plain from "../sasl-plain/index.js";
 import anonymous from "../sasl-anonymous/index.js";
 import htsha256none from "../sasl-ht-sha-256-none/index.js";
@@ -44,18 +44,18 @@ function client(options = {}) {
   const resolve = _resolve({ entity });
 
   // SASL mechanisms - order matters and define priority
-  const saslFactory = new SASLFactory();
+  const saslMechanisms = new SASLMechanismRegistry();
   const mechanisms = Object.entries({
     plain,
     anonymous,
-  }).map(([k, v]) => ({ [k]: v(saslFactory) }));
+  }).map(([k, v]) => ({ [k]: v(saslMechanisms) }));
 
   // eslint-disable-next-line n/no-unsupported-features/node-builtins
   userAgent ??= xml("user-agent", { id: globalThis.crypto.randomUUID() });
 
   // Stream features - order matters and define priority
   const sasl2 = _sasl2(
-    { streamFeatures, saslFactory },
+    { streamFeatures, saslMechanisms },
     createOnAuthenticate(credentials ?? { username, password }, userAgent),
   );
 
@@ -69,11 +69,11 @@ function client(options = {}) {
   const bind2 = _bind2({ sasl2, entity }, resource);
 
   // FAST mechanisms - order matters and define priority
-  htsha256none(fast.saslFactory);
+  htsha256none(fast.saslMechanisms);
 
   // Stream features - order matters and define priority
   const sasl = _sasl(
-    { streamFeatures, saslFactory },
+    { streamFeatures, saslMechanisms },
     createOnAuthenticate(credentials ?? { username, password }, userAgent),
   );
   const streamManagement = _streamManagement({
@@ -101,7 +101,7 @@ function client(options = {}) {
     iqCaller,
     iqCallee,
     resolve,
-    saslFactory,
+    saslMechanisms,
     sasl2,
     sasl,
     resourceBinding,

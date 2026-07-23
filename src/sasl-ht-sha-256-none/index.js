@@ -40,6 +40,6 @@ Mechanism.prototype.final = async function final(data) {
   }
 };
 
-export default function saslHashedToken(sasl) {
-  sasl.use(Mechanism);
+export default function registerHashedToken(saslMechanisms) {
+  saslMechanisms.register("HT-SHA-256-NONE", () => new Mechanism());
 }

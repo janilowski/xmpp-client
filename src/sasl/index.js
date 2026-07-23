@@ -8,16 +8,16 @@ import SASLError from "./lib/SASLError.js";
 
 const NS = "urn:ietf:params:xml:ns:xmpp-sasl";
 
-export function getAvailableMechanisms(element, NS, saslFactory) {
+export function getAvailableMechanisms(element, NS, saslMechanisms) {
   const offered = new Set(
     element.getChildren("mechanism", NS).map((m) => m.text()),
   );
-  const supported = saslFactory._mechs.map(({ name }) => name);
+  const supported = saslMechanisms.names;
   return supported.filter((mech) => offered.has(mech));
 }
 
-async function authenticate({ saslFactory, entity, mechanism, credentials }) {
-  const mech = saslFactory.create([mechanism]);
+async function authenticate({ saslMechanisms, entity, mechanism, credentials }) {
+  const mech = saslMechanisms.create(mechanism);
   if (!mech) {
     throw new Error(`SASL: Mechanism ${mechanism} not found.`);
   }
@@ -69,16 +69,19 @@ async function authenticate({ saslFactory, entity, mechanism, credentials }) {
   );
 }
 
-export default function sasl({ streamFeatures, saslFactory }, onAuthenticate) {
+export default function sasl(
+  { streamFeatures, saslMechanisms },
+  onAuthenticate,
+) {
   streamFeatures.use("mechanisms", NS, async ({ entity }, _next, element) => {
-    const mechanisms = getAvailableMechanisms(element, NS, saslFactory);
+    const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
     if (mechanisms.length === 0) {
       throw new SASLError("SASL: No compatible mechanism available.");
     }
 
     async function done(credentials, mechanism) {
       await authenticate({
-        saslFactory,
+        saslMechanisms,
         entity,
         mechanism,
         credentials,

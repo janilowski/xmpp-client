@@ -11,12 +11,14 @@
     "verbatimModuleSyntax": true,
     "noEmit": true,
     "strict": true,
-    "skipLibCheck": true,
+    "skipLibCheck": true
   },
   "include": [
     "src/**/*.js",
     "src/**/*.ts",
     "test/**/*.js",
-    "*.test.js",
-  ],
+    "test/**/*.ts",
+    "types/**/*.d.ts",
+    "*.test.js"
+  ]
 }

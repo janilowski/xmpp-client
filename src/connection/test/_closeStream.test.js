@@ -75,3 +75,25 @@ test("emits closing status", async () => {
   ]);
   expect(status).toBe("closing");
 });
+
+test("unhook removes a close hook", async () => {
+  const conn = new Connection();
+  conn.parser = new EventEmitter();
+
+  spyOn(conn, "footerElement").mockImplementation(() => xml("hello"));
+  spyOn(conn, "write").mockImplementation(async () => {});
+
+  let calls = 0;
+  const handler = () => {
+    calls += 1;
+  };
+  conn.hook("close", handler);
+  conn.unhook("close", handler);
+
+  setTimeout(() => {
+    conn.parser.emit("end");
+  }, 0);
+
+  await conn._closeStream();
+  expect(calls).toBe(0);
+});

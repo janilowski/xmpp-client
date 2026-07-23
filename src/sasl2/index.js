@@ -9,7 +9,7 @@ import { getAvailableMechanisms } from "../sasl/index.js";
 const NS = "urn:xmpp:sasl:2";
 
 async function authenticate({
-  saslFactory,
+  saslMechanisms,
   entity,
   mechanism,
   credentials,
@@ -17,7 +17,7 @@ async function authenticate({
   streamFeatures,
   features,
 }) {
-  const mech = saslFactory.create([mechanism]);
+  const mech = saslMechanisms.create(mechanism);
   if (!mech) {
     throw new Error(`SASL: Mechanism ${mechanism} not found.`);
   }
@@ -90,7 +90,10 @@ async function authenticate({
   );
 }
 
-export default function sasl2({ streamFeatures, saslFactory }, onAuthenticate) {
+export default function sasl2(
+  { streamFeatures, saslMechanisms },
+  onAuthenticate,
+) {
   const features = new Map();
   let fast;
 
@@ -98,7 +101,7 @@ export default function sasl2({ streamFeatures, saslFactory }, onAuthenticate) {
     "authentication",
     NS,
     async ({ entity }, _next, element) => {
-      const mechanisms = getAvailableMechanisms(element, NS, saslFactory);
+      const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
       const streamFeatures = await getStreamFeatures({ element, features });
       const fast_available = !!fast?.mechanism;
 
@@ -133,7 +136,7 @@ export default function sasl2({ streamFeatures, saslFactory }, onAuthenticate) {
           userAgent,
           streamFeatures,
           features,
-          saslFactory,
+          saslMechanisms,
           mechanism,
           credentials,
         });

@@ -1,6 +1,5 @@
 import resolve from "../resolve.js";
 
-// eslint-disable-next-line jest/no-disabled-tests
 test.skip("resolve", async () => {
   expect(await resolve("jabberfr.org")).toEqual([
     {

@@ -2,7 +2,7 @@ import { context, mockClient, mockInput, promiseError } from "../../../test/supp
 
 import IncomingContext from "../lib/IncomingContext.js";
 import OutgoingContext from "../lib/OutgoingContext.js";
-import _middleware from "../index.js";
+import _middleware, { runMiddleware } from "../index.js";
 
 let ctx;
 
@@ -53,4 +53,49 @@ test("emits an error event if a middleware throws", async () => {
 
   const err = await willError;
   expect(err).toEqual(error);
+});
+
+test("runs middleware in onion order", async () => {
+  const calls = [];
+
+  await runMiddleware(
+    [
+      async (_context, next) => {
+        calls.push("outer:before");
+        await next();
+        calls.push("outer:after");
+      },
+      async (_context, next) => {
+        calls.push("inner:before");
+        await next();
+        calls.push("inner:after");
+      },
+    ],
+    {},
+  );
+
+  expect(calls).toEqual([
+    "outer:before",
+    "inner:before",
+    "inner:after",
+    "outer:after",
+  ]);
+});
+
+test("rejects a second call to the same next function", async () => {
+  expect(
+    runMiddleware(
+      [async (_context, next) => {
+        await next();
+        await next();
+      }],
+      {},
+    ),
+  ).rejects.toThrow("next() called multiple times");
+});
+
+test("rejects a non-function middleware", async () => {
+  expect(runMiddleware([null], {})).rejects.toThrow(
+    "Every middleware must be a function.",
+  );
 });

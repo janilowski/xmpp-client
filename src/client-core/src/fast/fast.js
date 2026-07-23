@@ -2,12 +2,12 @@ import { EventEmitter } from "../../../events/index.js";
 import { getAvailableMechanisms } from "../../../sasl/index.js";
 import SASLError from "../../../sasl/lib/SASLError.js";
 import xml from "../../../xml/index.js";
-import SASLFactory from "../../../sasl/factory.js";
+import SASLMechanismRegistry from "../../../sasl/registry.js";
 
 const NS = "urn:xmpp:fast:0";
 
 export default function fast({ sasl2, entity }) {
-  const saslFactory = new SASLFactory();
+  const saslMechanisms = new SASLMechanismRegistry();
 
   let token;
 
@@ -45,7 +45,7 @@ export default function fast({ sasl2, entity }) {
         entity.emit("error", error);
       }
     },
-    saslFactory,
+    saslMechanisms,
     async auth({
       authenticate,
       entity,
@@ -66,7 +66,7 @@ export default function fast({ sasl2, entity }) {
 
       try {
         await authenticate({
-          saslFactory: fast.saslFactory,
+          saslMechanisms: fast.saslMechanisms,
           mechanism: token.mechanism,
           credentials: {
             ...credentials,
@@ -124,7 +124,7 @@ export default function fast({ sasl2, entity }) {
 
       fast.available = true;
 
-      const mechanisms = getAvailableMechanisms(element, NS, saslFactory);
+      const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
       const mechanism = mechanisms[0];
 
       if (!mechanism) return reset();

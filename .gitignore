@@ -14,3 +14,7 @@ server/.cache
 !.gitignore
 
 .eslintcache
+
+.env
+.env.*
+!.env.example

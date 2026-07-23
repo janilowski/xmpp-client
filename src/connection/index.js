@@ -40,7 +40,9 @@ class Connection extends EventEmitter {
           xml(condition, {xmlns: NS_STREAM}, children),
         ]),
       );
-    } catch {}
+    } catch {
+      // The stream may already be unusable; disconnect regardless.
+    }
 
     return this.disconnect();
   }
@@ -380,7 +382,7 @@ class Connection extends EventEmitter {
       this.#hooks.set(event, new Set());
     }
 
-    this.#hooks.get(event).add([handler]);
+    this.#hooks.get(event).add(handler);
   }
   #assertHookEventName(event) {
     if (!this.#hook_events.has(event)) {
@@ -389,9 +391,13 @@ class Connection extends EventEmitter {
   }
   unhook(event, handler) {
     this.#assertHookEventName(event);
-    const handlers = this.#hooks.get("event");
-    const item = [...handlers].find((item) => item.handler === handler);
-    handlers.remove(item);
+    const handlers = this.#hooks.get(event);
+    if (!handlers) return;
+
+    handlers.delete(handler);
+    if (handlers.size === 0) {
+      this.#hooks.delete(event);
+    }
   }
   async #runHooks(event, ...args) {
     this.#assertHookEventName(event);
@@ -403,7 +409,7 @@ class Connection extends EventEmitter {
     // run hooks with the same priority in parallel
 
     await Promise.all(
-      [...hooks].map(async ([handler]) => {
+      [...hooks].map(async (handler) => {
         try {
           await handler(...args);
         } catch (error) {

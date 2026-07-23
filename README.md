@@ -44,8 +44,8 @@ For a classic browser script, use `dist/xmpp.js` or the minified
 
 ```sh
 bun install
-bun run build
-````
+bun run test:all
+```
 
 The project uses Bun for development, TypeScript for its public API boundary,
 and Rolldown for ESM and classic browser bundles. The inherited implementation

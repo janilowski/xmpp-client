@@ -51,7 +51,9 @@ export default function streamManagement({
   async function sendAck() {
     try {
       await entity.send(xml("a", { xmlns: NS, h: sm.inbound }));
-    } catch {}
+    } catch {
+      // An acknowledgement is best-effort while the stream is closing.
+    }
   }
 
   entity.on("disconnect", () => {

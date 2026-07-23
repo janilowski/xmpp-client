@@ -7,7 +7,7 @@ function toChildren(children) {
   return Array.isArray(children) ? children : [children];
 }
 
-function create(type, props, key) {
+function create(type, props) {
   const { children, ...attrs } = props ?? {};
   const xmlChildren = toChildren(children);
 

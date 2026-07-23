@@ -77,11 +77,7 @@ class JID {
   }
 
   getLocal(unescape = false) {
-    let local = null;
-
-    local = unescape ? escaping.unescape(this._local) : this._local;
-
-    return local;
+    return unescape ? escaping.unescape(this._local) : this._local;
   }
 
   /**

@@ -3,10 +3,11 @@
 -- see https://prosody.im/doc/configure
 
 local lfs = Lua.require "lfs";
+local test_dir = os.getenv("PROSODY_TEST_DIR") or lfs.currentdir();
 
-plugin_paths = { "modules" }
+plugin_paths = { test_dir .. "/modules" }
 plugin_server = "https://modules.prosody.im/rocks/"
-installer_plugin_path = lfs.currentdir() .. "/modules";
+installer_plugin_path = test_dir .. "/modules";
 
 modules_enabled = {
   "roster";
@@ -33,7 +34,7 @@ modules_disabled = {
   "s2s";
 }
 
-pidfile = lfs.currentdir() .. "/prosody.pid";
+pidfile = test_dir .. "/prosody.pid";
 
 allow_registration = true;
 
@@ -50,16 +51,16 @@ authentication = "internal_plain"
 c2s_direct_tls_ports = { 5223 };
 
 log = {
-  debug = lfs.currentdir() .. "/prosody.log";
-  error = lfs.currentdir() .. "/prosody.err";
+  debug = test_dir .. "/prosody.log";
+  error = test_dir .. "/prosody.err";
 }
 
 ssl = {
-  certificate = lfs.currentdir() .. "/certs/localhost.crt";
-  key = lfs.currentdir() .. "/certs/localhost.key";
+  certificate = test_dir .. "/certs/localhost.crt";
+  key = test_dir .. "/certs/localhost.key";
 }
 
-data_path = lfs.currentdir()
+data_path = test_dir
 
 VirtualHost "localhost"
 

@@ -5,7 +5,8 @@ import globals from "globals";
 import eslintPluginUnicorn from "eslint-plugin-unicorn";
 import eslintNodePlugin from "eslint-plugin-n";
 import pluginPromise from "eslint-plugin-promise";
-import importPlugin from "eslint-plugin-import";
+import { importX, createNodeResolver } from "eslint-plugin-import-x";
+import tseslint from "typescript-eslint";
 
 export default [
   {
@@ -13,14 +14,22 @@ export default [
   },
 
   js.configs.recommended,
+  ...tseslint.configs.recommended.map((config) => ({
+    ...config,
+    files: ["**/*.ts"],
+  })),
   eslintNodePlugin.configs["flat/recommended-module"],
   pluginPromise.configs["flat/recommended"],
-  importPlugin.flatConfigs.errors,
+  importX.flatConfigs.errors,
   eslintConfigPrettier,
 
   {
+    plugins: {
+      unicorn: eslintPluginUnicorn,
+    },
     settings: {
-      "import/core-modules": ["bun:test"],
+      "import-x/core-modules": ["bun:test"],
+      "import-x/resolver-next": [createNodeResolver()],
     },
     languageOptions: {
       globals: {
@@ -31,23 +40,42 @@ export default [
       ecmaVersion: "latest",
     },
     rules: {
-      "import/no-commonjs": "error",
+      "import-x/no-commonjs": "error",
       "unicorn/prefer-module": "error",
     },
   },
 
   {
-    files: ["**/*.js"],
-    plugins: {
-      unicorn: eslintPluginUnicorn,
+    files: ["**/*.ts"],
+    rules: {
+      "n/no-missing-import": "off",
+      "n/no-unpublished-import": "off",
+      "import-x/no-unresolved": "off",
     },
+  },
+
+  {
+    files: ["**/*.d.ts"],
+    rules: {
+      "import-x/export": "off",
+    },
+  },
+
+  {
+    files: ["**/*.js"],
     rules: {
       "unicorn/catch-error-name": "error",
     },
   },
 
   {
-    files: ["**/*.test.js", "**/test.js", "**/test/**/*.js", "browser.test.js"],
+    files: [
+      "**/*.test.js",
+      "**/*.test.ts",
+      "**/test.js",
+      "**/test/**/*.js",
+      "browser.test.js",
+    ],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -66,6 +94,7 @@ export default [
       },
     },
     rules: {
+      "n/no-unpublished-import": "off",
       "promise/no-callback-in-promise": "off",
       "no-undef": "off",
       "unicorn/prevent-abbreviations": "off",

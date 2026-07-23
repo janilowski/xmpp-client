@@ -1,5 +1,3 @@
-/* eslint-disable n/no-extraneous-import*/
-
 import { client, xml } from "./index.js";
 import debug from "../debug/index.js";
 

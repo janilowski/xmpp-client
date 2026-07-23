@@ -1,38 +1,67 @@
 {
-  "name": "xmpp-client",
+  "name": "@janilowski/xmpp-client",
   "version": "0.0.1",
-  "main": "./src/index.js",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./types/index.d.ts",
   "license": "ISC",
   "repository": {
     "url": "https://github.com/janilowski/xmpp-client"
   },
+  "files": [
+    "dist",
+    "types",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
   "description": "An XMPP client library for the modern web.",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/bun": "^1.3.11",
-    "@types/node": "^25.5.2",
+    "@types/bun": "^1.3.14",
+    "@types/node": "^25.9.5",
     "bytes": "^3.1.2",
-    "eslint": "^10.2.0",
+    "eslint": "^10.7.0",
     "eslint-config-prettier": "^10.1.8",
-    "eslint-import-resolver-typescript": "^4.4.4",
-    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-import-x": "^4.17.1",
     "eslint-plugin-n": "^17.24.0",
-    "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^7.2.1",
+    "eslint-plugin-promise": "^7.3.0",
     "eslint-plugin-unicorn": "^64.0.0",
-    "globals": "^17.4.0",
-    "jsdom": "^29.0.1",
+    "globals": "^17.7.0",
     "lint-staged": "^16.4.0",
-    "prettier": "^3.8.1",
-    "rolldown": "^1.0.0-rc.13",
+    "prettier": "^3.9.6",
+    "rolldown": "^1.2.0",
     "selfsigned": "^5.5.0",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.65.0"
   },
   "exports": {
-    ".": "./src/index.js",
-    "./xml": "./src/xml/index.js",
-    "./xml/jsx-runtime": "./src/xml/jsx-runtime.js",
-    "./xml/jsx-dev-runtime": "./src/xml/jsx-dev-runtime.js"
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./xml": {
+      "types": "./types/xml.d.ts",
+      "import": "./dist/xml.js",
+      "default": "./dist/xml.js"
+    },
+    "./xml/jsx-runtime": {
+      "types": "./types/jsx-runtime.d.ts",
+      "import": "./dist/xml/jsx-runtime.js",
+      "default": "./dist/xml/jsx-runtime.js"
+    },
+    "./xml/jsx-dev-runtime": {
+      "types": "./types/jsx-dev-runtime.d.ts",
+      "import": "./dist/xml/jsx-dev-runtime.js",
+      "default": "./dist/xml/jsx-dev-runtime.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "imports": {
+    "#xml": "./src/xml/index.js",
+    "#xml/jsx-runtime": "./src/xml/jsx-runtime.js",
+    "#xml/jsx-dev-runtime": "./src/xml/jsx-dev-runtime.js"
   },
   "engines": {
     "node": ">= 22.11"
@@ -42,27 +71,35 @@
     "*.{json,md,html,css,yaml,yml}": "prettier --write"
   },
   "scripts": {
-    "test:unit": "bun test ./src/**/*.test.js ./src/sasl/test.js ./src/sasl2/test.js ./src/client/test.js ./src/reconnect/test.js ./src/error/test.js ./src/debug/test.js ./src/resource-binding/test.js",
+    "test:unit": "bun test src",
     "test": "bun run test:unit",
     "test:e2e": "NODE_TLS_REJECT_UNAUTHORIZED=0 bun test --timeout 20000 --max-concurrency 1 test/*.test.js",
     "test:browser": "bun test browser.test.js",
-    "prosody:setup": "cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2 >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_bind2 >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_sm >/dev/null && prosodyctl --config prosody.cfg.lua install mod_sasl2_fast >/dev/null",
-    "server:start": "./server/ctl.js start",
-    "server:stop": "./server/ctl.js stop",
-    "server:restart": "./server/ctl.js restart",
+    "prosody:setup": "cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2 && prosodyctl --config prosody.cfg.lua install mod_sasl2_bind2 && prosodyctl --config prosody.cfg.lua install mod_sasl2_sm && prosodyctl --config prosody.cfg.lua install mod_sasl2_fast && test -f modules/share/lua/*/mod_sasl2/mod_sasl2.lua && test -f modules/share/lua/*/mod_sasl2_bind2/mod_sasl2_bind2.lua && test -f modules/share/lua/*/mod_sasl2_sm/mod_sasl2_sm.lua && test -f modules/share/lua/*/mod_sasl2_fast/mod_sasl2_fast.lua",
+    "server:start": "bun server/ctl.js start",
+    "server:stop": "bun server/ctl.js stop",
+    "server:restart": "bun server/ctl.js restart",
     "bundlesize": "bun test/bundlesize.js",
     "size": "bun run build && bun run bundlesize",
-    "test:all": "bun run test:unit && bun run lint && bun run bundlesize",
-    "ci": "bun install && bun run test:unit && bun run lint && bun run server:restart && bun run build && bun run prosody:setup && bun run test:e2e && bun run test:browser && bun run bundlesize",
+    "test:all": "bun run test:unit && bun run lint && bun run typecheck && bun run build && bun run bundlesize",
+    "ci": "bun install --frozen-lockfile && bun run test:unit && bun run lint && bun run typecheck && bun run build && bun run bundlesize && bun run prosody:setup && bun run server:restart && bun run test:e2e && bun run test:browser",
     "clean": "bun run server:stop ; rm -f server/localhost.key server/localhost.crt server/prosody.err server/prosody.log server/prosody.pid lerna-debug.log ; rm -rf server/modules server/.cache node_modules dist",
     "preversion": "bun run build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --project test/tsconfig.public.json",
     "build": "rolldown -c",
     "lint": "eslint --cache .",
     "lint:fix": "eslint --cache --fix ."
   },
   "type": "module",
+  "sideEffects": false,
+  "packageManager": "bun@1.3.14",
+  "overrides": {
+    "brace-expansion": "5.0.7",
+    "flatted": "3.4.2",
+    "picomatch": "4.0.4"
+  },
   "dependencies": {
+    "events": "^3.3.0",
     "ltx": "^3.1.2"
   }
 }

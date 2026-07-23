@@ -1,2 +1,5 @@
 jsx = "react-jsx"
-jsxImportSource = "xmpp-client/xml"
+jsxImportSource = "#xml"
+
+[install]
+registry = { url = "https://registry.npmjs.org", token = "$NPM_TOKEN" }
