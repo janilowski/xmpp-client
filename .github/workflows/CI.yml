@@ -59,7 +59,6 @@ jobs:
           sudo systemctl stop prosody
 
           lua -v
-          prosodyctl about
 
       - name: Install Prosody test modules and start server
         run: |
