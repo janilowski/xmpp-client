@@ -28,7 +28,9 @@ export default [
       unicorn: eslintPluginUnicorn,
     },
     settings: {
-      allowModules: ["bun:test"],
+      n: {
+        allowModules: ["bun:test"],
+      },
       "import-x/core-modules": ["bun:test"],
       "import-x/resolver-next": [createNodeResolver()],
     },
