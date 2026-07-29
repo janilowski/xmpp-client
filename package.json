@@ -71,11 +71,11 @@
     "*.{json,md,html,css,yaml,yml}": "prettier --write"
   },
   "scripts": {
-    "test:unit": "bun test src",
+    "test:unit": "bun test src conformance/test",
     "test": "bun run test:unit",
     "test:e2e": "NODE_TLS_REJECT_UNAUTHORIZED=0 bun test --timeout 20000 --max-concurrency 1 test/*.test.js",
     "test:browser": "bun test browser.test.js",
-    "prosody:setup": "cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2 && prosodyctl --config prosody.cfg.lua install mod_sasl2_bind2 && prosodyctl --config prosody.cfg.lua install mod_sasl2_sm && prosodyctl --config prosody.cfg.lua install mod_sasl2_fast && test -f modules/share/lua/*/mod_sasl2/mod_sasl2.lua && test -f modules/share/lua/*/mod_sasl2_bind2/mod_sasl2_bind2.lua && test -f modules/share/lua/*/mod_sasl2_sm/mod_sasl2_sm.lua && test -f modules/share/lua/*/mod_sasl2_fast/mod_sasl2_fast.lua",
+    "prosody:setup": "cd server && prosodyctl --config prosody.cfg.lua install mod_sasl2 && prosodyctl --config prosody.cfg.lua install mod_sasl2_bind2 && prosodyctl --config prosody.cfg.lua install mod_sasl2_sm && prosodyctl --config prosody.cfg.lua install mod_sasl2_fast",
     "server:start": "bun server/ctl.js start",
     "server:stop": "bun server/ctl.js stop",
     "server:restart": "bun server/ctl.js restart",

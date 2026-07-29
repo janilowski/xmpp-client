@@ -3,7 +3,7 @@
 -- see https://prosody.im/doc/configure
 
 local lfs = Lua.require "lfs";
-local test_dir = os.getenv("PROSODY_TEST_DIR") or lfs.currentdir();
+local test_dir = Lua.os.getenv("PROSODY_TEST_DIR") or lfs.currentdir();
 
 plugin_paths = { test_dir .. "/modules" }
 plugin_server = "https://modules.prosody.im/rocks/"
