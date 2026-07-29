@@ -37,10 +37,29 @@ jobs:
 
       - name: Install Prosody
         run: |
-          sudo wget "https://prosody.im/downloads/repos/$(lsb_release -sc)/prosody.sources" -O /etc/apt/sources.list.d/prosody.sources
+          sudo wget \
+            "https://prosody.im/downloads/repos/$(lsb_release -sc)/prosody.sources" \
+            -O /etc/apt/sources.list.d/prosody.sources
+
           sudo apt-get update
-          sudo apt-get install --yes prosody lua-bitop lua-sec luarocks
+
+          # luarocks pulls in Lua 5.1, so install it before Prosody.
+          sudo apt-get install --yes \
+            lua5.4 \
+            lua-bitop \
+            lua-sec \
+            luarocks
+
+          # Prosody 13 requires Lua 5.2+; use Lua 5.4.
+          sudo update-alternatives --set lua-interpreter /usr/bin/lua5.4
+          sudo update-alternatives --set lua-compiler /usr/bin/luac5.4
+
+          # Now Prosody's post-install service start uses Lua 5.4.
+          sudo apt-get install --yes prosody
           sudo systemctl stop prosody
+
+          lua -v
+          prosodyctl about
 
       - name: Install Prosody test modules and start server
         run: |
