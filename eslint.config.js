@@ -95,6 +95,7 @@ export default [
       },
     },
     rules: {
+      "n/no-missing-import": "off",
       "n/no-unpublished-import": "off",
       "promise/no-callback-in-promise": "off",
       "no-undef": "off",
