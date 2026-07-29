@@ -52,6 +52,21 @@ jobs:
           bun run test:e2e
           bun run test:browser
 
+      - name: Pack main-branch artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p artifacts
+          bun pm pack --filename "artifacts/xmpp-client-${GITHUB_SHA}.tgz"
+
+      - name: Upload main-branch artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v7
+        with:
+          name: xmpp-client-${{ github.sha }}
+          path: artifacts/xmpp-client-${{ github.sha }}.tgz
+          if-no-files-found: error
+          retention-days: 30
+
       - name: Show Prosody errors
         if: failure()
         run: test ! -f server/prosody.err || cat server/prosody.err
