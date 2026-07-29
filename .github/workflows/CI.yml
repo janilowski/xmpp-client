@@ -46,6 +46,7 @@ jobs:
           # luarocks pulls in Lua 5.1, so install it before Prosody.
           sudo apt-get install --yes \
             lua5.4 \
+            liblua5.4-dev \
             lua-bitop \
             lua-sec \
             luarocks
