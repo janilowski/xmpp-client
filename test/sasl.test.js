@@ -43,7 +43,7 @@ test("client online with sasl and resource binding", async () => {
     if (!element.is("features")) return;
 
     expect(element.getChild("authentication", NS_SASL2)).toBe(undefined);
-    if (element.getChild("mechanisms", NS_SASL)) expect.pass();
+    if (element.getChild("mechanisms", NS_SASL)) expect().pass();
   });
 
   xmpp.on("send", (el) => {
@@ -70,7 +70,7 @@ test("client online with sasl2 and bind2", async () => {
     if (!element.is("features")) return;
 
     expect(element.getChild("mechanisms", NS_SASL)).toBe(undefined);
-    if (element.getChild("authentication", NS_SASL2)) expect.pass();
+    if (element.getChild("authentication", NS_SASL2)) expect().pass();
   });
 
   xmpp.on("send", (el) => {

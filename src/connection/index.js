@@ -251,10 +251,12 @@ class Connection extends EventEmitter {
    */
   async _closeSocket(timeout = this.timeout) {
     this._status("disconnecting");
-    this.socket.end();
+    const socket = this.socket;
+    const closed = promise(socket, "close", "error", timeout);
+    socket.end();
 
     // The 'disconnect' status is set by the socket 'close' listener
-    await promise(this.socket, "close", "error", timeout);
+    await closed;
   }
 
   /**

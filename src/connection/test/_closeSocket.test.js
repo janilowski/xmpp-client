@@ -31,6 +31,19 @@ test("resolves", (done) => {
   expect(conn.status).toBe("disconnect");
 });
 
+test("resolves when the socket closes synchronously", async () => {
+  expect.assertions(2);
+  const conn = new Connection();
+  const sock = new EventEmitter();
+  conn._attachSocket(sock);
+  sock.end = () => sock.emit("close");
+
+  await conn._closeSocket();
+
+  expect(conn.socket).toBe(null);
+  expect(conn.status).toBe("disconnect");
+});
+
 test("rejects if socket.end throws", (done) => {
   expect.assertions(1);
 
