@@ -44,19 +44,15 @@ test("resolves when the socket closes synchronously", async () => {
   expect(conn.status).toBe("disconnect");
 });
 
-test("rejects if socket.end throws", (done) => {
-  expect.assertions(1);
-
+test("rejects if socket.end throws", async () => {
   const error = new Error("foobar");
-
   const conn = new Connection();
   conn.socket = new EventEmitter();
   conn.socket.end = () => {
     throw error;
   };
 
-  conn._closeSocket().catch((error_) => {
-    expect(error_).toBe(error);
-    done();
-  });
+  await expect(conn._closeSocket()).rejects.toBe(error);
+  expect(conn.socket.listenerCount("close")).toBe(0);
+  expect(conn.socket.listenerCount("error")).toBe(0);
 });

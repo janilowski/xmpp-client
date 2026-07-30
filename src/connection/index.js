@@ -1,4 +1,10 @@
-import { EventEmitter, promise, listeners } from "../events/index.js";
+import {
+  EventEmitter,
+  TimeoutError,
+  listeners,
+  onoff,
+  promise,
+} from "../events/index.js";
 import jid from "../jid/index.js";
 import xml from "../xml/index.js";
 
@@ -252,11 +258,44 @@ class Connection extends EventEmitter {
   async _closeSocket(timeout = this.timeout) {
     this._status("disconnecting");
     const socket = this.socket;
-    const closed = promise(socket, "close", "error", timeout);
-    socket.end();
+    if (!socket) throw new Error("Socket is not connected");
 
     // The 'disconnect' status is set by the socket 'close' listener
-    await closed;
+    await new Promise((resolve, reject) => {
+      let timeoutId;
+      const { off, once } = onoff(socket);
+
+      const cleanup = () => {
+        clearTimeout(timeoutId);
+        off("close", onClose);
+        off("error", onError);
+      };
+      const onClose = (value) => {
+        cleanup();
+        resolve(value);
+      };
+      const onError = (error) => {
+        cleanup();
+        reject(error);
+      };
+
+      once("close", onClose);
+      once("error", onError);
+
+      if (timeout) {
+        timeoutId = setTimeout(() => {
+          cleanup();
+          reject(new TimeoutError());
+        }, timeout);
+      }
+
+      try {
+        socket.end();
+      } catch (error) {
+        cleanup();
+        reject(error);
+      }
+    });
   }
 
   /**
