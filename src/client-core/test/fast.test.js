@@ -48,6 +48,56 @@ test("requests and saves token if server advertises fast", async () => {
   expect(spy_saveToken).toHaveBeenCalledWith({ token, expiry, mechanism });
 });
 
+test("waits for the token to be saved before authentication completes", async () => {
+  let authenticationFinished = false;
+  const { entity, fast } = mockClient({
+    credentials: async (authenticate, mechanisms) => {
+      await authenticate(
+        { username: "username", password: "password" },
+        mechanisms[0],
+      );
+      authenticationFinished = true;
+    },
+  });
+
+  let finishSavingToken;
+  fast.saveToken = () =>
+    new Promise((resolve) => {
+      finishSavingToken = resolve;
+    });
+
+  entity.mockInput(
+    <features xmlns="http://etherx.jabber.org/streams">
+      <authentication xmlns="urn:xmpp:sasl:2">
+        <mechanism>PLAIN</mechanism>
+        <inline>
+          <fast xmlns="urn:xmpp:fast:0">
+            <mechanism>{mechanism}</mechanism>
+          </fast>
+        </inline>
+      </authentication>
+    </features>,
+  );
+
+  await entity.catchOutgoing();
+  entity.mockInput(
+    <success xmlns="urn:xmpp:sasl:2">
+      <token
+        expiry="2099-01-01T00:00:00Z"
+        xmlns="urn:xmpp:fast:0"
+        token="secret-token"
+      />
+    </success>,
+  );
+
+  await tick();
+  expect(authenticationFinished).toBe(false);
+
+  finishSavingToken();
+  await tick();
+  expect(authenticationFinished).toBe(true);
+});
+
 async function setupFast() {
   const { entity, fast } = mockClient();
 

@@ -1,4 +1,5 @@
 import { promisify } from "node:util";
+import { createPrivateKey, X509Certificate } from "node:crypto";
 import path from "node:path";
 import fs from "node:fs/promises";
 import child_process from "node:child_process";
@@ -61,8 +62,20 @@ async function ensureCertificate() {
   const keyPath = path.join(__dirname, "certs/localhost.key");
 
   try {
-    await Promise.all([fs.access(certificatePath), fs.access(keyPath)]);
-    return;
+    const [certificatePem, keyPem] = await Promise.all([
+      fs.readFile(certificatePath),
+      fs.readFile(keyPath),
+    ]);
+    const certificate = new X509Certificate(certificatePem);
+    const now = Date.now();
+    const valid =
+      Date.parse(certificate.validFrom) <= now &&
+      Date.parse(certificate.validTo) > now &&
+      certificate.checkHost("localhost") &&
+      certificate.checkIP("127.0.0.1") &&
+      certificate.checkIP("::1") &&
+      certificate.checkPrivateKey(createPrivateKey(keyPem));
+    if (valid) return;
   } catch {
     // Generate the test certificate below.
   }

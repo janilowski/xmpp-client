@@ -81,7 +81,7 @@ async function authenticate({
 
         for (const child of element.getChildElements()) {
           const feature = features.get(child.getNS());
-          feature?.[1]?.(child);
+          await feature?.[1]?.(child);
         }
 
         return done();
