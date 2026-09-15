@@ -1,4 +1,4 @@
-import { encode, decode } from "../util/base64.js";
+import { encode, decode, decodeBytes } from "../util/base64.js";
 import SASLError from "../sasl/lib/SASLError.js";
 import xml from "../xml/index.js";
 import { procedure } from "../events/index.js";
@@ -46,13 +46,16 @@ async function authenticate({
       if (element.getNS() !== NS) return;
 
       if (element.name === "challenge") {
-        await mech.challenge(decode(element.text()));
+        const challenge = mech.binary
+          ? decodeBytes(element.text())
+          : decode(element.text());
+        await mech.challenge(challenge);
         const resp = await mech.response(creds);
         await entity.send(
           xml(
             "response",
             { xmlns: NS, mechanism: mech.name },
-            typeof resp === "string" ? encode(resp) : "",
+            resp == null ? "" : encode(resp),
           ),
         );
         return;
@@ -69,7 +72,9 @@ async function authenticate({
       if (element.name === "success") {
         const additionalData = element.getChild("additional-data")?.text();
         if (additionalData && mech.final) {
-          await mech.final(decode(additionalData));
+          await mech.final(
+            mech.binary ? decodeBytes(additionalData) : decode(additionalData),
+          );
         }
 
         // https://xmpp.org/extensions/xep-0388.html#success

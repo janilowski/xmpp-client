@@ -8,6 +8,7 @@ export function Mechanism() {}
 Mechanism.prototype.Mechanism = Mechanism;
 Mechanism.prototype.name = "HT-SHA-256-NONE";
 Mechanism.prototype.clientFirst = true;
+Mechanism.prototype.binary = true;
 
 Mechanism.prototype.response = async function response({ username, password }) {
   this.key = await crypto.subtle.importKey(
@@ -23,16 +24,21 @@ Mechanism.prototype.response = async function response({ username, password }) {
     this.key,
     new TextEncoder().encode("Initiator"),
   );
-  return `${username}\0${String.fromCodePoint(...new Uint8Array(signature))}`;
+  const usernameBytes = new TextEncoder().encode(username);
+  const response = new Uint8Array(
+    usernameBytes.length + 1 + signature.byteLength,
+  );
+  response.set(usernameBytes);
+  response.set(new Uint8Array(signature), usernameBytes.length + 1);
+  return response;
 };
 
 Mechanism.prototype.final = async function final(data) {
-  const signature = Uint8Array.from(data, (c) => c.codePointAt(0));
   // https://developer.mozilla.org/en-US/docs/Web/API/SubtleCrypto/verify
   const result = await crypto.subtle.verify(
     "HMAC",
     this.key,
-    signature,
+    data,
     new TextEncoder().encode("Responder"),
   );
   if (result !== true) {

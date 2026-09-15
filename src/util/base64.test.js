@@ -1,4 +1,4 @@
-import { decode, encode } from "./base64.js";
+import { decode, decodeBytes, encode } from "./base64.js";
 
 test("encodes and decodes ASCII", () => {
   expect(encode("hello")).toBe("aGVsbG8=");
@@ -34,4 +34,11 @@ test("round-trips non-ASCII SASL PLAIN credentials", () => {
   const payload = "\0øyvindranda@example.com\0session-token";
 
   expect(decode(encode(payload))).toBe(payload);
+});
+
+test("round-trips arbitrary bytes without UTF-8 conversion", () => {
+  const bytes = Uint8Array.from([0, 0x7f, 0x80, 0xff]);
+
+  expect(encode(bytes)).toBe("AH+A/w==");
+  expect(decodeBytes(encode(bytes))).toEqual(bytes);
 });

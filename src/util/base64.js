@@ -1,5 +1,6 @@
-export function encode(string) {
-  const bytes = new TextEncoder().encode(string);
+export function encode(value) {
+  const bytes =
+    typeof value === "string" ? new TextEncoder().encode(value) : value;
 
   if (typeof bytes.toBase64 === "function") {
     return bytes.toBase64();
@@ -13,15 +14,16 @@ export function encode(string) {
 }
 
 export function decode(data) {
-  const decoder = new TextDecoder();
+  return new TextDecoder().decode(decodeBytes(data));
+}
 
+export function decodeBytes(data) {
   if (typeof Uint8Array.fromBase64 === "function") {
-    return decoder.decode(Uint8Array.fromBase64(data));
+    return Uint8Array.fromBase64(data);
   }
 
   const binary = globalThis.atob(data);
-  const bytes = Uint8Array.from(binary, (character) =>
+  return Uint8Array.from(binary, (character) =>
     character.codePointAt(0),
   );
-  return decoder.decode(bytes);
 }
