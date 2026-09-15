@@ -50,13 +50,60 @@ For a classic browser script, use `dist/xmpp.js` or the minified
 ## Develop
 
 ```sh
-bun install
-bun run test:all
+bun install --frozen-lockfile
+bun run test:static
 ```
 
 The project uses Bun for development, TypeScript for its public API boundary,
 and Rolldown for ESM and classic browser bundles. The inherited implementation
 is still predominantly JavaScript and is being migrated incrementally.
+
+### Native integration environment (Fedora)
+
+No VM or container is required. Use Bun 1.4.2 (also pinned in CI),
+Prosody 13 with Lua 5.4, and Playwright's Chromium:
+
+```sh
+sudo dnf install prosody lua lua-devel luarocks
+bun install --frozen-lockfile
+bun run prosody:setup
+bunx playwright install chromium
+bun run test:all
+```
+
+The integration runner starts and stops its own Prosody. Do not start the
+system service for these tests. Ports 5280, 5281, and 5347 must be free.
+If the system service already occupies them, stop it only if it is not serving
+anything you need: `sudo systemctl stop prosody`.
+
+`test:unit` needs no server. `test:e2e` runs native integration tests;
+`test:browser` builds and tests both bundles in Chromium. `test:all` runs
+static checks and both integration suites. Fedora uses Playwright's Ubuntu
+fallback browser build; it was verified locally on Fedora 44.
+
+Each integration invocation creates `server/.runtime/run-*` with an isolated
+configuration, account, certificate authority, and retained logs. Tests never
+reset the tracked Prosody configuration through Git. Run integration commands
+sequentially; a lock rejects overlapping runs. SIGKILL or a machine crash can
+leave the lock behind: inspect the processes before removing the empty lock
+directory. Runtime directories contain test credentials and keys; do not publish
+them. CI uploads only the server logs on failure.
+
+TLS verification remains enabled in Bun using the fixture CA. Chromium trusts
+only the fixture's public-key fingerprint for positive tests; a separate browser
+without that exception must reject it. That fingerprint exception is not a test
+of hostname validation. Bun 1.4.2's IPv6 WSS identity failure remains an executable
+expected-failure test, not a skip; an unexpected success requires removing the
+marker. See [the upstream fix](https://github.com/oven-sh/bun/pull/30674).
+
+The four Prosody module versions are pinned in `server/setup.js`. The native
+Prosody package is supplied by your distribution, not lockfile-pinned; this run
+used 13.0.6. JavaScript implementation-wide type checking and protocol compliance
+remain separate work; `typecheck` currently checks the typed public boundary.
+
+Protocol follow-ups are recorded in GitHub issues
+[#11](https://github.com/janilowski/xmpp-client/issues/11) through
+[#17](https://github.com/janilowski/xmpp-client/issues/17).
 
 ## Scope
 
