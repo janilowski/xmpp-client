@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
 
     steps:
@@ -19,7 +19,7 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: 1.3.14
+          bun-version: 1.4.2
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -61,10 +61,10 @@ jobs:
 
           lua -v
 
-      - name: Install Prosody test modules and start server
+      - name: Install integration fixtures
         run: |
           bun run prosody:setup
-          bun run server:start
+          bunx playwright install --with-deps chromium
 
       - name: Integration tests
         run: |
@@ -86,10 +86,12 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-      - name: Show Prosody errors
+      - name: Preserve Prosody logs
         if: failure()
-        run: test ! -f server/prosody.err || cat server/prosody.err
-
-      - name: Stop test server
-        if: always()
-        run: bun run server:stop
+        uses: actions/upload-artifact@v7
+        with:
+          name: prosody-logs
+          path: |
+            server/.runtime/**/prosody.log
+            server/.runtime/**/prosody.err
+          include-hidden-files: true

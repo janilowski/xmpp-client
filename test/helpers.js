@@ -1,6 +1,6 @@
 import selfsigned from "selfsigned";
 
-export async function makeSelfSignedCertificate() {
+export async function makeSelfSignedCertificate(options = {}) {
   const attrs = [{ name: "commonName", value: "localhost" }];
   const pem = await selfsigned.generate(attrs, {
     algorithm: "sha256",
@@ -24,6 +24,7 @@ export async function makeSelfSignedCertificate() {
       },
     ],
     keySize: 2048,
+    ...options,
   });
   return pem;
 }

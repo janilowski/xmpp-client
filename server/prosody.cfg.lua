@@ -5,9 +5,10 @@
 local lfs = Lua.require "lfs";
 local test_dir = Lua.os.getenv("PROSODY_TEST_DIR") or lfs.currentdir();
 
-plugin_paths = { test_dir .. "/modules" }
+local modules_dir = Lua.os.getenv("PROSODY_MODULES_DIR") or (lfs.currentdir() .. "/modules");
+plugin_paths = { modules_dir }
 plugin_server = "https://modules.prosody.im/rocks/"
-installer_plugin_path = test_dir .. "/modules";
+installer_plugin_path = modules_dir;
 
 modules_enabled = {
   "roster";
@@ -48,7 +49,9 @@ cross_domain_websocket = true;
 
 authentication = "internal_plain"
 
-c2s_direct_tls_ports = { 5223 };
+interfaces = { "127.0.0.1", "::1" };
+c2s_ports = {};
+c2s_direct_tls_ports = {};
 
 log = {
   debug = test_dir .. "/prosody.log";

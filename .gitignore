@@ -8,6 +8,7 @@ server/prosody.log
 server/prosody.pid
 server/modules
 server/.cache
+server/.runtime/
 
 !.gitkeep
 !.editorconfig
