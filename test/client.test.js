@@ -238,16 +238,21 @@ test("wss IPv4", async () => {
 });
 
 // Prosody 404 https://prosody.im/issues/issue/932
-test("wss IPv6", async () => {
-  xmpp = client({
-    credentials,
-    service: "wss://[::1]:5281/xmpp-websocket",
-    domain,
-  });
-  debug(xmpp);
-  const address = await xmpp.start();
-  expect(address.bare().toString()).toBe(JID);
-});
+// Bun 1.3.14 retains IPv6 URL brackets during TLS identity verification:
+// https://github.com/oven-sh/bun/pull/30674
+test.failingIf(["1.3.14", "1.4.2"].includes(process.versions.bun))(
+  "wss IPv6 (Bun upstream TLS identity defect)",
+  async () => {
+    xmpp = client({
+      credentials,
+      service: "wss://[::1]:5281/xmpp-websocket",
+      domain,
+    });
+    debug(xmpp);
+    const address = await xmpp.start();
+    expect(address.bare().toString()).toBe(JID);
+  },
+);
 
 test("wss domain", async () => {
   xmpp = client({
