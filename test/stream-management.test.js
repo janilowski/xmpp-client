@@ -1,4 +1,11 @@
-import { afterAll, beforeAll, beforeEach, expect, test } from "bun:test";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  expect,
+  test,
+} from "bun:test";
 
 import { client } from "../src/client/index.js";
 import { promise } from "../src/events/index.js";
@@ -22,8 +29,11 @@ beforeEach(async () => {
   await server.restart();
 });
 
-afterAll(async () => {
+afterEach(async () => {
   await xmpp?.stop();
+});
+
+afterAll(async () => {
   await server.reset();
 });
 
@@ -35,7 +45,7 @@ test("client ack stanzas", async () => {
   await xmpp.start();
   await xmpp.send(
     <iq to={domain} id="ping" type="get">
-      <ping xmlns="urn:xmppp:ping" />
+      <ping xmlns="urn:xmpp:ping" />
     </iq>,
   );
 
@@ -50,10 +60,10 @@ test("client fail stanzas", async () => {
   const promise_fail = promise(xmpp.streamManagement, "fail");
   await xmpp.start();
   // Expect send but don't actually send to server, so it will fail
-  await xmpp.streamManagement.outbound_q.push({
+  xmpp.streamManagement.outbound_q.push({
     stanza: (
       <iq to={domain} id="ping" type="get">
-        <ping xmlns="urn:xmppp:ping" />
+        <ping xmlns="urn:xmpp:ping" />
       </iq>
     ),
     stamp: datetime(),
@@ -71,10 +81,10 @@ test("client retry stanzas", async () => {
   const promise_ack = promise(xmpp.streamManagement, "ack");
   await xmpp.start();
   // Add to queue but don't actually send so it can retry after disconnect
-  await xmpp.streamManagement.outbound_q.push({
+  xmpp.streamManagement.outbound_q.push({
     stanza: (
       <iq to={domain} id="ping" type="get">
-        <ping xmlns="urn:xmppp:ping" />
+        <ping xmlns="urn:xmpp:ping" />
       </iq>
     ),
     stamp: datetime(),
@@ -91,14 +101,14 @@ test("client reconnects when server fails to ack stanza", async () => {
   xmpp = client({ credentials, service });
   xmpp.streamManagement.timeout = 10;
   xmpp.streamManagement.requestAckInterval = 5;
-  xmpp.streamManagement.debounceAckRequest = 1;
+  xmpp.streamManagement.requestAckDebounce = 1;
   debug(xmpp);
 
   const promise_resumed = promise(xmpp.streamManagement, "resumed");
   await xmpp.start();
-  xmpp.send(
+  await xmpp.send(
     <iq to={domain} id="ping" type="get">
-      <ping xmlns="urn:xmppp:ping" />
+      <ping xmlns="urn:xmpp:ping" />
     </iq>,
   );
 

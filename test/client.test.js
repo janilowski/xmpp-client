@@ -1,4 +1,4 @@
-import { promise } from "../src/events/index.js";
+import { promise, delay } from "../src/events/index.js";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 
 import { client, xml, jid } from "../src/client/index.js";
@@ -29,20 +29,18 @@ test("client", async () => {
   xmpp = client({ credentials, service });
   debug(xmpp);
 
-  xmpp.on("connect", () => {
-    expect().pass();
-  });
-
-  xmpp.once("open", (el) => {
-    expect(el instanceof xml.Element).toBe(true);
-  });
-
-  xmpp.on("online", (address) => {
-    expect(address instanceof jid.JID).toBe(true);
-    expect(address.bare().toString()).toBe(JID);
-  });
+  const connects = [];
+  const opens = [];
+  const online = [];
+  xmpp.on("connect", () => connects.push(true));
+  xmpp.once("open", (el) => opens.push(el));
+  xmpp.on("online", (address) => online.push(address));
 
   const address = await xmpp.start();
+  expect(connects).toHaveLength(1);
+  expect(opens[0]).toBeInstanceOf(xml.Element);
+  expect(online[0]).toBeInstanceOf(jid.JID);
+  expect(online[0]?.bare().toString()).toBe(JID);
   expect(address instanceof jid.JID).toBe(true);
   expect(address.bare().toString()).toBe(JID);
 });
@@ -56,83 +54,64 @@ test("bad credentials", async () => {
   });
   debug(xmpp);
 
-  let error;
+  const connects = [];
+  const opens = [];
+  const online = [];
+  const errors = [];
+  xmpp.on("connect", () => connects.push(true));
+  xmpp.once("open", (el) => opens.push(el));
+  xmpp.on("online", (address) => online.push(address));
+  xmpp.on("error", (error) => errors.push(error));
 
-  xmpp.on("connect", () => {
-    expect().pass();
+  await expect(xmpp.start()).rejects.toMatchObject({
+    name: "SASLError",
+    condition: "not-authorized",
   });
-  xmpp.once("open", () => {
-    expect().pass();
-  });
-
-  xmpp.on("online", () => {
-    expect().fail();
-  });
-
-  xmpp.on("error", (err) => {
-    expect(err).toBeInstanceOf(Error);
-    expect(err.name).toBe("SASLError");
-    expect(err.condition).toBe("not-authorized");
-    error = err;
-  });
-
-  await expect(xmpp.start()).rejects.toThrow(error);
+  expect(connects).toHaveLength(1);
+  expect(opens).toHaveLength(1);
+  expect(online).toHaveLength(0);
+  expect(errors).toHaveLength(1);
+  expect(errors[0]).toBeInstanceOf(Error);
 });
 
-test("reconnects when server restarts gracefully", (done) => {
+test("reconnects when server restarts gracefully", async () => {
   expect.assertions(2);
-  let c = 0;
 
   xmpp = client({ credentials, service });
   debug(xmpp);
 
   xmpp.on("error", () => {});
 
-  xmpp.on("online", async () => {
-    c++;
-    expect().pass();
-    if (c === 2) {
-      done();
-    } else {
-      await server.restart();
-    }
-  });
-
-  xmpp.start();
+  expect((await xmpp.start()).bare().toString()).toBe(JID);
+  const online = promise(xmpp, "online", null, 5000);
+  await server.restart();
+  expect((await online).bare().toString()).toBe(JID);
 });
 
-test("reconnects when server restarts non-gracefully", (done) => {
+test("reconnects when server restarts non-gracefully", async () => {
   expect.assertions(2);
-  let c = 0;
 
   xmpp = client({ credentials, service });
   debug(xmpp);
 
   xmpp.on("error", () => {});
 
-  xmpp.on("online", async () => {
-    c++;
-    expect().pass();
-    if (c === 2) {
-      done();
-    } else {
-      await server.restart("SIGKILL");
-    }
-  });
-
-  xmpp.start();
+  expect((await xmpp.start()).bare().toString()).toBe(JID);
+  const online = promise(xmpp, "online", null, 5000);
+  await server.restart("SIGKILL");
+  expect((await online).bare().toString()).toBe(JID);
 });
 
-test("does not reconnect when stop is called", (done) => {
-  expect.assertions(2);
+test("does not reconnect when stop is called", async () => {
+  expect.assertions(3);
 
   xmpp = client({ service, credentials });
   debug(xmpp);
-
-  xmpp.on("online", async () => {
-    await xmpp.stop();
-    await server.stop();
-    done();
+  const RECONNECT_DELAY_MS = 50;
+  xmpp.reconnect.delay = RECONNECT_DELAY_MS;
+  let reconnects = 0;
+  xmpp.reconnect.on("reconnecting", () => {
+    reconnects++;
   });
 
   xmpp.on("close", () => {
@@ -143,7 +122,11 @@ test("does not reconnect when stop is called", (done) => {
     expect().pass();
   });
 
-  xmpp.start();
+  await xmpp.start();
+  await xmpp.stop();
+  await server.stop();
+  await delay(RECONNECT_DELAY_MS * 2);
+  expect(reconnects).toBe(0);
 });
 
 test("statuses", async () => {
@@ -184,17 +167,11 @@ test("statuses", async () => {
   ]);
 });
 
-test("anonymous authentication", (done) => {
+test("anonymous authentication", async () => {
   expect.assertions(2);
 
   xmpp = client({ service, domain: "anon." + domain });
   debug(xmpp);
-
-  xmpp.on("online", async () => {
-    await xmpp.stop();
-    await server.stop();
-    done();
-  });
 
   xmpp.on("close", () => {
     expect().pass();
@@ -204,7 +181,9 @@ test("anonymous authentication", (done) => {
     expect().pass();
   });
 
-  xmpp.start();
+  await xmpp.start();
+  await xmpp.stop();
+  await server.stop();
 });
 
 test("auto", async () => {

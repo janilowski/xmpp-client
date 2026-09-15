@@ -39,6 +39,9 @@ test("client online with sasl and resource binding", async () => {
   xmpp = client({ credentials, service });
   debug(xmpp);
 
+  const features = [];
+  const sent = [];
+
   xmpp.on("nonza", (element) => {
     if (!element.is("features")) return;
 
@@ -46,16 +49,22 @@ test("client online with sasl and resource binding", async () => {
     const mechanisms = element.getChild("mechanisms", NS_SASL);
     if (!authentication && !mechanisms) return;
 
-    expect(authentication).toBe(undefined);
-    expect(mechanisms).not.toBe(undefined);
+    features.push({ authentication, mechanisms });
   });
 
   xmpp.on("send", (el) => {
-    if (el.is("auth", NS_SASL)) expect().pass();
-    if (el.is("iq") && el.getChild("bind", NS_BIND)) expect().pass();
+    sent.push(el);
   });
 
   const address = await xmpp.start();
+  expect(features.map(({ authentication }) => authentication)).toEqual([
+    undefined,
+  ]);
+  expect(features[0]?.mechanisms).toBeDefined();
+  expect(sent.some((el) => el.is("auth", NS_SASL))).toBe(true);
+  expect(sent.some((el) => el.is("iq") && el.getChild("bind", NS_BIND))).toBe(
+    true,
+  );
   expect(address instanceof jid.JID).toBe(true);
   expect(address.bare().toString()).toBe(JID);
 });
@@ -70,6 +79,9 @@ test("client online with sasl2 and bind2", async () => {
   xmpp = client({ credentials, service });
   debug(xmpp);
 
+  const features = [];
+  const sent = [];
+
   xmpp.on("nonza", (element) => {
     if (!element.is("features")) return;
 
@@ -77,17 +89,20 @@ test("client online with sasl2 and bind2", async () => {
     const authentication = element.getChild("authentication", NS_SASL2);
     if (!mechanisms && !authentication) return;
 
-    expect(mechanisms).toBe(undefined);
-    expect(authentication).not.toBe(undefined);
+    features.push({ authentication, mechanisms });
   });
 
   xmpp.on("send", (el) => {
-    if (!el.is("authenticate", NS_SASL2)) return;
-    expect().pass();
-    if (el.getChild("bind", NS_BIND2)) expect().pass();
+    if (el.is("authenticate", NS_SASL2)) {
+      sent.push(el);
+    }
   });
 
   const address = await xmpp.start();
+  expect(features.map(({ mechanisms }) => mechanisms)).toEqual([undefined]);
+  expect(features[0]?.authentication).toBeDefined();
+  expect(sent).toHaveLength(1);
+  expect(sent[0]?.getChild("bind", NS_BIND2)).toBeDefined();
   expect(address instanceof jid.JID).toBe(true);
   expect(address.bare().toString()).toBe(JID);
 });
@@ -115,22 +130,27 @@ test("client online with sasl2 and fast", async () => {
 
   debug(xmpp);
 
+  const features = [];
+  const sent = [];
+
   xmpp.on("nonza", (element) => {
     if (!element.is("features")) return;
 
     const authentication = element.getChild("authentication", NS_SASL2);
     if (!authentication) return;
     const inline = authentication.getChild("inline");
-    expect(inline.getChild("fast", NS_FAST)).not.toBe(undefined);
+    features.push(inline?.getChild("fast", NS_FAST));
   });
 
   xmpp.on("send", (el) => {
     const authenticate = el.is("authenticate", NS_SASL2);
     if (!authenticate) return;
 
-    expect(el.attrs.mechanism).toBe("HT-SHA-256-NONE");
-    expect(el.getChild("fast", NS_FAST)).not.toBe(undefined);
+    sent.push(el);
   });
 
   await xmpp.start();
+  expect(features[0]).toBeDefined();
+  expect(sent.map((el) => el.attrs.mechanism)).toEqual(["HT-SHA-256-NONE"]);
+  expect(sent[0]?.getChild("fast", NS_FAST)).toBeDefined();
 });
