@@ -15,12 +15,14 @@ const NS_FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 class ConnectionWebSocket extends Connection {
   send(element, ...args) {
     element.attrs.xmlns ??= this.NS;
+    element.attrs["xml:lang"] ??= this.root?.attrs["xml:lang"];
     return super.send(element, ...args);
   }
 
   async sendMany(elements) {
     for (const element of elements) {
       element.attrs.xmlns ??= this.NS;
+      element.attrs["xml:lang"] ??= this.root?.attrs["xml:lang"];
       element.parent = this.root;
       // Retain the SM replay path's middleware bypass, but honor stream closure.
       await this.write(element.toString());

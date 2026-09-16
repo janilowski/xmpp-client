@@ -4,6 +4,25 @@ import { test, expect, spyOn } from "bun:test";
 
 import Connection from "../index.js";
 
+test("subscribes before writing close and sends only one close for a synchronous peer", async () => {
+  const conn = new Connection({ timeout: 25 });
+  const parser = new EventEmitter();
+  conn._attachParser(parser);
+  conn.status = "online";
+  conn.footerElement = () => xml("close");
+  const writes = [];
+  conn.socket = new EventEmitter();
+  conn.socket.write = (data, callback) => {
+    writes.push(data);
+    parser.emit("end", xml("close"));
+    callback();
+  };
+  const result = await conn._closeStream();
+  expect(result?.name).toBe("close");
+  expect(writes).toHaveLength(1);
+  expect(conn.status).toBe("close");
+});
+
 test("resets properties on socket close event", () => {
   const conn = new Connection();
   conn._attachSocket(new EventEmitter());

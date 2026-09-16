@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { once } from "node:events";
 import server from "./server/index.js";
 import { ScriptedPeer } from "./conformance/peer.ts";
+import { RawPeer } from "./conformance/raw-peer.ts";
 
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="browser-peer"/>';
@@ -73,6 +74,75 @@ test("Chromium rejects the fixture certificate without explicit trust", async ()
 afterAll(async () => {
   await browser?.close();
   origin.close();
+});
+
+test.each([null, "other"])(
+  "Chromium rejects an actual handshake selecting %s",
+  async (protocol) => {
+    const peer = await new RawPeer(protocol).listen();
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${origin.address().port}`);
+      await page.addScriptTag({ path: "dist/xmpp.min.js" });
+      const result = await page.evaluate(async (service) => {
+        const xmpp = globalThis.XMPP.client({
+          service,
+          domain: "example.test",
+        });
+        xmpp.reconnect.stop();
+        xmpp.on("error", () => {});
+        let connected = false;
+        xmpp.on("connect", () => {
+          connected = true;
+        });
+        try {
+          await xmpp.start();
+          return { rejected: false, connected };
+        } catch {
+          return { rejected: true, connected };
+        } finally {
+          await xmpp.stop();
+        }
+      }, peer.url);
+      expect(result).toEqual({ rejected: true, connected: false });
+      expect(peer.requests).toHaveLength(1);
+    } finally {
+      await page.close();
+      await peer.stop();
+    }
+  },
+);
+
+test("Chromium rejects invalid UTF-8 WebSocket text before message delivery", async () => {
+  const peer = await new RawPeer("xmpp", [
+    new Uint8Array([0x81, 0x02, 0xc3, 0x28]),
+  ]).listen();
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    const messages = await page.evaluate(
+      (service) =>
+        new Promise((resolve, reject) => {
+          const received = [];
+          const socket = new WebSocket(service, "xmpp");
+          const timer = setTimeout(() => {
+            socket.close();
+            reject(new Error("Invalid text did not close transport"));
+          }, 2000);
+          socket.onmessage = (event) => received.push(event.data);
+          socket.onerror = () => {};
+          socket.onclose = () => {
+            clearTimeout(timer);
+            resolve(received);
+          };
+        }),
+      peer.url,
+    );
+    expect(messages).toEqual([]);
+  } finally {
+    await page.close();
+    await peer.stop();
+  }
 });
 
 test("Chromium independently validates outgoing RFC 7395 documents", async () => {

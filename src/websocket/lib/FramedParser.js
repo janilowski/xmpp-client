@@ -29,6 +29,18 @@ export default class FramedParser extends EventEmitter {
       }
       const opening = element.is("open", NS_FRAMING);
       const closing = element.is("close", NS_FRAMING);
+      if ((opening || closing) && element.children.length) {
+        throw new XMLError("A framing header must be empty");
+      }
+      if (opening) {
+        // RFC 6120 §4.7.5: compare numeric components, not decimal numbers.
+        const version = /^(\d+)\.(\d+)$/.exec(element.attrs.version ?? "0.9");
+        if (!version || Number(version[1]) !== 1) {
+          const error = new XMLError("Unsupported stream version");
+          error.condition = "unsupported-version";
+          throw error;
+        }
+      }
       if (
         (this.#state === "opening" && !opening && !closing) ||
         (this.#state === "open" && opening)

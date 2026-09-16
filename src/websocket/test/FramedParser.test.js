@@ -7,7 +7,7 @@ test("framed parser", (done) => {
 
   parser.on("start", (el) => {
     expect(el.toString()).toBe(
-      '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>',
+      '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" version="1.0"/>',
     );
   });
 
@@ -23,7 +23,7 @@ test("framed parser", (done) => {
     done();
   });
 
-  parser.write('<open xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>');
+  parser.write('<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" version="1.0"/>');
   parser.write('<bar>hello</bar>');
   parser.write('<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>');
 });

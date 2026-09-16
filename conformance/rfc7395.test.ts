@@ -63,7 +63,9 @@ async function openStream({
     await xmpp.start();
   } else {
     await xmpp.connect(peer.url);
-    await xmpp.open(CLIENT_OPTIONS);
+    if (establishment !== "connect") {
+      await xmpp.open(CLIENT_OPTIONS);
+    }
   }
 }
 
@@ -84,6 +86,167 @@ afterEach(async () => {
 });
 
 describe("RFC 7395 — client wire behavior", () => {
+  test("§3.4/3.6 stopping before stream initiation sends no XML close", async () => {
+    await openStream({ establishment: "connect" });
+    await xmpp.stop();
+    await peer.waitForClose();
+    expect(peer.transcript).toEqual([]);
+  });
+
+  test("§3.8 XMPP ping uses XML frames, never whitespace keepalives", async () => {
+    await openStream({
+      onFrame(frame, remote) {
+        if (frame.includes('id="keepalive"')) {
+          remote.send(
+            '<iq xmlns="jabber:client" type="result" id="keepalive"/>',
+          );
+        }
+      },
+    });
+    await peer.next();
+    const reply = await xmpp.iqCaller.request(
+      xml(
+        "iq",
+        { type: "get", id: "keepalive" },
+        xml("ping", { xmlns: "urn:xmpp:ping" }),
+      ),
+    );
+    expect(reply.attrs.type).toBe("result");
+    const frame = await peer.next();
+    expect(frame.startsWith("<iq ")).toBe(true);
+    expect(frame).toContain('<ping xmlns="urn:xmpp:ping"/>');
+    expect(peer.transcript).toHaveLength(2);
+    for (const sent of peer.transcript) {
+      expect(sent.startsWith("<")).toBe(true);
+      expect(sent.startsWith("<?xml")).toBe(false);
+    }
+  });
+
+  test.each([
+    [
+      "size",
+      '<message xmlns="jabber:client">' +
+        "x".repeat(1024 * 1024) +
+        "</message>",
+    ],
+    [
+      "depth",
+      '<message xmlns="jabber:client">' +
+        "<x>".repeat(64) +
+        "</x>".repeat(64) +
+        "</message>",
+    ],
+  ])(
+    "§6 local XML %s limit fails atomically with policy-violation",
+    async (limit, frame) => {
+      await openStream();
+      await peer.next();
+      const received: unknown[] = [];
+      xmpp.on("stanza", (element: unknown) => received.push(element));
+      expectedErrors = [`XML document exceeds ${limit} limit`];
+      peer.send(frame);
+      expect(await peer.next()).toContain(
+        '<policy-violation xmlns="urn:ietf:params:xml:ns:xmpp-streams"/>',
+      );
+      expect(readFrame(await peer.next())).toEqual(readFrame(CLOSE));
+      await peer.waitForClose();
+      expect(received).toEqual([]);
+    },
+  );
+
+  test("§3.3.1 unsupported peer version rejects initiation and sends its stream error", async () => {
+    const result = await openStream({
+      serverOpen: OPEN.replace('version="1.0"', 'version="0.9"'),
+    }).catch((error: Error) => error);
+    expectedErrors = ["Unsupported stream version"];
+    expect(result).toMatchObject({ condition: "unsupported-version" });
+    await peer.next();
+    expect(await peer.next()).toContain(
+      '<unsupported-version xmlns="urn:ietf:params:xml:ns:xmpp-streams"/>',
+    );
+    expect(readFrame(await peer.next())).toEqual(readFrame(CLOSE));
+    await peer.waitForClose();
+  });
+
+  test("§3.3.3 every outgoing stanza carries its language without overwriting explicit values", async () => {
+    await openStream();
+    await peer.next();
+    await xmpp.send(xml("message", {}, xml("body", {}, "hello")));
+    await xmpp.sendMany([
+      xml("message", { "xml:lang": "pl" }),
+      xml("message", { "xml:lang": "" }),
+      xml("presence"),
+    ]);
+    for (const language of ["en", "pl", "", "en"]) {
+      const [root] = readFrame(await peer.next());
+      expect(
+        root &&
+          "open" in root &&
+          root.attributes["{http://www.w3.org/XML/1998/namespace}lang"],
+      ).toBe(language);
+    }
+  });
+
+  test("§3.3.3 incoming language is local to each document", async () => {
+    await openStream();
+    const received: unknown[] = [];
+    xmpp.on("stanza", (element: { attrs: Record<string, string> }) =>
+      received.push(element.attrs["xml:lang"]),
+    );
+    const last = once(xmpp, "nonza", {
+      signal: AbortSignal.timeout(EVENT_TIMEOUT_MS),
+    });
+    peer.send('<message xmlns="jabber:client" xml:lang="pl"/>');
+    peer.send('<message xmlns="jabber:client"/>');
+    peer.send('<barrier xmlns="urn:test"/>');
+    await last;
+    expect(received).toEqual(["pl", undefined]);
+  });
+
+  test("§3.7 repeated restarts retain destination, version and language without closing", async () => {
+    await openStream();
+    await peer.next();
+    for (let index = 0; index < 3; index += 1) {
+      await xmpp.restart();
+      expect(readFrame(await peer.next())).toEqual(readFrame(CLIENT_OPEN));
+    }
+    expect(peer.requests).toHaveLength(1);
+  });
+
+  test("§3.7 a rejected restart settles without retaining an old stream", async () => {
+    let opens = 0;
+    await openStream({
+      serverOpen: "",
+      onFrame(frame, remote) {
+        if (!frame.startsWith("<open")) {
+          return;
+        }
+        opens += 1;
+        remote.send(opens === 1 ? OPEN : CLOSE);
+      },
+    });
+    await expect(xmpp.restart()).rejects.toThrow("Stream closed before open");
+    await peer.waitForClose();
+  });
+
+  test("§3.5 opening then stream error then close rejects start", async () => {
+    const result = await openStream({
+      establishment: "online",
+      onFrame(frame, remote) {
+        if (!frame.startsWith("<open")) {
+          return;
+        }
+        remote.send(
+          '<error xmlns="http://etherx.jabber.org/streams"><host-unknown xmlns="urn:ietf:params:xml:ns:xmpp-streams"/></error>',
+        );
+        remote.send(CLOSE);
+      },
+    }).catch((error: Error) => error);
+    expectedErrors = ["host-unknown"];
+    expect(result).toMatchObject({ condition: "host-unknown" });
+    await peer.waitForClose();
+  });
+
   test("§3.4 peer close during initiation rejects start without a timeout", async () => {
     const result = await openStream({
       serverOpen: CLOSE,
@@ -174,7 +337,7 @@ describe("RFC 7395 — client wire behavior", () => {
     peer.send('<close xmlns="urn:wrong"/>');
     expect(readFrame(await peer.next())).toEqual(
       readFrame(
-        '<stream:error xmlns:stream="http://etherx.jabber.org/streams"><invalid-namespace xmlns="urn:ietf:params:xml:ns:xmpp-streams"/></stream:error>',
+        '<stream:error xmlns:stream="http://etherx.jabber.org/streams" xml:lang="en"><invalid-namespace xmlns="urn:ietf:params:xml:ns:xmpp-streams"/></stream:error>',
       ),
     );
     expect(readFrame(await peer.next())).toEqual(readFrame(CLOSE));
@@ -273,7 +436,7 @@ describe("RFC 7395 — client wire behavior", () => {
     await xmpp.send(xml("message", {}, xml("body", {}, "Zażółć 🐦 & < >")));
     expect(readFrame(await peer.next())).toEqual(
       readFrame(
-        '<message xmlns="jabber:client"><body>Zażółć 🐦 &amp; &lt; &gt;</body></message>',
+        '<message xmlns="jabber:client" xml:lang="en"><body>Zażółć 🐦 &amp; &lt; &gt;</body></message>',
       ),
     );
   });
@@ -283,10 +446,10 @@ describe("RFC 7395 — client wire behavior", () => {
     await peer.next();
     await xmpp.sendMany([xml("presence"), xml("message", { id: "second" })]);
     expect(readFrame(await peer.next())).toEqual(
-      readFrame('<presence xmlns="jabber:client"/>'),
+      readFrame('<presence xmlns="jabber:client" xml:lang="en"/>'),
     );
     expect(readFrame(await peer.next())).toEqual(
-      readFrame('<message id="second" xmlns="jabber:client"/>'),
+      readFrame('<message id="second" xmlns="jabber:client" xml:lang="en"/>'),
     );
     expect(peer.transcript).toHaveLength(3);
   });

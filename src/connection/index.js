@@ -17,6 +17,7 @@ const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
 class Connection extends EventEmitter {
   #socketListeners = null;
   #parserListeners = null;
+  #closing = false;
 
   constructor(options = {}) {
     super();
@@ -83,6 +84,7 @@ class Connection extends EventEmitter {
     const reply =
       this.parser &&
       this.socket &&
+      !this.#closing &&
       this.status !== "closing" &&
       !(dirty instanceof Error)
         ? this.write(this.footer(this.footerElement()))
@@ -265,8 +267,13 @@ class Connection extends EventEmitter {
     const socket = new this.Socket();
     this._attachSocket(socket);
     // The 'connect' status is set by the socket 'connect' listener
-    socket.connect(this.socketParameters(service));
-    return promise(socket, "connect");
+    const connected = this.#waitForStream("connect", this.timeout, socket);
+    try {
+      socket.connect(this.socketParameters(service));
+      return await connected.result;
+    } finally {
+      connected.cancel();
+    }
   }
 
   /**
@@ -325,6 +332,7 @@ class Connection extends EventEmitter {
       throw new Error("A stream is already open; use restart instead");
     }
     this._status("opening");
+    this.#closing = false;
 
     const { domain, lang } = options;
 
@@ -348,7 +356,7 @@ class Connection extends EventEmitter {
   }
 
   // Negotiation must settle on transport/stream termination, not only on errors.
-  #waitForStream(event, timeout) {
+  #waitForStream(event, timeout, target = this) {
     let cancel;
     const result = new Promise((resolve, reject) => {
       let timer;
@@ -358,17 +366,27 @@ class Connection extends EventEmitter {
       };
       const ready = (value) => finish(resolve, value);
       const error = (value) => finish(reject, value);
-      const closed = () => error(new Error(`Stream closed before ${event}`));
+      const closed = () => {
+        if (event !== "end") {
+          error(new Error(`Stream closed before ${event}`));
+        }
+      };
       const disconnected = () =>
         error(new Error(`Connection closed before ${event}`));
       cancel = () => {
         clearTimeout(timer);
-        this.off(event, ready);
+        target.off(event, ready);
+        if (target !== this) {
+          target.off("error", error);
+        }
         this.off("error", error);
         this.off("close", closed);
         this.off("disconnect", disconnected);
       };
-      this.on(event, ready);
+      target.on(event, ready);
+      if (target !== this) {
+        target.on("error", error);
+      }
       this.on("error", error);
       this.on("close", closed);
       this.on("disconnect", disconnected);
@@ -396,16 +414,29 @@ class Connection extends EventEmitter {
    * https://tools.ietf.org/html/rfc7395#section-3.6
    */
   async _closeStream(timeout = this.timeout) {
-    await this.#runHooks("close");
-
-    const fragment = this.footer(this.footerElement());
-
-    await this.write(fragment);
-    this._status("closing");
-    if (this.parser) {
-      return promise(this.parser, "end", "error", timeout);
+    // An established transport does not imply an initiated XML stream.
+    if (this.status === "connect" || this.status === "connecting") {
+      return;
     }
-    // The 'close' status is set by the parser 'end' listener
+    await this.#runHooks("close");
+    if (this.#closing) {
+      throw new Error("Connection is closing");
+    }
+    this.#closing = true;
+    const fragment = this.footer(this.footerElement());
+    const closed =
+      this.parser && this.#waitForStream("end", timeout, this.parser);
+    try {
+      // Subscribe and mark the close before a synchronous peer can answer it.
+      const written = this.write(fragment);
+      if (this.status !== "close" && this.status !== "disconnect") {
+        this._status("closing");
+      }
+      const [element] = await Promise.all([closed?.result, written]);
+      return element;
+    } finally {
+      closed?.cancel();
+    }
   }
 
   /**

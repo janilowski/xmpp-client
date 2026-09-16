@@ -15,6 +15,39 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept an unsupported stream version",
+    file: "src/websocket/lib/FramedParser.js",
+    before: "if (!version || Number(version[1]) !== 1)",
+    after: "if (false)",
+    suite: "src/websocket/test/frames.test.js",
+    test: "rejects unsupported peer version",
+  },
+  {
+    name: "omit the outgoing language context",
+    file: "src/websocket/lib/Connection.js",
+    before:
+      'element.attrs["xml:lang"] ??= this.root?.attrs["xml:lang"];\n    return super.send',
+    after: "return super.send",
+    suite: "conformance/rfc7395.test.ts",
+    test: "every outgoing stanza carries its language",
+  },
+  {
+    name: "remove the document byte limit",
+    file: "src/xml/lib/parseDocument.js",
+    before: "export const MAX_XML_BYTES = 1024 * 1024;",
+    after: "export const MAX_XML_BYTES = Infinity;",
+    suite: "src/xml/test/limits.test.js",
+    test: "document byte limit",
+  },
+  {
+    name: "remove the document depth limit",
+    file: "src/xml/lib/parseDocument.js",
+    before: "const MAX_XML_DEPTH = 64;",
+    after: "const MAX_XML_DEPTH = Infinity;",
+    suite: "src/xml/test/limits.test.js",
+    test: "document depth limit",
+  },
+  {
     name: "accept an unfinished XML document",
     file: "src/xml/lib/parseDocument.js",
     before: "parser.write(source).close();",
