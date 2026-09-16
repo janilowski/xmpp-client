@@ -12,7 +12,8 @@ const path = "dist/xmpp.min.js";
 const buffer = await readFile(path);
 const compressed = await brotliCompress(buffer);
 
-const max_size = "13 KB";
+// Complete-document XML validation adds saxes; measured at 19.46 KB Brotli.
+const max_size = "20 KB";
 
 console.log(`${path}:`);
 if (compressed.length > bytes(max_size)) {

@@ -23,7 +23,7 @@ test("framed parser", (done) => {
     done();
   });
 
-  parser.write(
-    '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing"/><bar>hello</bar><close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>',
-  );
+  parser.write('<open xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>');
+  parser.write('<bar>hello</bar>');
+  parser.write('<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>');
 });

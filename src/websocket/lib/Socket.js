@@ -3,6 +3,7 @@ import { parseURI } from "../../connection/lib/util.js";
 
 const CODE = "ECONNERROR";
 const SUBPROTOCOL = "xmpp";
+const WS_UNSUPPORTED_DATA = 1003;
 
 export function isSecure(url) {
   const uri = parseURI(url);
@@ -13,6 +14,7 @@ export function isSecure(url) {
 
 export default class Socket extends EventEmitter {
   #listeners = null;
+  #rejected = false;
   socket = null;
   url = null;
   secure = false;
@@ -24,11 +26,13 @@ export default class Socket extends EventEmitter {
   }
 
   _attachSocket(socket) {
+    this.#rejected = false;
     this.socket = socket;
     this.#listeners ??= listeners({
       open: () => {
         // RFC 7395 §3.1: an accepted WebSocket is not yet an XMPP transport.
         if (this.socket.protocol !== SUBPROTOCOL) {
+          this.#rejected = true;
           this.socket.close();
           this.emit(
             "error",
@@ -38,7 +42,21 @@ export default class Socket extends EventEmitter {
         }
         this.emit("connect");
       },
-      message: ({ data }) => this.emit("data", data),
+      message: ({ data }) => {
+        if (this.#rejected) {
+          return;
+        }
+        if (typeof data !== "string") {
+          this.#rejected = true;
+          this.socket.close(WS_UNSUPPORTED_DATA, "XMPP requires text messages");
+          this.emit(
+            "error",
+            new Error("XMPP requires WebSocket text messages"),
+          );
+          return;
+        }
+        this.emit("data", data);
+      },
       error: (event) => {
         const { url } = this;
         // WS

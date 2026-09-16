@@ -1,39 +1,63 @@
-import { Parser, Element, XMLError } from "../../xml/index.js";
+import { EventEmitter } from "../../events/index.js";
+import XMLError from "../../xml/lib/XMLError.js";
+import parseDocument, { XML_CONTEXT } from "../../xml/lib/parseDocument.js";
 
-export default class FramedParser extends Parser {
-  onStartElement(name, attrs) {
-    const element = new Element(name, attrs);
+const NS_FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 
-    const { cursor } = this;
+export default class FramedParser extends EventEmitter {
+  #failed = false;
+  #state = "opening";
 
-    if (cursor) {
-      cursor.append(element);
+  write(data) {
+    if (this.#failed || this.#state === "closed") {
+      return;
     }
-
-    this.cursor = element;
+    let element;
+    try {
+      if (typeof data !== "string" || !data.startsWith("<")) {
+        throw new XMLError("An XMPP frame must start with <");
+      }
+      // WebSocket messages are documents, not chunks of a shared XML stream.
+      element = parseDocument(data, XML_CONTEXT.XMPP);
+      if (
+        ["open", "close"].includes(element.getName()) &&
+        element.getNS() !== NS_FRAMING
+      ) {
+        const error = new XMLError("Invalid framing namespace");
+        error.condition = "invalid-namespace";
+        throw error;
+      }
+      const opening = element.is("open", NS_FRAMING);
+      const closing = element.is("close", NS_FRAMING);
+      if (
+        (this.#state === "opening" && !opening && !closing) ||
+        (this.#state === "open" && opening)
+      ) {
+        throw new XMLError("Unexpected stream frame");
+      }
+    } catch (error_) {
+      this.#failed = true;
+      const error =
+        error_ instanceof XMLError
+          ? error_
+          : new XMLError(error_.message, { cause: error_ });
+      this.emit("error", error);
+      return;
+    }
+    if (element.is("open", NS_FRAMING)) {
+      this.#state = "open";
+      this.emit("start", element);
+    } else if (element.is("close", NS_FRAMING)) {
+      this.#state = "closed";
+      this.emit("end", element);
+    } else {
+      this.emit("element", element);
+    }
   }
 
-  onEndElement(name) {
-    const { cursor } = this;
-    if (name !== cursor.name) {
-      // <foo></bar>
-      this.emit("error", new XMLError(`${cursor.name} must be closed.`));
-      return;
+  end(data) {
+    if (data) {
+      this.write(data);
     }
-
-    if (cursor.parent) {
-      this.cursor = cursor.parent;
-      return;
-    }
-
-    if (cursor.is("open", "urn:ietf:params:xml:ns:xmpp-framing")) {
-      this.emit("start", cursor);
-    } else if (cursor.is("close", "urn:ietf:params:xml:ns:xmpp-framing")) {
-      this.emit("end", cursor);
-    } else {
-      this.emit("element", cursor);
-    }
-
-    this.cursor = null;
   }
 }

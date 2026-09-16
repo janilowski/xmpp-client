@@ -32,7 +32,6 @@
     "playwright": "1.63.0",
     "prettier": "^3.9.6",
     "rolldown": "^1.2.7",
-    "saxes": "6.0.0",
     "selfsigned": "^5.5.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.69.0"
@@ -104,6 +103,7 @@
     "picomatch": "4.0.4"
   },
   "dependencies": {
+    "saxes": "6.0.0",
     "events": "^3.3.0",
     "ltx": "^3.1.2"
   }
