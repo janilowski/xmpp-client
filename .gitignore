@@ -15,6 +15,7 @@ server/.runtime/
 !.gitignore
 
 .eslintcache
+conformance/reports/
 
 .env
 .env.*

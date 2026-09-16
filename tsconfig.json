@@ -14,6 +14,7 @@
     "skipLibCheck": true
   },
   "include": [
+    "conformance/**/*.ts",
     "src/**/*.js",
     "src/**/*.ts",
     "test/**/*.js",

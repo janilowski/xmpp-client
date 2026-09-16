@@ -35,6 +35,19 @@ jobs:
           bun run build
           bun run bundlesize
 
+      - name: Protocol tests and mutation checks
+        run: |
+          bun run test:conformance
+          bun run test:mutations
+
+      - name: Preserve protocol results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: conformance-results
+          path: conformance/reports/
+          if-no-files-found: warn
+
       - name: Install Prosody
         run: |
           sudo wget \
