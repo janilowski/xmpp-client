@@ -2,6 +2,7 @@ import { EventEmitter, listeners } from "../../events/index.js";
 import { parseURI } from "../../connection/lib/util.js";
 
 const CODE = "ECONNERROR";
+const SUBPROTOCOL = "xmpp";
 
 export function isSecure(url) {
   const uri = parseURI(url);
@@ -19,13 +20,24 @@ export default class Socket extends EventEmitter {
   connect(url) {
     this.url = url;
     this.secure = isSecure(url);
-    this._attachSocket(new WebSocket(url, ["xmpp"]));
+    this._attachSocket(new WebSocket(url, [SUBPROTOCOL]));
   }
 
   _attachSocket(socket) {
     this.socket = socket;
     this.#listeners ??= listeners({
-      open: () => this.emit("connect"),
+      open: () => {
+        // RFC 7395 §3.1: an accepted WebSocket is not yet an XMPP transport.
+        if (this.socket.protocol !== SUBPROTOCOL) {
+          this.socket.close();
+          this.emit(
+            "error",
+            new Error("WebSocket did not negotiate the xmpp subprotocol"),
+          );
+          return;
+        }
+        this.emit("connect");
+      },
       message: ({ data }) => this.emit("data", data),
       error: (event) => {
         const { url } = this;
