@@ -15,6 +15,14 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept an IQ reply from an unrelated sender",
+    file: "src/iq/caller.js",
+    before: "!deferred || !replyMatches(stanza.attrs.from, deferred)",
+    after: "!deferred",
+    suite: "conformance/rfc6120.test.ts",
+    test: "IQ ignores a forged",
+  },
+  {
     name: "accept an unsupported stream version",
     file: "src/websocket/lib/FramedParser.js",
     before: "if (!version || Number(version[1]) !== 1)",
@@ -97,6 +105,7 @@ for (const mutation of mutations) {
     for (const file of [
       "package.json",
       "conformance/rfc7395.test.ts",
+      "conformance/rfc6120.test.ts",
       "conformance/peer.ts",
       "conformance/xml.ts",
     ]) {

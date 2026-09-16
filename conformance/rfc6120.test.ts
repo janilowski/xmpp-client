@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { client } from "../src/client/index.js";
+import xml from "../src/xml/index.js";
 import { ScriptedPeer } from "./peer.ts";
 
 const OPEN =
@@ -8,6 +9,51 @@ const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';
 const FEATURES =
   '<features xmlns="http://etherx.jabber.org/streams"><mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl"><mechanism>PLAIN</mechanism></mechanisms></features>';
 const NEGOTIATION_TIMEOUT_MS = 100;
+
+test.each(["result", "error"])(
+  "IQ ignores a forged %s before the authentic wire reply",
+  async (type) => {
+    const peer = new ScriptedPeer((frame, remote) => {
+      if (frame.startsWith("<open")) {
+        remote.send(OPEN);
+      } else if (frame.startsWith("<iq")) {
+        remote.send(
+          `<iq xmlns="jabber:client" id="sender-check" type="${type}" from="attacker.example"><error type="cancel"><service-unavailable xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`,
+        );
+        remote.send(
+          '<iq xmlns="jabber:client" id="sender-check" type="result" from="expected.example"><verified xmlns="urn:test:reply"/></iq>',
+        );
+      } else if (frame.startsWith("<close")) {
+        remote.send(CLOSE);
+      }
+    });
+    const xmpp = client({ service: peer.url, domain: "example.test" });
+    xmpp.reconnect.stop();
+    try {
+      await xmpp.connect(peer.url);
+      await xmpp.open({ domain: "example.test" });
+      const reply = await xmpp.iqCaller
+        .request(
+          xml(
+            "iq",
+            {
+              type: "get",
+              id: "sender-check",
+              to: "expected.example",
+            },
+            xml("query", { xmlns: "urn:test:reply" }),
+          ),
+        )
+        .catch((error: Error) => error);
+      expect(reply.attrs?.from).toBe("expected.example");
+      expect(reply.getChild("verified", "urn:test:reply")).toBeDefined();
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
 
 // RFC 6120 §§4.4, 4.6 and 6. The deadline is local policy, not an RFC duration.
 test.each(["silent", "disconnect"])(

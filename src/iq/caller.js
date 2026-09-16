@@ -2,6 +2,36 @@ import xid from "../util/id.js";
 import StanzaError from "../middleware/lib/StanzaError.js";
 import operation from "../events/lib/operation.js";
 import xml from "../xml/index.js";
+import jid from "../jid/index.js";
+
+// Match prepared wire identities; do not repair malformed sender addresses.
+function replyMatches(from, { to, server, account }) {
+  if (from === undefined) {
+    return !to || to === server || to === account;
+  }
+  const slash = from.indexOf("/");
+  if (!from || from.startsWith("@") || slash === from.length - 1) {
+    return false;
+  }
+  let sender;
+  try {
+    sender = jid(from);
+  } catch {
+    return false;
+  }
+  const canonical =
+    slash < 0
+      ? from.toLowerCase()
+      : from.slice(0, slash).toLowerCase() + from.slice(slash);
+  if (sender.toString() !== canonical) {
+    return false;
+  }
+  if (!to) {
+    return canonical === server || canonical === account;
+  }
+  const target = jid(to);
+  return target.equals(target.resource ? sender : sender.bare());
+}
 
 function isReply({ name, type }) {
   if (name !== "iq") return false;
@@ -25,7 +55,7 @@ class IQCaller {
 
     const deferred = this.handlers.get(id);
 
-    if (!deferred) {
+    if (!deferred || !replyMatches(stanza.attrs.from, deferred)) {
       return next();
     }
 
@@ -43,8 +73,18 @@ class IQCaller {
       stanza.attrs.id = xid();
     }
 
-    const deferred = Promise.withResolvers();
-    this.handlers.set(stanza.attrs.id, deferred);
+    const { id, to } = stanza.attrs;
+    if (this.handlers.has(id)) {
+      throw new Error(`Duplicate IQ id: ${id}`);
+    }
+    // Snapshot the request identity before send or application callbacks run.
+    const deferred = Object.assign(Promise.withResolvers(), {
+      to: to === undefined ? undefined : jid(to.toString()).toString(),
+      server:
+        this.entity.jid?.domain || this.entity.options.domain?.toLowerCase(),
+      account: this.entity.jid?.bare().toString(),
+    });
+    this.handlers.set(id, deferred);
 
     try {
       return await operation(
@@ -57,8 +97,8 @@ class IQCaller {
         signal,
       );
     } finally {
-      if (this.handlers.get(stanza.attrs.id) === deferred) {
-        this.handlers.delete(stanza.attrs.id);
+      if (this.handlers.get(id) === deferred) {
+        this.handlers.delete(id);
       }
     }
   }
