@@ -1,4 +1,4 @@
-import parse from "../../xml/lib/parseDocument.js";
+import parse, { MAX_XML_BYTES } from "../../xml/lib/parseDocument.js";
 
 import { compare as compareAltConnections } from "./alt-connections.js";
 
@@ -20,7 +20,31 @@ export async function resolve(domain) {
     if (!res.ok) {
       return [];
     }
-    const text = await res.text();
+    if (!res.body) {
+      return [];
+    }
+    // Bound decompressed bytes while reading, not after allocating the body.
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8", { fatal: true });
+    let bytes = 0;
+    let text = "";
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        bytes += value.byteLength;
+        if (bytes > MAX_XML_BYTES) {
+          return [];
+        }
+        text += decoder.decode(value, { stream: true });
+      }
+      text += decoder.decode();
+    } finally {
+      await reader.cancel();
+      reader.releaseLock();
+    }
     const document = parse(text);
     if (!document.is("XRD", NS_XRD)) {
       return [];

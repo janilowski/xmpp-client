@@ -22,6 +22,8 @@ const args = [
   "src/websocket/test/subprotocol.test.js",
   "src/websocket/test/frames.test.js",
   "src/resolve/test/resolve.test.js",
+  "src/resolve/test/connect.test.js",
+  "src/xml/test/limits.test.js",
   "--reporter=junit",
   `--reporter-outfile=${join(directory, "tests.xml")}`,
 ];

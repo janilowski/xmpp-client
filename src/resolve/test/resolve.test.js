@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { ReadableStream } from "node:stream/web";
 import resolve from "../resolve.js";
 
 const DOMAIN = "example.test";
@@ -32,6 +33,26 @@ test("discovery has a deadline and does not follow HTTP redirects", async () => 
   await resolve(DOMAIN);
   expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: "error" });
   expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+});
+
+test("cancels an oversized discovery body before reading its remainder", async () => {
+  let cancelled = false;
+  fetchMock.mockResolvedValue(
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new Uint8Array(1024 * 1024 + 1).fill(32));
+          controller.enqueue(new TextEncoder().encode(DOCUMENT));
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }),
+    ),
+  );
+  // The reader must cancel without waiting for the never-ending body.
+  expect(await resolve(DOMAIN)).toEqual([]);
+  expect(cancelled).toBe(true);
 });
 
 test("does not trust a host-meta document from an unsuccessful HTTP response", async () => {
