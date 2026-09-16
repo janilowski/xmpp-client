@@ -1,7 +1,33 @@
 import { mockClient, mockInput } from "../../../test/support/index.js";
 import StanzaError from "../../middleware/lib/StanzaError.js";
 
-test("#request", (done) => {
+test("deadline includes a send that never settles", async () => {
+  const xmpp = mockClient();
+  xmpp.send = () => new Promise(() => {});
+  let error;
+  const pending = xmpp.iqCaller.request(<iq type="get" />, 5).catch((error_) => { error = error_; });
+  await Bun.sleep(25);
+  expect(error?.name).toBe("TimeoutError");
+  expect(xmpp.iqCaller.handlers.size).toBe(0);
+  await pending;
+});
+
+test("disconnect rejects old IQ while a new session can receive its own response", async () => {
+  const xmpp = mockClient();
+  const old = xmpp.iqCaller.request(<iq type="get" id="old" />);
+  xmpp.emit("disconnect");
+  await expect(old).rejects.toThrow("Connection closed");
+  xmpp.emit("connect");
+  const current = xmpp.iqCaller.request(<iq type="get" id="new" />);
+  mockInput(xmpp, <iq type="result" id="old" />);
+  expect(xmpp.iqCaller.handlers.has("new")).toBe(true);
+  const reply = <iq type="result" id="new" />;
+  mockInput(xmpp, reply);
+  expect(await current).toEqual(reply);
+  expect(xmpp.iqCaller.handlers.size).toBe(0);
+});
+
+test("#request", async () => {
   const xmpp = mockClient();
   const { iqCaller } = xmpp;
 
@@ -11,11 +37,11 @@ test("#request", (done) => {
         <foo />
       </iq>,
     );
-    done();
+    mockInput(xmpp, <iq type="result" id="foobar" />);
     return Promise.resolve();
   };
 
-  iqCaller.request(
+  await iqCaller.request(
     <iq type="get" id="foobar">
       <foo />
     </iq>,

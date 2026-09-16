@@ -5,6 +5,8 @@
  * https://xmpp.org/registrar/stream-features.html XML Stream Features
  */
 
+import operation from "../events/lib/operation.js";
+
 export default function streamFeatures({ middleware }) {
   function use(name, xmlns, handler) {
     return middleware.use((ctx, next) => {
@@ -13,7 +15,17 @@ export default function streamFeatures({ middleware }) {
         return next();
       const feature = stanza.getChild(name, xmlns);
       if (!feature) return next();
-      return handler(ctx, next, feature);
+      return operation(ctx.entity, (signal) =>
+        handler(
+          ctx,
+          () => {
+            signal.throwIfAborted();
+            return next();
+          },
+          feature,
+          signal,
+        ),
+      );
     });
   }
 

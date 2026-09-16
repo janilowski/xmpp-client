@@ -1,3 +1,8 @@
+import { afterEach } from "bun:test";
+import { disconnectClients } from "../../../test/support/mockClient.js";
+
+afterEach(disconnectClients);
+
 import { tick } from "../../events/index.js";
 import { mockClient } from "../../../test/support/index.js";
 import { datetime } from "../../util/time.js";

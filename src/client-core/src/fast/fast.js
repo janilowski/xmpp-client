@@ -90,8 +90,7 @@ export default function fast({ sasl2, entity }) {
         ) {
           return onInvalidToken();
         }
-        entity.emit("error", error);
-        return false;
+        throw error;
       }
 
       async function onInvalidToken() {

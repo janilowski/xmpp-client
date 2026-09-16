@@ -13,15 +13,20 @@ export function setupStreamFeature({
 }) {
   // https://xmpp.org/extensions/xep-0198.html#enable
   // For client-to-server connections, the client MUST NOT attempt to enable stream management until after it has completed Resource Binding unless it is resuming a previous session
-  streamFeatures.use("sm", NS, async (context, next) => {
+  streamFeatures.use("sm", NS, async (context, next, _feature, signal) => {
     // Resuming
     if (sm.id) {
       try {
         const element = await resume(entity, sm);
-        await resumed(element);
+        signal.throwIfAborted();
+        await resumed(element, signal);
         return;
         // If resumption fails, continue with session establishment
-      } catch {
+      } catch (error) {
+        signal.throwIfAborted();
+        if (!(error instanceof XMPPError)) {
+          throw error;
+        }
         failed();
       }
     }
@@ -30,6 +35,7 @@ export function setupStreamFeature({
 
     // Resource binding first
     await next();
+    signal.throwIfAborted();
 
     const promiseEnable = enable(entity, sm);
 
@@ -45,10 +51,15 @@ export function setupStreamFeature({
 
     try {
       const response = await promiseEnable;
+      signal.throwIfAborted();
       enabled(response.attrs);
-    } catch {
+    } catch (error) {
+      signal.throwIfAborted();
       sm.enabled = false;
       sm.enableSent = false;
+      if (!(error instanceof XMPPError)) {
+        throw error;
+      }
     }
   });
 }

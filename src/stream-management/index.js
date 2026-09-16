@@ -32,6 +32,7 @@ export default function streamManagement({
   let timeoutTimeout = null;
   let requestAckTimeout = null;
   let requestAckDebounce = null;
+  const replaying = new Set();
 
   const sm = new EventEmitter();
   Object.assign(sm, {
@@ -70,13 +71,22 @@ export default function streamManagement({
     await sendAck();
   });
 
-  async function resumed(resumed) {
+  async function resumed(resumed, signal) {
+    signal?.throwIfAborted();
     sm.enabled = true;
     ackQueue(+resumed.attrs.h);
-    let q = sm.outbound_q;
-    sm.outbound_q = [];
-    // This will trigger the middleware and re-add to the queue
-    await entity.sendMany(q.map((item) => queueToStanza({ entity, item })));
+    const q = [...sm.outbound_q];
+    // Keep unacknowledged items owned by SM even if replay is cancelled.
+    for (const item of q) {
+      signal?.throwIfAborted();
+      replaying.add(item.stanza);
+      try {
+        await entity.send(queueToStanza({ entity, item }));
+      } finally {
+        replaying.delete(item.stanza);
+      }
+    }
+    signal?.throwIfAborted();
     sm.emit("resumed");
     entity._ready(true);
     scheduleRequestAck();
@@ -186,7 +196,9 @@ export default function streamManagement({
     if (!sm.enabled && !sm.enableSent) return next();
     if (!["presence", "message", "iq"].includes(stanza.name)) return next();
 
-    sm.outbound_q.push({ stanza, stamp: datetime() });
+    if (!replaying.delete(stanza)) {
+      sm.outbound_q.push({ stanza, stamp: datetime() });
+    }
     // Debounce requests so we send only one after a big run of stanza together
     clearTimeout(requestAckTimeout);
     clearTimeout(requestAckDebounce);

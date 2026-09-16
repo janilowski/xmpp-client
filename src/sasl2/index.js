@@ -16,7 +16,9 @@ async function authenticate({
   userAgent,
   streamFeatures,
   features,
+  signal,
 }) {
+  signal.throwIfAborted();
   const mech = saslMechanisms.create(mechanism);
   if (!mech) {
     throw new Error(`SASL: Mechanism ${mechanism} not found.`);
@@ -34,15 +36,17 @@ async function authenticate({
     ...credentials,
   };
 
+  const response = mech.clientFirst && encode(await mech.response(creds));
+  signal.throwIfAborted();
   await procedure(
     entity,
     xml("authenticate", { xmlns: NS, mechanism: mech.name }, [
       mech.clientFirst &&
-        xml("initial-response", {}, encode(await mech.response(creds))),
+        xml("initial-response", {}, response),
       userAgent,
       ...streamFeatures,
     ]),
-    async (element, done) => {
+    async (element, done, exchange) => {
       if (element.getNS() !== NS) return;
 
       if (element.name === "challenge") {
@@ -50,7 +54,9 @@ async function authenticate({
           ? decodeBytes(element.text())
           : decode(element.text());
         await mech.challenge(challenge);
+        exchange.throwIfAborted();
         const resp = await mech.response(creds);
+        exchange.throwIfAborted();
         await entity.send(
           xml(
             "response",
@@ -75,6 +81,7 @@ async function authenticate({
           await mech.final(
             mech.binary ? decodeBytes(additionalData) : decode(additionalData),
           );
+          exchange.throwIfAborted();
         }
 
         // https://xmpp.org/extensions/xep-0388.html#success
@@ -85,13 +92,15 @@ async function authenticate({
         }
 
         for (const child of element.getChildElements()) {
+          exchange.throwIfAborted();
           const feature = features.get(child.getNS());
-          await feature?.[1]?.(child);
+          await feature?.[1]?.(child, exchange);
         }
 
         return done();
       }
     },
+    signal,
   );
 }
 
@@ -105,9 +114,10 @@ export default function sasl2(
   streamFeatures.use(
     "authentication",
     NS,
-    async ({ entity }, _next, element) => {
+    async ({ entity }, _next, element, signal) => {
       const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
       const streamFeatures = await getStreamFeatures({ element, features });
+      signal.throwIfAborted();
       const fast_available = !!fast?.mechanism;
 
       if (mechanisms.length === 0 && !fast_available) {
@@ -122,15 +132,17 @@ export default function sasl2(
       );
 
       async function done(credentials, mechanism, userAgent) {
+        signal.throwIfAborted();
         // Try fast
         const success = await fast.auth({
-          authenticate,
+          authenticate: (options) => authenticate({ ...options, signal }),
           entity,
           userAgent,
           streamFeatures,
           features,
           credentials,
         });
+        signal.throwIfAborted();
         if (success) return;
 
         // fast.auth may mutate streamFeatures to request a token
@@ -144,6 +156,7 @@ export default function sasl2(
           saslMechanisms,
           mechanism,
           credentials,
+          signal,
         });
       }
     },

@@ -11,8 +11,14 @@ function makeBindElement(resource) {
   return xml("bind", { xmlns: NS }, resource && xml("resource", {}, resource));
 }
 
-async function bind(entity, iqCaller, resource) {
-  const result = await iqCaller.set(makeBindElement(resource));
+async function bind(entity, iqCaller, resource, signal) {
+  const result = await iqCaller.set(
+    makeBindElement(resource),
+    undefined,
+    entity.timeout,
+    signal,
+  );
+  signal.throwIfAborted();
   const jid = result.getChildText("jid");
   entity._jid(jid);
   entity._ready(false);
@@ -20,10 +26,12 @@ async function bind(entity, iqCaller, resource) {
 }
 
 function route({ iqCaller }, resource) {
-  return async ({ entity }, next) => {
-    resource = typeof resource === "function" ? await resource() : resource;
-    await bind(entity, iqCaller, resource);
-    next();
+  return async ({ entity }, next, _feature, signal) => {
+    const selected = typeof resource === "function" ? await resource() : resource;
+    signal.throwIfAborted();
+    await bind(entity, iqCaller, selected, signal);
+    signal.throwIfAborted();
+    return next();
   };
 }
 

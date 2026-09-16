@@ -7,9 +7,9 @@ export function setupSasl2({ sasl2, sm, failed, resumed }) {
       if (!element.is("sm")) return;
       if (sm.id) return makeResumeElement({ sm });
     },
-    (element) => {
+    (element, signal) => {
       if (element.is("resumed")) {
-        resumed(element);
+        return resumed(element, signal);
       } else if (element.is("failed")) {
         // const error = StreamError.fromElement(element)
         failed();

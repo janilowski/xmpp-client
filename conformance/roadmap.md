@@ -3,6 +3,23 @@
 Implement a standard through small test-first slices. Never infer completeness
 from a green suite or a count of catalogue entries.
 
+## Immediate sequence
+
+Fix tracked defects before adding standards: procedure cancellation (#12), IQ
+sender validation (#11), stream-management counters (#13), and JID preparation
+(#14). JID normalization is a dependency of complete address comparison.
+
+The [lifecycle coverage map](rfc6120.md) links procedure deadlines, IQ cleanup,
+SASL/SASL2, binding and SM cancellation regressions, including delayed callbacks
+across reconnects. Wire tests also exercise a silent or disconnected SASL peer.
+These address #12; they do not establish complete RFC 6120 compliance.
+
+Then implement XEP-0030 before XEP-0115, which depends on discovery. Keep TLS and
+XEP-0156 audits separate from new features; close each standard only after its
+requirements and inherited dependencies have been reviewed and tested.
+
+## Coverage backlog
+
 1. Preserve the [RFC 7395 client-binding baseline](rfc7395.md). Attributes,
    language, failed restarts, raw handshakes, limits and Bun PKIX now have tests.
    Expand fuzzing and browser matrices; fixed vectors are not exhaustive proof.

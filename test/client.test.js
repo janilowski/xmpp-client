@@ -19,8 +19,13 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  xmpp?.removeAllListeners();
-  await xmpp?.stop();
+  try {
+    if (xmpp && xmpp.status !== "offline") {
+      await xmpp.stop();
+    }
+  } finally {
+    xmpp?.removeAllListeners();
+  }
 });
 
 test("client", async () => {

@@ -1,3 +1,8 @@
+import { afterEach, test, expect } from "bun:test";
+import { disconnectClients } from "../../test/support/mockClient.js";
+
+afterEach(disconnectClients);
+
 import { mockClient } from "../../test/support/index.js";
 
 test("resume", async () => {

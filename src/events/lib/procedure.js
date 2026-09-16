@@ -1,24 +1,40 @@
-export default function procedure(entity, stanza = null, handler) {
-  return new Promise((resolve, reject) => {
-    function onError(err) {
-      entity.removeListener("nonza", listener);
-      reject(err);
-    }
+import operation from "./operation.js";
 
-    function done(...args) {
-      entity.removeListener("nonza", listener);
-      resolve(...args);
-    }
+export default function procedure(entity, stanza = null, handler, parent) {
+  return operation(
+    entity,
+    (signal) =>
+      new Promise((resolve, reject) => {
+        const cleanup = () => entity.removeListener("nonza", listener);
+        signal.addEventListener("abort", cleanup, { once: true });
 
-    async function listener(element) {
-      try {
-        await handler(element, done);
-      } catch (error) {
-        onError(error);
-      }
-    }
+        function done(value) {
+          cleanup();
+          resolve(value);
+        }
 
-    stanza && entity.send(stanza).catch(onError);
-    entity.on("nonza", listener);
-  });
+        async function listener(element) {
+          if (signal.aborted) {
+            return;
+          }
+          try {
+            await handler(element, done, signal);
+          } catch (error) {
+            reject(error);
+          }
+        }
+
+        // Observe responses and termination before sending, including synchronous peers.
+        entity.on("nonza", listener);
+        if (stanza) {
+          try {
+            Promise.resolve(entity.send(stanza)).catch(reject);
+          } catch (error) {
+            reject(error);
+          }
+        }
+      }),
+    entity.timeout,
+    parent,
+  );
 }

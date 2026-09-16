@@ -1,6 +1,6 @@
 import xid from "../util/id.js";
 import StanzaError from "../middleware/lib/StanzaError.js";
-import { timeout as timeoutPromise } from "../events/index.js";
+import operation from "../events/lib/operation.js";
 import xml from "../xml/index.js";
 
 function isReply({ name, type }) {
@@ -38,7 +38,7 @@ class IQCaller {
     this.handlers.delete(id);
   }
 
-  async request(stanza, timeout = 30 * 1000) {
+  async request(stanza, timeout = 30 * 1000, signal) {
     if (!stanza.attrs.id) {
       stanza.attrs.id = xid();
     }
@@ -47,14 +47,20 @@ class IQCaller {
     this.handlers.set(stanza.attrs.id, deferred);
 
     try {
-      await this.entity.send(stanza);
-      await timeoutPromise(deferred.promise, timeout);
-    } catch (error) {
-      this.handlers.delete(stanza.attrs.id);
-      throw error;
+      return await operation(
+        this.entity,
+        () => {
+          Promise.resolve(this.entity.send(stanza)).catch(deferred.reject);
+          return deferred.promise;
+        },
+        timeout,
+        signal,
+      );
+    } finally {
+      if (this.handlers.get(stanza.attrs.id) === deferred) {
+        this.handlers.delete(stanza.attrs.id);
+      }
     }
-
-    return deferred.promise;
   }
 
   _childRequest(type, element, to, ...args) {

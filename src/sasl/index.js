@@ -16,7 +16,14 @@ export function getAvailableMechanisms(element, NS, saslMechanisms) {
   return supported.filter((mech) => offered.has(mech));
 }
 
-async function authenticate({ saslMechanisms, entity, mechanism, credentials }) {
+async function authenticate({
+  saslMechanisms,
+  entity,
+  mechanism,
+  credentials,
+  signal,
+}) {
+  signal.throwIfAborted();
   const mech = saslMechanisms.create(mechanism);
   if (!mech) {
     throw new Error(`SASL: Mechanism ${mechanism} not found.`);
@@ -34,20 +41,24 @@ async function authenticate({ saslMechanisms, entity, mechanism, credentials }) 
     ...credentials,
   };
 
+  const response = mech.clientFirst && encode(await mech.response(creds));
+  signal.throwIfAborted();
   await procedure(
     entity,
     mech.clientFirst &&
       xml(
         "auth",
         { xmlns: NS, mechanism: mech.name },
-        encode(await mech.response(creds)),
+        response,
       ),
-    async (element, done) => {
+    async (element, done, exchange) => {
       if (element.getNS() !== NS) return;
 
       if (element.name === "challenge") {
         await mech.challenge(decode(element.text()));
+        exchange.throwIfAborted();
         const resp = await mech.response(creds);
+        exchange.throwIfAborted();
         await entity.send(
           xml(
             "response",
@@ -66,6 +77,7 @@ async function authenticate({ saslMechanisms, entity, mechanism, credentials }) 
         return done();
       }
     },
+    signal,
   );
 }
 
@@ -73,7 +85,7 @@ export default function sasl(
   { streamFeatures, saslMechanisms },
   onAuthenticate,
 ) {
-  streamFeatures.use("mechanisms", NS, async ({ entity }, _next, element) => {
+  streamFeatures.use("mechanisms", NS, async ({ entity }, _next, element, signal) => {
     const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
     if (mechanisms.length === 0) {
       throw new SASLError("SASL: No compatible mechanism available.");
@@ -85,11 +97,13 @@ export default function sasl(
         entity,
         mechanism,
         credentials,
+        signal,
       });
     }
 
     await onAuthenticate(done, mechanisms, null, entity);
 
+    signal.throwIfAborted();
     await entity.restart();
   });
 }
