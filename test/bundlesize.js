@@ -12,7 +12,7 @@ const path = "dist/xmpp.min.js";
 const buffer = await readFile(path);
 const compressed = await brotliCompress(buffer);
 
-// Complete-document XML validation adds saxes; measured at 19.46 KB Brotli.
+// Shared saxes engine for document and stream parsing; measured at 19.00 KB Brotli.
 const max_size = "20 KB";
 
 console.log(`${path}:`);

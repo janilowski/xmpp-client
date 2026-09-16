@@ -1,27 +1,10 @@
-import Parser from "./Parser.js";
+import parseDocument from "./parseDocument.js";
+import XMLError from "./XMLError.js";
 
 export default function parse(data) {
-  const p = new Parser();
-
-  let result = null;
-  let error = null;
-
-  p.on("start", (el) => {
-    result = el;
-  });
-  p.on("element", (el) => {
-    result.append(el);
-  });
-  p.on("error", (err) => {
-    error = err;
-  });
-
-  p.write(data);
-  p.end();
-
-  if (error) {
-    throw error;
-  } else {
-    return result;
+  try {
+    return parseDocument(data);
+  } catch (error) {
+    throw new XMLError(error.message, { cause: error });
   }
 }

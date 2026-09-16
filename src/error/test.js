@@ -30,7 +30,7 @@ test("fromElement", () => {
 test("fromElement - whitespaces", () => {
   const nonza = parse(
     `
-    <stream:error>
+    <stream:error xmlns:stream="http://etherx.jabber.org/streams">
       <some-condition xmlns="urn:ietf:params:xml:ns:xmpp-streams" />
       <text xmlns="urn:ietf:params:xml:ns:xmpp-streams" xml:lang="langcode">
         foo
