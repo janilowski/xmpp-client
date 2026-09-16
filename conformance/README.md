@@ -37,9 +37,9 @@ JUnit results and environment metadata (revision, dirty flag, runtime, OS, comma
 exit status). Reports are generated and ignored by Git. CI uploads them even on
 failure. Results describe tested scenarios, not a completeness percentage.
 
-The suite uses Bun's real WebSocket transport. Adapter-level subprotocol tests
-simulate platforms that accept upgrades without selecting `xmpp`; these are
-not browser evidence. The transcript normalizer and production document parser
+The suite uses Bun's real WebSocket transport, including raw-peer tests for
+absent/wrong subprotocols and invalid UTF-8 in Bun and Chromium. Adapter tests
+also simulate permissive platforms. The transcript normalizer and production document parser
 both use `saxes`; their agreement is not independent validation. Literal malformed
 inputs check production rejection directly. Chromium tests additionally parse
 outgoing frames with native `DOMParser` and exercise malicious peer responses.

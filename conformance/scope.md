@@ -1,8 +1,9 @@
 # Scope and sources
 
 Target: XMPP Core and Web Client Compliance 2023 over WebSocket.
-This is a development target, **not a certification**. The first executable
-pilot covers selected RFC 7395 behaviors; other standards remain review work.
+This is a development target, **not a certification**. The RFC 7395 client-binding
+suite maps direct obligations and platform boundaries; inherited standards remain
+separate work. See the [coverage map](rfc7395.md).
 Core also needs XEP-0030 and XEP-0115; transport tests do not establish Core compliance.
 
 ## Historical source snapshot

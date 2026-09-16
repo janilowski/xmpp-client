@@ -3,15 +3,15 @@
 Implement a standard through small test-first slices. Never infer completeness
 from a green suite or a count of catalogue entries.
 
-1. Complete the remaining [RFC 7395 boundaries](rfc7395.md), especially stream
-   attributes, language context, failed restarts and platform handshake evidence.
-   Complete-document validation now precedes stanza delivery. Add resource-limit
-   and fuzz tests; do not infer parser completeness from the fixed vectors.
+1. Preserve the [RFC 7395 client-binding baseline](rfc7395.md). Attributes,
+   language, failed restarts, raw handshakes, limits and Bun PKIX now have tests.
+   Expand fuzzing and browser matrices; fixed vectors are not exhaustive proof.
 2. Cover RFC 6120 stream negotiation, fatal errors, authentication, binding and IQ
    correlation, including cancellation and timeout sequences.
 3. Cover RFC 7622 preparation and byte limits with independent Unicode vectors.
 4. Cover RFC 7590/BCP 195 and XEP-0156 with authenticated TLS endpoints and adversarial
-   redirects/discovery. Test certificate trust, expiry and hostname independently.
+   redirects/discovery. Bun now checks trust, expiry and hostname independently;
+   extend the trusted-CA matrix to browsers.
 5. Cover XEP-0198 acknowledgement ranges, rollover, resume, retry and failure.
 6. Add XEP-0030, then XEP-0115. Split large suites by section, retaining a standard-level index.
 7. Run relevant wire scenarios in supported browsers as well as Bun. Browser TLS
