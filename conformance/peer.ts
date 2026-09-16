@@ -16,6 +16,7 @@ export class ScriptedPeer {
     reject: (error: Error) => void;
   };
   private closed = false;
+  private readonly terminal = Promise.withResolvers<void>();
 
   constructor(onMessage: (frame: string, peer: ScriptedPeer) => void) {
     this.server = serve<undefined>({
@@ -59,6 +60,7 @@ export class ScriptedPeer {
         },
         close: () => {
           this.closed = true;
+          this.terminal.resolve();
           this.waiter?.reject(
             new Error(
               `Peer closed before the expected frame: ${this.transcript.join(" | ")}`,
@@ -79,6 +81,27 @@ export class ScriptedPeer {
       throw new Error("Peer is not connected");
     }
     this.socket.send(frame);
+  }
+
+  terminate() {
+    this.socket?.terminate();
+  }
+
+  async waitForClose() {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        this.terminal.promise,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("WebSocket did not close")),
+            PEER_TIMEOUT,
+          );
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async next(): Promise<string> {

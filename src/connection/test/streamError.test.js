@@ -14,8 +14,10 @@ test("#_streamError", async () => {
   expect(spy_disconnect).toHaveBeenCalled();
 
   expect(spy_send).toHaveBeenCalledWith(
-    xml("stream:error", {}, [
-      xml("foo-bar", { xmlns: "urn:ietf:params:xml:ns:xmpp-streams" }),
-    ]),
+    xml(
+      "stream:error",
+      { "xmlns:stream": "http://etherx.jabber.org/streams" },
+      [xml("foo-bar", { xmlns: "urn:ietf:params:xml:ns:xmpp-streams" })],
+    ),
   );
 });

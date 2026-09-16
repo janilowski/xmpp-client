@@ -3,11 +3,10 @@
 Implement a standard through small test-first slices. Never infer completeness
 from a green suite or a count of catalogue entries.
 
-1. Finish RFC 7395 inbound XML and lifecycle coverage. The streaming ltx tokenizer
-   does not validate an independent XML document at each WebSocket message boundary.
-   Include truncated/multiple roots, trailing garbage, namespaces, attributes,
-   XML declarations, numeric references, prohibited constructs and invalid framing
-   namespaces. Validate before delivering any stanza. Do not patch this with regex.
+1. Complete the remaining [RFC 7395 boundaries](rfc7395.md), especially stream
+   attributes, language context, failed restarts and platform handshake evidence.
+   Complete-document validation now precedes stanza delivery. Add resource-limit
+   and fuzz tests; do not infer parser completeness from the fixed vectors.
 2. Cover RFC 6120 stream negotiation, fatal errors, authentication, binding and IQ
    correlation, including cancellation and timeout sequences.
 3. Cover RFC 7622 preparation and byte limits with independent Unicode vectors.

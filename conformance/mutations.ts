@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept an unfinished XML document",
+    file: "src/xml/lib/parseDocument.js",
+    before: "parser.write(source).close();",
+    after: "parser.write(source);",
+    suite: "src/websocket/test/frames.test.js",
+    test: "rejects a whole malformed frame",
+  },
+  {
+    name: "report the wrong framing namespace condition",
+    file: "src/websocket/lib/FramedParser.js",
+    before: 'error.condition = "invalid-namespace";',
+    after: 'error.condition = "bad-format";',
+    suite: "src/websocket/test/frames.test.js",
+    test: "reports invalid-namespace",
+  },
+  {
     name: "accept an unnegotiated subprotocol",
     file: "src/websocket/lib/Socket.js",
     before: "this.socket.protocol !== SUBPROTOCOL",

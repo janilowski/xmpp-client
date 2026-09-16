@@ -42,7 +42,7 @@ class Connection extends EventEmitter {
     try {
       await this.send(
         // prettier-ignore
-        xml('stream:error', {}, [
+        xml('stream:error', {'xmlns:stream': NS_JABBER_STREAM}, [
           xml(condition, {xmlns: NS_STREAM}, children),
         ]),
       );
@@ -67,19 +67,33 @@ class Connection extends EventEmitter {
     // "This error can be used instead of the more specific XML-related errors,
     // such as <bad-namespace-prefix/>, <invalid-xml/>, <not-well-formed/>, <restricted-xml/>,
     // and <unsupported-encoding/>. However, the more specific errors are RECOMMENDED."
-    this._streamError("bad-format");
+    this._streamError(error.condition || "bad-format");
     this._detachParser();
     this.emit("error", error);
   }
 
   #onSocketClosed(dirty, reason) {
     this._detachSocket();
+    this._detachParser();
     this._status("disconnect", { clean: !dirty, reason });
   }
 
   #onStreamClosed(dirty, reason) {
+    // A peer-initiated close still needs our closing header before the transport closes.
+    const reply =
+      this.parser &&
+      this.socket &&
+      this.status !== "closing" &&
+      !(dirty instanceof Error)
+        ? this.write(this.footer(this.footerElement()))
+        : null;
     this._detachParser();
     this._status("close", { clean: !dirty, reason });
+    if (reply) {
+      reply
+        .then(() => this._closeSocket())
+        .catch((error) => this.emit("error", error));
+    }
   }
 
   _attachSocket(socket) {
@@ -231,11 +245,16 @@ class Connection extends EventEmitter {
 
     await this.connect(service);
 
-    const promiseOnline = promise(this, "online");
-
-    await this.open({ domain, lang });
-
-    return promiseOnline;
+    const online = this.#waitForStream("online", 0);
+    try {
+      const [address] = await Promise.all([
+        online.result,
+        this.open({ domain, lang }),
+      ]);
+      return address;
+    } finally {
+      online.cancel();
+    }
   }
 
   /**
@@ -302,6 +321,9 @@ class Connection extends EventEmitter {
    * Opens the stream
    */
   async open(options) {
+    if (this.parser) {
+      throw new Error("A stream is already open; use restart instead");
+    }
     this._status("opening");
 
     const { domain, lang } = options;
@@ -313,8 +335,48 @@ class Connection extends EventEmitter {
 
     this._attachParser(new this.Parser());
 
-    await this.write(this.header(headerElement));
-    return promise(this, "open", "error", this.timeout);
+    const opened = this.#waitForStream("open", this.timeout);
+    try {
+      const [element] = await Promise.all([
+        opened.result,
+        this.write(this.header(headerElement)),
+      ]);
+      return element;
+    } finally {
+      opened.cancel();
+    }
+  }
+
+  // Negotiation must settle on transport/stream termination, not only on errors.
+  #waitForStream(event, timeout) {
+    let cancel;
+    const result = new Promise((resolve, reject) => {
+      let timer;
+      const finish = (settle, value) => {
+        cancel();
+        settle(value);
+      };
+      const ready = (value) => finish(resolve, value);
+      const error = (value) => finish(reject, value);
+      const closed = () => error(new Error(`Stream closed before ${event}`));
+      const disconnected = () =>
+        error(new Error(`Connection closed before ${event}`));
+      cancel = () => {
+        clearTimeout(timer);
+        this.off(event, ready);
+        this.off("error", error);
+        this.off("close", closed);
+        this.off("disconnect", disconnected);
+      };
+      this.on(event, ready);
+      this.on("error", error);
+      this.on("close", closed);
+      this.on("disconnect", disconnected);
+      if (timeout) {
+        timer = setTimeout(() => error(new TimeoutError()), timeout);
+      }
+    });
+    return { result, cancel };
   }
 
   /**
@@ -340,7 +402,9 @@ class Connection extends EventEmitter {
 
     await this.write(fragment);
     this._status("closing");
-    return promise(this.parser, "end", "error", timeout);
+    if (this.parser) {
+      return promise(this.parser, "end", "error", timeout);
+    }
     // The 'close' status is set by the parser 'end' listener
   }
 
@@ -371,7 +435,7 @@ class Connection extends EventEmitter {
   async write(string) {
     // https://xmpp.org/rfcs/rfc6120.html#streams-close
     // "Refrain from sending any further data over its outbound stream to the other entity"
-    if (this.status === "closing") {
+    if (this.status === "closing" || this.status === "close") {
       throw new Error("Connection is closing");
     }
 

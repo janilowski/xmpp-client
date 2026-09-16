@@ -22,7 +22,8 @@ class ConnectionWebSocket extends Connection {
     for (const element of elements) {
       element.attrs.xmlns ??= this.NS;
       element.parent = this.root;
-      this.socket.write(element.toString());
+      // Retain the SM replay path's middleware bypass, but honor stream closure.
+      await this.write(element.toString());
       this.emit("send", element);
     }
   }

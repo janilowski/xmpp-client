@@ -96,7 +96,7 @@ test("sendMany", async () => {
     expect(element.parent).toBe(conn.root);
   }
 
-  expect(spy_write).toHaveBeenCalledWith(foo.toString());
-  expect(spy_write).toHaveBeenCalledWith(bar.toString());
+  expect(spy_write).toHaveBeenCalledWith(foo.toString(), expect.any(Function));
+  expect(spy_write).toHaveBeenCalledWith(bar.toString(), expect.any(Function));
   expect(spy_write).toHaveBeenCalledTimes(2);
 });

@@ -37,11 +37,14 @@ JUnit results and environment metadata (revision, dirty flag, runtime, OS, comma
 exit status). Reports are generated and ignored by Git. CI uploads them even on
 failure. Results describe tested scenarios, not a completeness percentage.
 
-The pilot uses Bun's real WebSocket transport. Adapter-level subprotocol tests
+The suite uses Bun's real WebSocket transport. Adapter-level subprotocol tests
 simulate platforms that accept upgrades without selecting `xmpp`; these are
-not browser evidence. The XML oracle uses `saxes`, not the client's `ltx` parser.
-Saxes 6 is archived upstream; it is a development-only cross-check, not a sole
-certification authority or a production dependency.
+not browser evidence. The transcript normalizer and production document parser
+both use `saxes`; their agreement is not independent validation. Literal malformed
+inputs check production rejection directly. Chromium tests additionally parse
+outgoing frames with native `DOMParser` and exercise malicious peer responses.
+Saxes 6 is archived upstream: this production dependency needs continued review,
+not an assumption of certification.
 
 `notes/` preserves the former catalogue's IDs and interpretations without its
 schema or hand-maintained results. Those notes still need source review;

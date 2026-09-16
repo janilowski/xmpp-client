@@ -155,10 +155,15 @@ Web target:
 
 Compliance work is requirements-driven. Requirements are extracted from the
 standards and their errata before being compared with the current
-implementation. Every applicable normative requirement is tracked with its
-role, conditions, source section, status, and evidence. `SHOULD` and `SHOULD
+implementation. Applicable requirements retain their source sections and
+conditions; execution produces results. `SHOULD` and `SHOULD
 NOT` deviations require a written justification; server-only or
 transport-replaced requirements must be explicitly marked not applicable.
+
+The [protocol suites and coverage maps](conformance/) include RFC 7395
+scenarios. Run `bun run test:conformance` for wire tests and generated reports,
+and `bun run test:mutations` to check assertions against deliberate defects.
+The maps distinguish covered scenarios from remaining work.
 
 Evidence can include:
 

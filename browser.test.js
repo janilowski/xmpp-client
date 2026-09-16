@@ -6,6 +6,25 @@ import path from "node:path";
 import { createServer } from "node:http";
 import { once } from "node:events";
 import server from "./server/index.js";
+import { ScriptedPeer } from "./conformance/peer.ts";
+
+const OPEN =
+  '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="browser-peer"/>';
+const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';
+
+// Native browser XML parsing is independent of both saxes and ltx.
+function inspectFrames(frames) {
+  return frames.map((frame) => {
+    const document = new DOMParser().parseFromString(frame, "application/xml");
+    const root = document.documentElement;
+    return {
+      valid: document.getElementsByTagName("parsererror").length === 0,
+      name: root.localName,
+      namespace: root.namespaceURI,
+      body: document.getElementsByTagName("body")[0]?.textContent ?? null,
+    };
+  });
+}
 
 let browser;
 const origin = createServer((_request, response) =>
@@ -55,6 +74,129 @@ afterAll(async () => {
   await browser?.close();
   origin.close();
 });
+
+test("Chromium independently validates outgoing RFC 7395 documents", async () => {
+  const peer = new ScriptedPeer((frame, remote) => {
+    if (frame.startsWith("<open ")) {
+      remote.send(OPEN);
+    }
+    if (frame === CLOSE) {
+      remote.send(CLOSE);
+    }
+  });
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const errors = await page.evaluate(async (service) => {
+      const { client, xml } = globalThis.XMPP;
+      const xmpp = client({ service, domain: "example.test" });
+      const errors = [];
+      xmpp.reconnect.stop();
+      xmpp.on("error", (error) => errors.push(error.message));
+      try {
+        await xmpp.connect(service);
+        await xmpp.open({ domain: "example.test" });
+        await xmpp.send(xml("message", {}, xml("body", {}, "Zażółć 🐦 & < >")));
+      } finally {
+        await xmpp.stop();
+      }
+      return errors;
+    }, peer.url);
+    expect(errors).toEqual([]);
+    expect(await page.evaluate(inspectFrames, peer.transcript)).toEqual([
+      {
+        valid: true,
+        name: "open",
+        namespace: "urn:ietf:params:xml:ns:xmpp-framing",
+        body: null,
+      },
+      {
+        valid: true,
+        name: "message",
+        namespace: "jabber:client",
+        body: "Zażółć 🐦 & < >",
+      },
+      {
+        valid: true,
+        name: "close",
+        namespace: "urn:ietf:params:xml:ns:xmpp-framing",
+        body: null,
+      },
+    ]);
+  } finally {
+    await page.close();
+    await peer.stop();
+  }
+});
+
+test.each([
+  '<message xmlns="jabber:client"><body>unfinished',
+  '<message xmlns="jabber:client"/><presence xmlns="jabber:client"/>',
+  '<close xmlns="urn:wrong"/>',
+])(
+  "Chromium rejects a malicious peer frame atomically: %s",
+  async (malformed) => {
+    const peer = new ScriptedPeer((frame, remote) => {
+      if (frame.startsWith("<open ")) {
+        remote.send(OPEN);
+        remote.send(malformed);
+      }
+      if (frame === CLOSE) {
+        remote.send(CLOSE);
+      }
+    });
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${origin.address().port}`);
+      await page.addScriptTag({ path: "dist/xmpp.min.js" });
+      const result = await page.evaluate(async (service) => {
+        const xmpp = globalThis.XMPP.client({
+          service,
+          domain: "example.test",
+          timeout: 250,
+        });
+        xmpp.reconnect.stop();
+        const errors = [];
+        const stanzas = [];
+        xmpp.on("error", (error) => errors.push(error.name));
+        xmpp.on("stanza", (stanza) => stanzas.push(stanza.toString()));
+        let timer;
+        const disconnected = new Promise((resolve, reject) => {
+          xmpp.once("disconnect", resolve);
+          timer = setTimeout(
+            () => reject(new Error("Transport stayed open")),
+            2000,
+          );
+        });
+        try {
+          await Promise.all([
+            disconnected,
+            (async () => {
+              await xmpp.connect(service);
+              await xmpp.open({ domain: "example.test" }).catch(() => {});
+            })(),
+          ]);
+          return { errors, stanzas };
+        } finally {
+          clearTimeout(timer);
+          await xmpp.stop();
+        }
+      }, peer.url);
+      expect(result).toEqual({ errors: ["XMLError"], stanzas: [] });
+      const frames = await page.evaluate(inspectFrames, peer.transcript);
+      expect(frames.map(({ name }) => name)).toEqual([
+        "open",
+        "error",
+        "close",
+      ]);
+      expect(frames.every(({ valid }) => valid)).toBe(true);
+    } finally {
+      await page.close();
+      await peer.stop();
+    }
+  },
+);
 
 test.each([
   ["xmpp.js", "ws://localhost:5280/xmpp-websocket"],
