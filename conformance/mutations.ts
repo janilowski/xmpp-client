@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "silently ignore invalid SM counters",
+    file: "src/stream-management/index.js",
+    before: "if (!valid || distance > sm.outbound_q.length) {",
+    after: "if (!valid || distance > sm.outbound_q.length) { return;",
+    suite: "conformance/xep0198.test.ts",
+    test: "invalid SM acknowledgement",
+  },
+  {
+    name: "omit SM inbound counter rollover",
+    file: "src/stream-management/index.js",
+    before: "sm.inbound = (sm.inbound + 1) % COUNTER_MODULUS;",
+    after: "sm.inbound += 1;",
+    suite: "src/stream-management/counters.test.js",
+    test: "received stanza counter wraps",
+  },
+  {
     name: "accept an IQ reply from an unrelated sender",
     file: "src/iq/caller.js",
     before: "!deferred || !replyMatches(stanza.attrs.from, deferred)",
@@ -102,10 +118,14 @@ for (const mutation of mutations) {
   const directory = mkdtempSync(join(tmpdir(), "xmpp-mutation-"));
   try {
     cpSync("src", join(directory, "src"), { recursive: true });
+    cpSync("test/support", join(directory, "test/support"), { recursive: true });
     for (const file of [
       "package.json",
+      "tsconfig.json",
+      "bunfig.toml",
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
+      "conformance/xep0198.test.ts",
       "conformance/peer.ts",
       "conformance/xml.ts",
     ]) {

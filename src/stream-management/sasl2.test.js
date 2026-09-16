@@ -33,7 +33,7 @@ test("resume", async () => {
 
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
-      <resumed xmlns="urn:xmpp:sm:3" previd={sm.id} h="0" />
+      <resumed xmlns="urn:xmpp:sm:3" previd={sm.id} h="45" />
     </success>,
   );
 
@@ -71,7 +71,7 @@ test("Client failed to resume stream", async () => {
 
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
-      <failed xmlns="urn:xmpp:sm:3" h="another-sequence-number">
+      <failed xmlns="urn:xmpp:sm:3" h="45">
         <item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
       </failed>
     </success>,

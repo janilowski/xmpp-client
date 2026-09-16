@@ -39,12 +39,13 @@ class Connection extends EventEmitter {
     return this.socket?.secure === true;
   }
 
-  async _streamError(condition, children) {
+  async _streamError(condition, children, application) {
     try {
       await this.send(
         // prettier-ignore
         xml('stream:error', {'xmlns:stream': NS_JABBER_STREAM}, [
           xml(condition, {xmlns: NS_STREAM}, children),
+          application,
         ]),
       );
     } catch {

@@ -1,6 +1,7 @@
 import { EventEmitter } from "../events/index.js";
 import xml from "../xml/index.js";
 import { datetime } from "../util/time.js";
+import { ConnectionClosedError } from "../events/lib/operation.js";
 
 import { setupBind2 } from "./bind2.js";
 import { setupSasl2 } from "./sasl2.js";
@@ -9,6 +10,7 @@ import { setupStreamFeature } from "./stream-feature.js";
 // https://xmpp.org/extensions/xep-0198.html
 
 export const NS = "urn:xmpp:sm:3";
+const COUNTER_MODULUS = 2 ** 32;
 
 export function makeEnableElement({ sm }) {
   return xml("enable", {
@@ -34,8 +36,7 @@ export default function streamManagement({
   let requestAckDebounce = null;
   const replaying = new Set();
 
-  const sm = new EventEmitter();
-  Object.assign(sm, {
+  const sm = Object.assign(new EventEmitter(), {
     preferredMaximum: null,
     enabled: false,
     enableSent: false,
@@ -74,7 +75,7 @@ export default function streamManagement({
   async function resumed(resumed, signal) {
     signal?.throwIfAborted();
     sm.enabled = true;
-    ackQueue(+resumed.attrs.h);
+    ackQueue(resumed.attrs.h);
     const q = [...sm.outbound_q];
     // Keep unacknowledged items owned by SM even if replay is cancelled.
     for (const item of q) {
@@ -92,18 +93,49 @@ export default function streamManagement({
     scheduleRequestAck();
   }
 
-  function failed() {
+  function failed(element) {
+    if (element?.attrs.h !== undefined) {
+      ackQueue(element.attrs.h);
+    }
     sm.enabled = false;
     sm.enableSent = false;
     sm.id = "";
     failQueue();
   }
 
-  function ackQueue(n) {
-    const oldOutbound = sm.outbound;
-    for (let i = 0; i < +n - oldOutbound; i++) {
+  function ackQueue(h) {
+    // XEP-0198 h is an XML Schema unsignedInt, not a JS numeric expression.
+    const n = Number(h);
+    const valid =
+      /^[\t\n\r ]*[+-]?[0-9]+[\t\n\r ]*$/.test(h) &&
+      Number.isInteger(n) &&
+      n >= 0 &&
+      n < COUNTER_MODULUS;
+    const distance = (n - sm.outbound + COUNTER_MODULUS) % COUNTER_MODULUS;
+    if (!valid || distance > sm.outbound_q.length) {
+      sm.enabled = false;
+      sm.enableSent = false;
+      const detail = valid
+        ? xml("handled-count-too-high", {
+            xmlns: NS,
+            h,
+            "send-count":
+              (sm.outbound + sm.outbound_q.length) % COUNTER_MODULUS,
+          })
+        : undefined;
+      // Validate before consuming the queue or allowing resumption to continue.
+      entity
+        ._streamError(
+          valid ? "undefined-condition" : "bad-format",
+          undefined,
+          detail,
+        )
+        .catch(() => {});
+      throw new ConnectionClosedError();
+    }
+    for (let i = 0; i < distance; i++) {
       const item = sm.outbound_q.shift();
-      sm.outbound++;
+      sm.outbound = (sm.outbound + 1) % COUNTER_MODULUS;
       sm.emit("ack", item.stanza);
     }
   }
@@ -139,13 +171,16 @@ export default function streamManagement({
     clearTimeout(timeoutTimeout);
     timeoutTimeout = null;
     if (["presence", "message", "iq"].includes(stanza.name)) {
-      sm.inbound += 1;
+      sm.inbound = (sm.inbound + 1) % COUNTER_MODULUS;
     } else if (stanza.is("r", NS)) {
       // > When an <r/> element ("request") is received, the recipient MUST acknowledge it by sending an <a/> element to the sender containing a value of 'h' that is equal to the number of stanzas handled by the recipient of the <r/> element.
       await sendAck();
     } else if (stanza.is("a", NS)) {
+      if (!sm.enabled) {
+        return next();
+      }
       // > When a party receives an <a/> element, it SHOULD keep a record of the 'h' value returned as the sequence number of the last handled outbound stanza for the current stream (and discard the previous value).
-      ackQueue(+stanza.attrs.h);
+      ackQueue(stanza.attrs.h);
     }
 
     scheduleRequestAck();

@@ -27,7 +27,7 @@ export function setupStreamFeature({
         if (!(error instanceof XMPPError)) {
           throw error;
         }
-        failed();
+        failed(error.element);
       }
     }
 
