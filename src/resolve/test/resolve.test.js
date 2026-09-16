@@ -1,170 +1,64 @@
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import resolve from "../resolve.js";
 
-test.skip("resolve", async () => {
-  expect(await resolve("jabberfr.org")).toEqual([
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpp://178.170.40.189:5222",
-      name: "jabberfr.org",
-      port: 5222,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-client",
-      protocol: "tcp",
-    },
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpp://178.170.40.189:5222",
-      name: "jabberfr.org",
-      port: 5222,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-client",
-      protocol: "tcp",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpp://[2a00:c70:1:178:170:40:189:1]:5222",
-      name: "jabberfr.org",
-      port: 5222,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-client",
-      protocol: "tcp",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpp://[2a00:c70:1:178:170:40:189:1]:5222",
-      name: "jabberfr.org",
-      port: 5222,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-client",
-      protocol: "tcp",
-    },
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpp://178.170.40.189:5269",
-      name: "jabberfr.org",
-      port: 5269,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-server",
-      protocol: "tcp",
-    },
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpp://178.170.40.189:5269",
-      name: "jabberfr.org",
-      port: 5269,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-server",
-      protocol: "tcp",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpp://[2a00:c70:1:178:170:40:189:1]:5269",
-      name: "jabberfr.org",
-      port: 5269,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-server",
-      protocol: "tcp",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpp://[2a00:c70:1:178:170:40:189:1]:5269",
-      name: "jabberfr.org",
-      port: 5269,
-      priority: 8,
-      weight: 0,
-      service: "xmpp-server",
-      protocol: "tcp",
-    },
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpps://178.170.40.189:5223",
-      name: "jabberfr.org",
-      port: 5223,
-      priority: 10,
-      weight: 0,
-      service: "xmpps-client",
-      protocol: "tcp",
-    },
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpps://178.170.40.189:5223",
-      name: "jabberfr.org",
-      port: 5223,
-      priority: 10,
-      weight: 0,
-      service: "xmpps-client",
-      protocol: "tcp",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpps://[2a00:c70:1:178:170:40:189:1]:5223",
-      name: "jabberfr.org",
-      port: 5223,
-      priority: 10,
-      weight: 0,
-      service: "xmpps-client",
-      protocol: "tcp",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpps://[2a00:c70:1:178:170:40:189:1]:5223",
-      name: "jabberfr.org",
-      port: 5223,
-      priority: 10,
-      weight: 0,
-      service: "xmpps-client",
-      protocol: "tcp",
-    },
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpps://178.170.40.189:5223",
-    },
-    {
-      family: 4,
-      address: "178.170.40.189",
-      uri: "xmpp://178.170.40.189:5222",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpps://[2a00:c70:1:178:170:40:189:1]:5223",
-    },
-    {
-      family: 6,
-      address: "2a00:c70:1:178:170:40:189:1",
-      uri: "xmpp://[2a00:c70:1:178:170:40:189:1]:5222",
-    },
-    {
-      rel: "urn:xmpp:alt-connections:websocket",
-      href: "wss://ws.jabberfr.org/",
-      method: "websocket",
-      uri: "wss://ws.jabberfr.org/",
-    },
-    {
-      rel: "urn:xmpp:alt-connections:xbosh",
-      href: "https://bosh.jabberfr.org/",
-      method: "xbosh",
-      uri: "https://bosh.jabberfr.org/",
-    },
-  ]);
+const DOMAIN = "example.test";
+const DOCUMENT =
+  '<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link rel="urn:xmpp:alt-connections:websocket" href="wss://endpoint.example.test/xmpp"/></XRD>';
+const ENDPOINT = {
+  rel: "urn:xmpp:alt-connections:websocket",
+  href: "wss://endpoint.example.test/xmpp",
+  uri: "wss://endpoint.example.test/xmpp",
+  method: "websocket",
+};
+const HTTP_NOT_FOUND = 404;
+let fetchMock;
+
+beforeEach(() => {
+  fetchMock = spyOn(globalThis, "fetch").mockResolvedValue(
+    new Response(DOCUMENT),
+  );
+});
+afterEach(() => fetchMock.mockRestore());
+
+test("discovers an endpoint through HTTPS host-meta, not DNS SRV", async () => {
+  expect(await resolve(DOMAIN)).toEqual([ENDPOINT]);
+  expect(fetchMock.mock.calls[0][0]).toBe(
+    `https://${DOMAIN}/.well-known/host-meta`,
+  );
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
+test("discovery has a deadline and does not follow HTTP redirects", async () => {
+  await resolve(DOMAIN);
+  expect(fetchMock.mock.calls[0][1]).toMatchObject({ redirect: "error" });
+  expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+});
+
+test("does not trust a host-meta document from an unsuccessful HTTP response", async () => {
+  fetchMock.mockResolvedValue(
+    new Response(DOCUMENT, { status: HTTP_NOT_FOUND }),
+  );
+  expect(await resolve(DOMAIN)).toEqual([]);
+});
+
+test.each([
+  DOCUMENT.replace("http://docs.oasis-open.org/ns/xri/xrd-1.0", "urn:wrong"),
+  DOCUMENT.replace("<Link ", '<Link xmlns="urn:wrong" '),
+  DOCUMENT.replace(' href="wss://endpoint.example.test/xmpp"', ""),
+  DOCUMENT.replace("wss://endpoint.example.test/xmpp", "javascript:alert(1)"),
+  DOCUMENT.replace("wss://endpoint.example.test/xmpp", "/relative"),
+  "<XRD>",
+  DOCUMENT.slice(0, -6),
+  DOCUMENT + DOCUMENT,
+])("ignores invalid discovery metadata: %s", async (document) => {
+  fetchMock.mockResolvedValue(new Response(document));
+  expect(await resolve(DOMAIN)).toEqual([]);
+});
+
+test.each([
+  new Error("Network failure"),
+  new DOMException("Expired", "TimeoutError"),
+])("failed discovery yields no endpoints: %s", async (error) => {
+  fetchMock.mockRejectedValue(error);
+  expect(await resolve(DOMAIN)).toEqual([]);
 });

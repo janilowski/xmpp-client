@@ -1,22 +1,25 @@
 import { resolve } from "../lib/http.js";
+import { beforeEach, afterEach, spyOn, test, expect } from "bun:test";
 
 const domain = "example.com";
-globalThis.fetch = (url) => {
-  if (url !== `https://${domain}/.well-known/host-meta`) {
-    throw new Error("Fetch URL incorrect");
-  }
+let fetchMock;
+beforeEach(() => {
+  fetchMock = spyOn(globalThis, "fetch").mockImplementation((url) => {
+    if (url !== `https://${domain}/.well-known/host-meta`) {
+      throw new Error("Fetch URL incorrect");
+    }
 
-  return Promise.resolve({
-    text() {
-      return `<?xml version='1.0' encoding='UTF-8'?>
+    return Promise.resolve(
+      new Response(`<?xml version='1.0' encoding='UTF-8'?>
               <XRD xmlns='http://docs.oasis-open.org/ns/xri/xrd-1.0'>
                 <Link rel='urn:xmpp:alt-connections:websocket' href='wss://example.com/ws' />
                 <Link rel='urn:xmpp:alt-connections:xbosh' href='http://example.com/bosh' />
                 <Link rel='urn:xmpp:alt-connections:httppoll' href='http://example.com/http-poll' />
-              </XRD>`;
-    },
+              </XRD>`),
+    );
   });
-};
+});
+afterEach(() => fetchMock.mockRestore());
 
 test("parse", async () => {
   expect(await resolve(domain)).toEqual([
