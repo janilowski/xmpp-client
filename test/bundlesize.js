@@ -12,8 +12,8 @@ const path = "dist/xmpp.min.js";
 const buffer = await readFile(path);
 const compressed = await brotliCompress(buffer);
 
-// Shared saxes engine for document and stream parsing; measured at 19.00 KB Brotli.
-const max_size = "20 KB";
+// RFC 7622 / Unicode 16 validation increases the baseline to about 31.7 KiB Brotli.
+const max_size = "32 KB";
 
 console.log(`${path}:`);
 if (compressed.length > bytes(max_size)) {

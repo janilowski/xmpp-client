@@ -28,6 +28,9 @@ function client(options = {}) {
   if (!domain && service) {
     params.domain = getDomain(service);
   }
+  if (params.domain) {
+    params.domain = jid("", params.domain).domain;
+  }
 
   const entity = new Client(params);
   if (username && params.domain) {

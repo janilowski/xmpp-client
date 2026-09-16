@@ -1,15 +1,13 @@
 import jid from "../index.js";
 
-test("Should not change string - issue 43", () => {
+test("RFC 8264 rejects a trailing control character", () => {
   const test = "test\u001A@example.com";
 
-  const addr = jid(test);
-  expect(addr.local).toBe("test\u001A");
+  expect(() => jid(test)).toThrow(TypeError);
 });
 
-test("Should escape - issue 43", () => {
+test("RFC 8264 rejects an embedded control character", () => {
   const test = "test\u001Aa@example.com";
 
-  const addr = jid(test);
-  expect(addr.local).toBe("testa");
+  expect(() => jid(test)).toThrow(TypeError);
 });

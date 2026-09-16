@@ -61,9 +61,6 @@ test("should allow access to jid parts using keys", () => {
   expect(j.resource).toBe("r");
 });
 
-test("shouldn't get U_STRINGPREP_PROHIBITED_ERROR (#93)", () => {
-  expect(() => {
-    const j = parse("f u@d");
-    j.toString();
-  }).not.toThrow();
+test("RFC 7622 parsing does not implicitly escape invalid wire localparts", () => {
+  expect(() => parse("f u@d")).toThrow(TypeError);
 });

@@ -33,6 +33,8 @@ const identities = [
   ["peer@remote", "", false],
   ["bar", "@bar", false],
   ["peer@remote", "peer@remote/", false],
+  ["é@bücher.example/Rés", "e\u0301@xn--bcher-kva.example/Re\u0301s", true],
+  ["peer@remote", "peer@remote./Device", true],
 ];
 
 for (const type of ["result", "error"]) {

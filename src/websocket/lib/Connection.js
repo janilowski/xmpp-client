@@ -24,9 +24,8 @@ class ConnectionWebSocket extends Connection {
       element.attrs.xmlns ??= this.NS;
       element.attrs["xml:lang"] ??= this.root?.attrs["xml:lang"];
       element.parent = this.root;
-      // Retain the SM replay path's middleware bypass, but honor stream closure.
-      await this.write(element.toString());
-      this.emit("send", element);
+      // Bypass SM middleware during replay, not address or stream validation.
+      await super.send(element);
     }
   }
 

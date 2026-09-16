@@ -9,12 +9,14 @@ export default class IncomingContext extends Context {
     const { jid } = entity;
     const { domain } = entity.options ?? {};
 
-    const to = stanza.attrs.to || jid?.toString();
-    const from = stanza.attrs.from || domain;
+    const to = stanza.attrs.to ?? jid?.toString();
+    const from = stanza.attrs.from ?? domain;
 
-    if (to) this.to = new JID(to);
+    if (to !== undefined) {
+      this.to = new JID(to);
+    }
 
-    if (from) {
+    if (from !== undefined) {
       this.from = new JID(from);
       this.local = this.from.local;
       this.domain = this.from.domain;

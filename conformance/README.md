@@ -16,6 +16,7 @@ Prosody interoperability and Chromium tests remain separate (`test:e2e`,
 - [Scope and source notes](scope.md)
 - [RFC 7395 coverage and gaps](rfc7395.md)
 - [RFC 6120 lifecycle coverage and gaps](rfc6120.md)
+- [RFC 7622 JID preparation and validation](rfc7622.md)
 - [Remaining standards work](roadmap.md)
 - [XEP-0198 counters and resumption](xep0198.md)
 

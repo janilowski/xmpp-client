@@ -84,8 +84,17 @@ jid("contact@example.net@xmpp.net");
 
 ## References
 
-- [RFC 7622 XMPP Address Format](https://tools.ietf.org/html/rfc7622) mostly implemented, l10n WIP
+- [RFC 7622 XMPP Address Format](https://www.rfc-editor.org/rfc/rfc7622.html):
+  Unicode 16 PRECIS and IDNA2008 preparation, validation and UTF-8 byte limits.
+  See the [coverage and compatibility map](../../conformance/rfc7622.md).
 - [XEP-0106 JID Escaping](https://xmpp.org/extensions/xep-0106.html) implemented
+
+Complete wire addresses are parsed strictly and invalid ones throw `TypeError`.
+Localparts are width-mapped, lowercased and NFC-normalized; resources retain
+case/width and map non-ASCII spaces. Domains normalize to Unicode U-labels.
+Canonical equivalents now compare equal. Audit stored keys for collisions when
+migrating. The parts constructor's automatic escaping remains separate from
+strict wire parsing; do not use display-unescaped strings as protocol addresses.
 
 ### Deprecated
 

@@ -9,25 +9,14 @@ function replyMatches(from, { to, server, account }) {
   if (from === undefined) {
     return !to || to === server || to === account;
   }
-  const slash = from.indexOf("/");
-  if (!from || from.startsWith("@") || slash === from.length - 1) {
-    return false;
-  }
   let sender;
   try {
     sender = jid(from);
   } catch {
     return false;
   }
-  const canonical =
-    slash < 0
-      ? from.toLowerCase()
-      : from.slice(0, slash).toLowerCase() + from.slice(slash);
-  if (sender.toString() !== canonical) {
-    return false;
-  }
   if (!to) {
-    return canonical === server || canonical === account;
+    return sender.toString() === server || sender.toString() === account;
   }
   const target = jid(to);
   return target.equals(target.resource ? sender : sender.bare());
@@ -81,7 +70,8 @@ class IQCaller {
     const deferred = Object.assign(Promise.withResolvers(), {
       to: to === undefined ? undefined : jid(to.toString()).toString(),
       server:
-        this.entity.jid?.domain || this.entity.options.domain?.toLowerCase(),
+        this.entity.jid?.domain ||
+        (this.entity.options.domain && jid(this.entity.options.domain).domain),
       account: this.entity.jid?.bare().toString(),
     });
     this.handlers.set(id, deferred);

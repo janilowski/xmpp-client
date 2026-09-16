@@ -103,8 +103,9 @@
     "picomatch": "4.0.4"
   },
   "dependencies": {
-    "saxes": "6.0.0",
     "events": "^3.3.0",
-    "ltx": "^3.1.2"
+    "ltx": "^3.1.2",
+    "punycode": "2.3.1",
+    "saxes": "6.0.0"
   }
 }

@@ -451,6 +451,15 @@ class Connection extends EventEmitter {
   }
 
   async send(element) {
+    if (this.isStanza(element)) {
+      for (const attribute of ["to", "from"]) {
+        if (element.attrs[attribute] !== undefined) {
+          element.attrs[attribute] = jid(
+            element.attrs[attribute].toString(),
+          ).toString();
+        }
+      }
+    }
     element.parent = this.root;
     await this.write(element.toString());
     this.emit("send", element);

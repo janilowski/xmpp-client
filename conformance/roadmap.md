@@ -7,7 +7,8 @@ from a green suite or a count of catalogue entries.
 
 Fix tracked defects before adding standards: procedure cancellation (#12), IQ
 sender validation (#11), stream-management counters (#13), and JID preparation
-(#14). JID normalization is a dependency of complete address comparison.
+(#14). These bounded fixes now have executable evidence; JID preparation and
+its Unicode profile are mapped in [RFC 7622 coverage](rfc7622.md).
 
 The [lifecycle coverage map](rfc6120.md) links procedure deadlines, IQ cleanup,
 SASL/SASL2, binding and SM cancellation regressions, including delayed callbacks
@@ -25,7 +26,8 @@ requirements and inherited dependencies have been reviewed and tested.
    Expand fuzzing and browser matrices; fixed vectors are not exhaustive proof.
 2. Cover RFC 6120 stream negotiation, fatal errors, authentication, binding and IQ
    correlation, including cancellation and timeout sequences.
-3. Cover RFC 7622 preparation and byte limits with independent Unicode vectors.
+3. Preserve the [RFC 7622 baseline](rfc7622.md), including independent Unicode
+   vectors, versioned tables, contextual cases and browser/runtime validation.
 4. Cover RFC 7590/BCP 195 and XEP-0156 with authenticated TLS endpoints and adversarial
    redirects/discovery. Bun now checks trust, expiry and hostname independently;
    extend the trusted-CA matrix to browsers.

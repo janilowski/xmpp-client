@@ -1,8 +1,10 @@
 import * as escaping from "./escaping.js";
+import prepareDomain from "./domain.js";
+import { prepareLocal, prepareResource } from "./precis.js";
 
 /**
  * JID implements
- * - XMPP addresses according to RFC6122
+ * - XMPP addresses according to RFC 7622
  * - XEP-0106: JID Escaping
  *
  * @see http://tools.ietf.org/html/rfc6122#section-2
@@ -72,7 +74,7 @@ class JID {
       local = escaping.escape(local);
     }
 
-    this._local = local && local.toLowerCase();
+    this._local = local ? prepareLocal(local) : "";
     return this;
   }
 
@@ -84,7 +86,7 @@ class JID {
    * http://xmpp.org/rfcs/rfc6122.html#addressing-domain
    */
   setDomain(domain) {
-    this._domain = domain.toLowerCase();
+    this._domain = prepareDomain(domain);
     return this;
   }
 
@@ -96,7 +98,7 @@ class JID {
    * http://xmpp.org/rfcs/rfc6122.html#addressing-resourcepart
    */
   setResource(resource) {
-    this._resource = resource;
+    this._resource = resource ? prepareResource(resource) : "";
     return this;
   }
 

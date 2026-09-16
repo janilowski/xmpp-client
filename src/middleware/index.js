@@ -32,7 +32,16 @@ export async function runMiddleware(stack, context) {
 
 function listener(entity, middleware, Context) {
   return (stanza) => {
-    const ctx = new Context(entity, stanza);
+    let ctx;
+    try {
+      ctx = new Context(entity, stanza);
+    } catch (error) {
+      // Malformed peer identities must not route replies or escape into the XML parser.
+      if (Context === IncomingContext && error instanceof TypeError) {
+        return;
+      }
+      throw error;
+    }
     return runMiddleware(middleware, ctx);
   };
 }

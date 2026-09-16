@@ -1,4 +1,5 @@
 import xml from "../xml/index.js";
+import { prepareResource } from "../jid/lib/precis.js";
 
 /*
  * References
@@ -8,7 +9,11 @@ import xml from "../xml/index.js";
 const NS = "urn:ietf:params:xml:ns:xmpp-bind";
 
 function makeBindElement(resource) {
-  return xml("bind", { xmlns: NS }, resource && xml("resource", {}, resource));
+  return xml(
+    "bind",
+    { xmlns: NS },
+    resource && xml("resource", {}, prepareResource(resource)),
+  );
 }
 
 async function bind(entity, iqCaller, resource, signal) {
@@ -27,7 +32,8 @@ async function bind(entity, iqCaller, resource, signal) {
 
 function route({ iqCaller }, resource) {
   return async ({ entity }, next, _feature, signal) => {
-    const selected = typeof resource === "function" ? await resource() : resource;
+    const selected =
+      typeof resource === "function" ? await resource() : resource;
     signal.throwIfAborted();
     await bind(entity, iqCaller, selected, signal);
     signal.throwIfAborted();

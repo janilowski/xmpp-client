@@ -15,6 +15,46 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "omit JID NFC normalization",
+    file: "src/jid/lib/precis.js",
+    before: 'value = value.toLowerCase().normalize("NFC");',
+    after: "value = value.toLowerCase();",
+    suite: "conformance/rfc7622.test.js",
+    test: "normalizes equivalent identities",
+  },
+  {
+    name: "omit JID byte limits",
+    file: "src/jid/lib/precis.js",
+    before: "export function checkLength(value) {",
+    after: "export function checkLength(value) { return value;",
+    suite: "conformance/rfc7622.test.js",
+    test: "post-preparation UTF-8 limits",
+  },
+  {
+    name: "omit JID contextual rules",
+    file: "src/jid/lib/precis.js",
+    before: "if (!valid) {",
+    after: "if (false) {",
+    suite: "conformance/rfc7622.test.js",
+    test: "rejects localpart",
+  },
+  {
+    name: "omit JID bidi checks",
+    file: "src/jid/lib/precis.js",
+    before: "export function validateBidi(value) {",
+    after: "export function validateBidi(value) { return;",
+    suite: "conformance/rfc7622.test.js",
+    test: "rejects localpart",
+  },
+  {
+    name: "accept IDNA-disallowed identifier characters",
+    file: "src/jid/lib/domain.js",
+    before: "if (unicode.idnaDisallowed.test(label)) {",
+    after: "if (false) {",
+    suite: "conformance/rfc7622.test.js",
+    test: "rejects domain",
+  },
+  {
     name: "silently ignore invalid SM counters",
     file: "src/stream-management/index.js",
     before: "if (!valid || distance > sm.outbound_q.length) {",
@@ -118,7 +158,9 @@ for (const mutation of mutations) {
   const directory = mkdtempSync(join(tmpdir(), "xmpp-mutation-"));
   try {
     cpSync("src", join(directory, "src"), { recursive: true });
-    cpSync("test/support", join(directory, "test/support"), { recursive: true });
+    cpSync("test/support", join(directory, "test/support"), {
+      recursive: true,
+    });
     for (const file of [
       "package.json",
       "tsconfig.json",
@@ -126,6 +168,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/xep0198.test.ts",
+      "conformance/rfc7622.test.js",
       "conformance/peer.ts",
       "conformance/xml.ts",
     ]) {

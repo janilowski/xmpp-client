@@ -76,6 +76,49 @@ afterAll(async () => {
   origin.close();
 });
 
+test("Chromium bundled JIDs enforce RFC 7622 profiles", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(() => {
+      const { jid } = globalThis.XMPP;
+      const invalid = [
+        "@example.com",
+        "a b@example.com",
+        "a\u200db@example.com",
+        "אבa@example.com",
+        "😀.example",
+        "example.com/\ud800",
+        `${"é".repeat(512)}@example.com`,
+      ];
+      return {
+        normalized: jid(
+          "E\u0301@XN--BCHER-KVA.example./Re\u0301s\u00a0X",
+        ).toString(),
+        width: jid("ＦＯＯ@example.com/Ｒ").toString(),
+        contexts: jid("カ・a@example.com").local,
+        rejected: invalid.map((value) => {
+          try {
+            jid(value);
+            return false;
+          } catch (error) {
+            return error instanceof TypeError;
+          }
+        }),
+      };
+    });
+    expect(result).toEqual({
+      normalized: "é@bücher.example/Rés X",
+      width: "foo@example.com/Ｒ",
+      contexts: "カ・a",
+      rejected: Array(7).fill(true),
+    });
+  } finally {
+    await page.close();
+  }
+});
+
 test.each([null, "other"])(
   "Chromium rejects an actual handshake selecting %s",
   async (protocol) => {
