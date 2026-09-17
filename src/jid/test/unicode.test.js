@@ -5,6 +5,47 @@ import * as unicode from "../lib/unicode.js";
 import { prepareLocal, prepareResource } from "../lib/precis.js";
 import jid from "../index.js";
 
+test("all Unicode 16 property tables preserve their complete repertoire", () => {
+  // Frozen before representation changes, independently of the new encoder.
+  const names = [
+    "an",
+    "en",
+    "freeform",
+    "greek",
+    "hebrew",
+    "identifier",
+    "idnaDisallowed",
+    "japanese",
+    "joinLeft",
+    "joinRight",
+    "joinTransparent",
+    "ltrStart",
+    "mark",
+    "nsm",
+    "rtl",
+    "rtlStart",
+    "space",
+    "unassigned",
+    "virama",
+    "width",
+  ];
+  expect(Object.keys(unicode).sort()).toEqual(names);
+  const properties = new Map(Object.entries(unicode));
+  const digest = createHash("sha256");
+  for (const name of names) {
+    const property = properties.get(name);
+    expect(property.test("")).toBe(false);
+    digest.update(
+      Uint8Array.from({ length: 0x110000 }, (_, cp) =>
+        Number(property.test(String.fromCodePoint(cp))),
+      ),
+    );
+  }
+  expect(digest.digest("hex")).toBe(
+    "c445e88b892f68395bd6025dabb88abb11d9e53de2165bb77849a1ca1487ba83",
+  );
+}, 10000);
+
 test("fails closed when the runtime lacks Unicode 16 case mapping", () => {
   const result = spawnSync(
     process.execPath,

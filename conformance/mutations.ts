@@ -15,6 +15,14 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "drop decoded Unicode ranges",
+    file: "src/jid/lib/unicode-ranges.js",
+    before: 'return new RegExp(`[${parts.join("")}]`, "u");',
+    after: 'return new RegExp("[]", "u");',
+    suite: "src/jid/test/unicode.test.js",
+    test: "all Unicode 16 property tables preserve",
+  },
+  {
     name: "omit JID NFC normalization",
     file: "src/jid/lib/precis.js",
     before: 'value = value.toLowerCase().normalize("NFC");',

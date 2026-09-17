@@ -8,6 +8,7 @@ import { once } from "node:events";
 import server from "./server/index.js";
 import { ScriptedPeer } from "./conformance/peer.ts";
 import { RawPeer } from "./conformance/raw-peer.ts";
+import { rolldown } from "rolldown";
 
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="browser-peer"/>';
@@ -75,6 +76,44 @@ afterAll(async () => {
   await browser?.close();
   origin.close();
 });
+
+test("Chromium decodes every Unicode property without changing its repertoire", async () => {
+  const build = await rolldown({ input: "src/jid/lib/unicode.js" });
+  const page = await browser.newPage();
+  try {
+    const { output } = await build.generate({
+      format: "iife",
+      name: "UnicodeTables",
+      minify: true,
+    });
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ content: output[0].code });
+    const hash = await page.evaluate(async () => {
+      const properties = Object.entries(globalThis.UnicodeTables)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([, property]) => property);
+      const end = 0x110000;
+      const values = new Uint8Array(properties.length * end);
+      for (let bit = 0; bit < properties.length; bit++) {
+        for (let cp = 0; cp < end; cp++) {
+          values[bit * end + cp] = Number(
+            properties[bit].test(String.fromCodePoint(cp)),
+          );
+        }
+      }
+      const digest = await window.crypto.subtle.digest("SHA-256", values);
+      return [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+    });
+    expect(hash).toBe(
+      "c445e88b892f68395bd6025dabb88abb11d9e53de2165bb77849a1ca1487ba83",
+    );
+  } finally {
+    await page.close();
+    await build.close();
+  }
+}, 20000);
 
 test("Chromium bundled JIDs enforce RFC 7622 profiles", async () => {
   const page = await browser.newPage();
