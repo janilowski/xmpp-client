@@ -39,5 +39,6 @@ export function compare(a, b) {
     return method;
   }
 
-  return 0;
+  // XEP-0156 §2.2: XML order is not an endpoint priority signal.
+  return a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0;
 }

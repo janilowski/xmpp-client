@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "treat discovery document order as priority",
+    file: "src/resolve/lib/alt-connections.js",
+    before: "return a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0;",
+    after: "return 0;",
+    suite: "conformance/xep0156.test.js",
+    test: "endpoint preference ignores document order",
+  },
+  {
+    name: "accept resource templates as host-wide endpoints",
+    file: "src/resolve/lib/http.js",
+    before: "if (attrs.template !== undefined) {",
+    after: "if (false) {",
+    suite: "conformance/xep0156.test.js",
+    test: "excludes resource templates",
+  },
+  {
     name: "drop decoded Unicode ranges",
     file: "src/jid/lib/unicode-ranges.js",
     before: 'return new RegExp(`[${parts.join("")}]`, "u");',
@@ -176,6 +192,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/xep0198.test.ts",
+      "conformance/xep0156.test.js",
       "conformance/rfc7622.test.js",
       "conformance/peer.ts",
       "conformance/xml.ts",

@@ -52,6 +52,10 @@ export async function resolve(domain) {
     return document
       .getChildren("Link", NS_XRD)
       .filter(({ attrs }) => {
+        // RFC 6415 §4.1: templates describe resources, not the whole host.
+        if (attrs.template !== undefined) {
+          return false;
+        }
         try {
           const uri = new URL(attrs.href);
           return (

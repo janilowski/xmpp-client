@@ -8,7 +8,7 @@ Core compliance, followed by carefully selected XMPP extensions needed by a
 useful web client.
 
 The minified browser bundle is continuously checked against a **27 KiB**
-Brotli-compressed budget. The current measured size is approximately 26.60 KiB;
+Brotli-compressed budget. The current measured size is approximately 26.62 KiB;
 run `bun run size` to rebuild and check it.
 
 The project is in early development and is not yet published as a stable
