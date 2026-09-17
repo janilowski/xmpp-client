@@ -5,38 +5,44 @@ from a green suite or a count of catalogue entries.
 
 ## Immediate sequence
 
-Fix tracked defects before adding standards: procedure cancellation (#12), IQ
-sender validation (#11), stream-management counters (#13), and JID preparation
-(#14). These bounded fixes now have executable evidence; JID preparation and
-its Unicode profile are mapped in [RFC 7622 coverage](rfc7622.md).
+The bounded remediation issues #11–#17 are closed, including procedure
+cancellation (#12), IQ sender validation (#11), stream-management counters (#13),
+and JID preparation (#14). These fixes have executable evidence; JID preparation
+and its Unicode profile are mapped in [RFC 7622 coverage](rfc7622.md).
 
 The [lifecycle coverage map](rfc6120.md) links procedure deadlines, IQ cleanup,
 SASL/SASL2, binding and SM cancellation regressions, including delayed callbacks
 across reconnects. Wire tests also exercise a silent or disconnected SASL peer.
 These address #12; they do not establish complete RFC 6120 compliance.
 
-Then implement XEP-0030 before XEP-0115, which depends on discovery. Keep TLS and
-XEP-0156 audits separate from new features; close each standard only after its
-requirements and inherited dependencies have been reviewed and tested.
+Next, complete the [TLS/Web audit (#8)](https://github.com/janilowski/xmpp-client/issues/8)
+before adding XEP-0030 (#1), then XEP-0115 (#2), which depends on discovery.
+For #8, verify the RFC 7590, BCP 195 and XEP-0156 review notes against their
+sources and errata; map requirements to tests or justified runtime delegation;
+fix any uncovered defects; publish the evidence on the default branch.
+Chromium SPKI exceptions do not prove hostname or expiry validation. Broader
+browser matrices remain useful follow-up work, not an absolute closure condition.
+Contribute these maps to #10 without waiting for unrelated Core work in #7.
 
 ## Coverage backlog
 
 1. Preserve the [RFC 7395 client-binding baseline](rfc7395.md). Attributes,
    language, failed restarts, raw handshakes, limits and Bun PKIX now have tests.
    Expand fuzzing and browser matrices; fixed vectors are not exhaustive proof.
-2. Cover RFC 6120 stream negotiation, fatal errors, authentication, binding and IQ
-   correlation, including cancellation and timeout sequences.
+2. Extend the [RFC 6120 lifecycle/IQ baseline](rfc6120.md) to the remaining
+   negotiation, authentication, binding, stanza and error requirements.
 3. Preserve the [RFC 7622 baseline](rfc7622.md), including independent Unicode
    vectors, versioned tables, contextual cases and browser/runtime validation.
 4. Cover RFC 7590/BCP 195 and XEP-0156 with authenticated TLS endpoints and adversarial
    redirects/discovery. Bun now checks trust, expiry and hostname independently;
    extend the trusted-CA matrix to browsers.
-5. Cover XEP-0198 acknowledgement ranges, rollover, resume, retry and failure.
+5. Preserve the [XEP-0198 counter/resumption baseline](xep0198.md); review the
+   remaining negotiation, session policy and application-handling requirements.
 6. Add XEP-0030, then XEP-0115. Split large suites by section, retaining a standard-level index.
 7. Run relevant wire scenarios in supported browsers as well as Bun. Browser TLS
    tests with an SPKI exception do not prove hostname validation; retain that gap.
 
-Tracked protocol issues: [11](https://github.com/janilowski/xmpp-client/issues/11),
+Closed remediation issues: [11](https://github.com/janilowski/xmpp-client/issues/11),
 [12](https://github.com/janilowski/xmpp-client/issues/12),
 [13](https://github.com/janilowski/xmpp-client/issues/13),
 [14](https://github.com/janilowski/xmpp-client/issues/14),
