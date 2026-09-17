@@ -6,6 +6,14 @@ suite maps direct obligations and platform boundaries; inherited standards remai
 separate work. See the [coverage map](rfc7395.md).
 Core also needs XEP-0030 and XEP-0115; transport tests do not establish Core compliance.
 
+## Reviewed transport subset (2026-09-17)
+
+[RFC 7590/current BCP 195](tls.md) and [XEP-0156/XRD](xep0156.md) now have
+source-reviewed section maps, inherited requirement boundaries, errata decisions
+and executable evidence. These supersede the historical TLS/discovery entries
+below and contribute the transport subset to #10. They do not mark unrelated
+Core requirements or the entire historical inventory as reviewed.
+
 ## Historical source snapshot
 
 The former inventory recorded the following sources on 2026-07-29. Versions,

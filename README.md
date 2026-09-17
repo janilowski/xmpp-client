@@ -8,7 +8,7 @@ Core compliance, followed by carefully selected XMPP extensions needed by a
 useful web client.
 
 The minified browser bundle is continuously checked against a **27 KiB**
-Brotli-compressed budget. The current measured size is approximately 26.62 KiB;
+Brotli-compressed budget. The current measured size is approximately 26.88 KiB;
 run `bun run size` to rebuild and check it.
 
 The project is in early development and is not yet published as a stable
@@ -102,9 +102,9 @@ Prosody package is supplied by your distribution, not lockfile-pinned; this run
 used 13.0.6. JavaScript implementation-wide type checking and protocol compliance
 remain separate work; `typecheck` currently checks the typed public boundary.
 
-The bounded defects in issues #11–#17 are fixed and closed. Remaining audits
-are tracked in [#7](https://github.com/janilowski/xmpp-client/issues/7) (Core)
-and [#8](https://github.com/janilowski/xmpp-client/issues/8) (TLS/Web transport),
+The bounded defects in issues #11–#17 are fixed and closed. The
+[TLS/Web audit](conformance/tls.md) maps #8's tested profile and platform limits.
+The remaining Core audit is tracked in [#7](https://github.com/janilowski/xmpp-client/issues/7),
 with harness and requirements work in #9 and #10. See the
 [roadmap](conformance/roadmap.md) for the next steps.
 
@@ -126,20 +126,20 @@ The current target is a self-assessed **XMPP Core and Web Client Compliance
 | Standard                                              | Area                        | Status                                                                                   |
 | ----------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
 | [RFC 6120](https://www.rfc-editor.org/info/rfc6120/)  | XMPP Core                   | [Lifecycle/IQ coverage](conformance/rfc6120.md); wider audit pending                     |
-| [RFC 7590](https://www.rfc-editor.org/info/rfc7590/)  | TLS for XMPP                | Partial; audit pending                                                                   |
+| [RFC 7590](https://www.rfc-editor.org/info/rfc7590/)  | TLS for XMPP                | [Web profile audited](conformance/tls.md); TLS stack delegated                              |
 | [RFC 7622](https://www.rfc-editor.org/info/rfc7622/)  | XMPP addresses              | [Six address features covered](conformance/rfc7622.md); Unicode 16 profile               |
 | [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | Service Discovery           | Planned                                                                                  |
 | [XEP-0115](https://xmpp.org/extensions/xep-0115.html) | Entity Capabilities         | Planned                                                                                  |
 | [RFC 7395](https://www.rfc-editor.org/info/rfc7395/)  | XMPP over WebSocket         | [Direct client obligations mapped](conformance/rfc7395.md); platform boundaries explicit |
-| [XEP-0156](https://xmpp.org/extensions/xep-0156.html) | Connection Method Discovery | Partial; audit pending                                                                   |
+| [XEP-0156](https://xmpp.org/extensions/xep-0156.html) | Connection Method Discovery | [XRD/WSS profile audited](conformance/xep0156.md); redirect deviation explicit              |
 
 RFC 6120 and the other top-level specifications have normative dependencies,
 including XML, XML Namespaces, UTF-8, SASL, Base64, and current TLS best
 practices. Applicable requirements from those dependencies are part of the
 audit even when they do not have their own project milestone.
 The coverage maps describe tested profiles and remaining boundaries, not blanket
-certification of all inherited standards or browser engines. TLS and discovery
-review remains open under #8.
+certification of all inherited standards or browser engines. The TLS/discovery
+maps retain runtime delegation, the redirect deviation and Bun's IPv6 limitation.
 
 ### Additional protocol work
 

@@ -15,14 +15,12 @@ SASL/SASL2, binding and SM cancellation regressions, including delayed callbacks
 across reconnects. Wire tests also exercise a silent or disconnected SASL peer.
 These address #12; they do not establish complete RFC 6120 compliance.
 
-Next, complete the [TLS/Web audit (#8)](https://github.com/janilowski/xmpp-client/issues/8)
-before adding XEP-0030 (#1), then XEP-0115 (#2), which depends on discovery.
-For #8, verify the RFC 7590, BCP 195 and XEP-0156 review notes against their
-sources and errata; map requirements to tests or justified runtime delegation;
-fix any uncovered defects; publish the evidence on the default branch.
-Chromium SPKI exceptions do not prove hostname or expiry validation. Broader
-browser matrices remain useful follow-up work, not an absolute closure condition.
-Contribute these maps to #10 without waiting for unrelated Core work in #7.
+The [TLS/Web audit (#8)](tls.md) and [discovery map](xep0156.md) supply the
+reviewed transport subset for #10, including expiry/case-folding fixes and the
+explicit redirect deviation. #8's publication gate requires these changes on
+the default branch. Next implement XEP-0030 (#1), then XEP-0115 (#2), which
+depends on service discovery. Chromium SPKI exceptions still do not prove
+hostname or expiry validation; broader browser matrices remain follow-up work.
 
 ## Coverage backlog
 
@@ -33,9 +31,9 @@ Contribute these maps to #10 without waiting for unrelated Core work in #7.
    negotiation, authentication, binding, stanza and error requirements.
 3. Preserve the [RFC 7622 baseline](rfc7622.md), including independent Unicode
    vectors, versioned tables, contextual cases and browser/runtime validation.
-4. Cover RFC 7590/BCP 195 and XEP-0156 with authenticated TLS endpoints and adversarial
-   redirects/discovery. Bun now checks trust, expiry and hostname independently;
-   extend the trusted-CA matrix to browsers.
+4. Preserve the [TLS](tls.md) and [discovery](xep0156.md) baselines. Extend the
+   trusted-CA matrix to browsers; maintain the recorded runtime/deployment
+   obligations and reassess the conservative redirect policy if Web APIs change.
 5. Preserve the [XEP-0198 counter/resumption baseline](xep0198.md); review the
    remaining negotiation, session policy and application-handling requirements.
 6. Add XEP-0030, then XEP-0115. Split large suites by section, retaining a standard-level index.

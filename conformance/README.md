@@ -18,6 +18,7 @@ Prosody interoperability and Chromium tests remain separate (`test:e2e`,
 - [RFC 6120 lifecycle coverage and gaps](rfc6120.md)
 - [RFC 7622 JID preparation and validation](rfc7622.md)
 - [XEP-0156 discovery coverage and gaps](xep0156.md)
+- [RFC 7590 / BCP 195 TLS audit and platform boundaries](tls.md)
 - [Remaining standards work](roadmap.md)
 - [XEP-0198 counters and resumption](xep0198.md)
 
@@ -51,5 +52,5 @@ Saxes 6 is archived upstream: this production dependency needs continued review,
 not an assumption of certification.
 
 `notes/` preserves the former catalogue's IDs and interpretations without its
-schema or hand-maintained results. Those notes still need source review;
-the migration is not validation.
+schema or hand-maintained results. Each reviewed subset links its coverage map;
+unreviewed notes remain explicitly marked. Migration alone is not validation.
