@@ -15,6 +15,30 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "allow callback to bypass PLAIN transport policy",
+    file: "src/client/lib/createOnAuthenticate.js",
+    before: "mechanism === PLAIN && !entity.isSecure()",
+    after: "false",
+    suite: "src/client/test/authentication-policy.test.js",
+    test: "policy / insecure",
+  },
+  {
+    name: "allow callback to select unoffered mechanisms",
+    file: "src/client/lib/createOnAuthenticate.js",
+    before: "!mechanisms.includes(mechanism)",
+    after: "false",
+    suite: "src/client/test/authentication-policy.test.js",
+    test: "policy / unoffered",
+  },
+  {
+    name: "restart without successful SASL authentication",
+    file: "src/client/lib/createOnAuthenticate.js",
+    before: "if (!authenticated)",
+    after: "if (false)",
+    suite: "conformance/rfc6120-sasl.test.ts",
+    test: "callback cannot authorize restart",
+  },
+  {
     name: "omit server-first SASL initiation",
     file: "src/sasl/index.js",
     before: 'xml("auth", { xmlns: NS, mechanism: mech.name }, response)',

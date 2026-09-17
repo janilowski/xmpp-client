@@ -11,6 +11,68 @@ const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 const MECHANISM = "TEST-WIRE";
 const TIMEOUT_MS = 500;
 
+test.each(["omit", "swallow failure"])(
+  "RFC 6120 §6.4.6: callback cannot authorize restart / %s",
+  async (mode) => {
+    let opens = 0;
+    const peer = new ScriptedPeer((frame, remote) => {
+      if (frame.startsWith("<open")) {
+        // Bound a broken client's restart loop so the assertion, not a timeout,
+        // reports the violation during regression mutation checks.
+        if (++opens > 1) {
+          remote.terminate();
+          return;
+        }
+        remote.send(
+          `<open xmlns="${FRAMING}" from="example.test" version="1.0" id="session"/>`,
+        );
+        remote.send(
+          `<features xmlns="${STREAM}"><mechanisms xmlns="${SASL}"><mechanism>PLAIN</mechanism></mechanisms></features>`,
+        );
+      } else if (frame.startsWith("<auth")) {
+        remote.send(`<failure xmlns="${SASL}"><not-authorized/></failure>`);
+      } else if (frame.startsWith("<close")) {
+        remote.send(`<close xmlns="${FRAMING}"/>`);
+      }
+    });
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      timeout: TIMEOUT_MS,
+      credentials: async (
+        authenticate: (credentials: object, mechanism: string) => Promise<void>,
+      ) => {
+        if (mode === "swallow failure") {
+          await authenticate(
+            { username: "user", password: "secret" },
+            "PLAIN",
+          ).catch(() => {});
+        }
+      },
+    });
+    xmpp.reconnect.stop();
+    xmpp.on("error", () => {});
+    try {
+      await expect(xmpp.start()).rejects.toThrow(
+        "SASL authentication did not complete",
+      );
+      expect(
+        peer.transcript.filter((frame) => frame.startsWith("<open")),
+      ).toHaveLength(1);
+      expect(
+        peer.transcript.filter((frame) => frame.startsWith("<auth")),
+      ).toHaveLength(mode === "omit" ? 0 : 1);
+      expect(peer.transcript.some((frame) => frame.startsWith("<iq"))).toBe(
+        false,
+      );
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
 // RFC 6120 §§6.4.2–6.4.6: test the SASL transport, not a particular mechanism.
 // Independent wire expectations include non-UTF-8 octets and explicit empty data.
 test.each([
