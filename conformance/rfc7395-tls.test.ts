@@ -31,12 +31,15 @@ afterAll(async () => {
 });
 
 test.each([
-  "valid",
-  "discovery",
-  "wrong-name",
-  "expired",
-  "untrusted",
-] as const)("§3.9/6 WSS endpoint identity and PKIX: %s", async (scenario) => {
+  ["direct", "valid"],
+  ["direct", "wrong-name"],
+  ["direct", "expired"],
+  ["direct", "untrusted"],
+  ["discovery", "valid"],
+  ["discovery", "wrong-name"],
+  ["discovery", "expired"],
+  ["discovery", "untrusted"],
+] as const)("§3.9/6 PKIX: %s / %s", async (mode, scenario) => {
   const now = Date.now();
   const certificate = await generate(
     [{ name: "commonName", value: "localhost" }],
@@ -100,7 +103,7 @@ test.each([
         "--eval",
         `
         import { client } from "./src/client/index.js";
-        const xmpp = client({ service: ${JSON.stringify(scenario === "discovery" ? `localhost:${server.port}` : `wss://localhost:${server.port}/xmpp`)}, domain: "different-xmpp-domain.test" });
+        const xmpp = client({ service: ${JSON.stringify(mode === "discovery" ? `localhost:${server.port}` : `wss://localhost:${server.port}/xmpp`)}, domain: "different-xmpp-domain.test" });
         xmpp.reconnect.stop();
         xmpp.on("error", () => {});
         try {
@@ -122,10 +125,10 @@ test.each([
       new Response(child.stderr).text(),
     ]);
     expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
-    const accepted = scenario === "valid" || scenario === "discovery";
+    const accepted = scenario === "valid";
     expect(stdout.trim()).toBe(accepted ? "accepted" : "rejected");
     expect(upgrades).toBe(accepted ? 1 : 0);
-    expect(discoveries).toBe(scenario === "discovery" ? 1 : 0);
+    expect(discoveries).toBe(mode === "discovery" && accepted ? 1 : 0);
   } finally {
     await server.stop(true);
   }
