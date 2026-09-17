@@ -110,6 +110,7 @@ test("with function credentials", async () => {
 // https://github.com/xmppjs/xmpp.js/pull/1045#discussion_r1904611099
 test("with FAST token only", async () => {
   const mech = "HT-SHA-256-NONE";
+  const verified = Promise.withResolvers();
 
   function onAuthenticate(authenticate, mechanisms, fast) {
     expect(mechanisms).toEqual([]);
@@ -123,7 +124,7 @@ test("with FAST token only", async () => {
       },
       null,
       userAgent,
-    );
+    ).then(verified.resolve, verified.reject);
   }
 
   const { entity } = mockClient({ credentials: onAuthenticate });
@@ -156,10 +157,12 @@ test("with FAST token only", async () => {
 
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
+      <additional-data>fv6IPvIbO5ai0CP+BdOVk+awDbWrtJnEWHTgsM9QKuA=</additional-data>
       <authorization-identifier>{jid}</authorization-identifier>
     </success>,
   );
 
+  await verified.promise;
   expect(entity.jid.toString()).toBe(jid);
 });
 
@@ -196,21 +199,21 @@ test("failure", async () => {
   expect(error.element).toBe(failure);
 });
 
-test("prefers PLAIN in web client build", async () => {
+test("prefers SCRAM over PLAIN in web client build", async () => {
   const { entity } = mockClient({ credentials });
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
       <authentication xmlns="urn:xmpp:sasl:2">
         <mechanism>ANONYMOUS</mechanism>
-        <mechanism>SCRAM-SHA-1</mechanism>
         <mechanism>PLAIN</mechanism>
+        <mechanism>SCRAM-SHA-1</mechanism>
       </authentication>
     </features>,
   );
 
   const result = await promise(entity, "send");
-  expect(result.attrs.mechanism).toEqual("PLAIN");
+  expect(result.attrs.mechanism).toEqual("SCRAM-SHA-1");
 });
 
 test("use ANONYMOUS if username and password are not provided", async () => {

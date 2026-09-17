@@ -281,15 +281,14 @@ XMPP supports multiple transports, this table list `@xmpp/client` supported and 
 
 ## Authentication
 
-Multiple authentication mechanisms are supported.
-PLAIN should only be used over secure WebSocket (`wss://)`, direct TLS (`xmpps:`) or a TCP (`xmpp:`) connection upgraded to TLS via STARTTLS.
+Password mechanism preference is SCRAM-SHA-256, SCRAM-SHA-1, then PLAIN.
+ANONYMOUS is selected when credentials are absent and the server offers it.
+SCRAM requires Web Crypto and currently accepts printable ASCII credentials;
+non-ASCII fails explicitly until SASLprep is implemented. Neither PLUS mechanism
+is offered because browser APIs do not expose channel-binding material.
+FAST's HT-SHA-256-NONE is a separate token mechanism, not initial password login.
 
-|                   SASL                    | Node.js | Browser | React Native | Bun | Deno |
-| :---------------------------------------: | :-----: | :-----: | :----------: | --- | ---- |
-|   [ANONYMOUS](/src/sasl-anonymous)   |   ✔    |   ✔    |      ✔      | ✔  | ✔   |
-|       [PLAIN](/src/sasl-plain)       |   ✔    |   ✔    |      ✔      | ✔  | ✔   |
-|             SCRAM-SHA-1              |   ✔    |    ☐    |      ✗       | ✔  | ✔   |
-
-- ☐ : Optional
-- ✗ : Unavailable
-- ✔ : Included
+Use authenticated WSS; never disable certificate verification. PLAIN transmits
+the password and needs transport protection. Explicit loopback credentials are
+a local testing policy, not proof of TLS. See the
+[authentication profile](../../docs/profile.md#authentication).

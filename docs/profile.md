@@ -70,6 +70,26 @@ remain executable test markers, not evidence of successful validation.
   `sm.outbound` means last acknowledged sequence, not total sent; retransmission
   does not count twice. SM supplies neither persistence nor exactly-once delivery.
 
+## Authentication
+
+Password authentication prefers SCRAM-SHA-256, then SCRAM-SHA-1, then PLAIN,
+independently of the server's advertisement order. Both SCRAM variants use native
+Web Crypto and verify the server proof before stream restart, binding or online.
+Use HTTPS/WSS: SCRAM does not replace authenticated transport.
+
+The current SCRAM credential profile is printable ASCII (an empty password is
+allowed). Non-ASCII credentials fail explicitly, without automatic downgrade to
+PLAIN. Full SASLprep is separate work in #18; JID PRECIS is not a substitute.
+Web APIs provide no channel-binding material, so the client uses the GS2 `n`
+flag and does not advertise or select `-PLUS`. This is an explicit platform
+boundary, not a claim of full RFC 6120 mandatory mechanism compliance.
+
+SCRAM caps server messages at 16,384 characters and PBKDF2 at 1,000,000
+iterations. These are local resource limits, not RFC maxima. Counts above the
+limit fail rather than being reduced. Native derivation already in progress
+cannot be cancelled; connection cancellation prevents its result from being
+sent or completing a replacement session. No password/key cache is retained.
+
 ## Address preparation
 
 JIDs use RFC 7622 with verified errata 4534/4560, RFC 8264/8265 PRECIS,

@@ -15,6 +15,7 @@ import _fast from "../client-core/src/fast/fast.js";
 import SASLMechanismRegistry from "../sasl/registry.js";
 import plain from "../sasl-plain/index.js";
 import anonymous from "../sasl-anonymous/index.js";
+import scram from "../sasl-scram/index.js";
 import htsha256none from "../sasl-ht-sha-256-none/index.js";
 
 import createOnAuthenticate from "./lib/createOnAuthenticate.js";
@@ -49,6 +50,7 @@ function client(options = {}) {
   // SASL mechanisms - order matters and define priority
   const saslMechanisms = new SASLMechanismRegistry();
   const mechanisms = Object.entries({
+    scram,
     plain,
     anonymous,
   }).map(([k, v]) => ({ [k]: v(saslMechanisms) }));

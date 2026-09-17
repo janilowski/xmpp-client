@@ -25,7 +25,7 @@ afterEach(async () => {
 });
 
 test("client online with sasl and resource binding", async () => {
-  expect.assertions(6);
+  expect.assertions(7);
 
   await server.disableModules([
     "sasl2",
@@ -62,6 +62,9 @@ test("client online with sasl and resource binding", async () => {
   ]);
   expect(features[0]?.mechanisms).toBeDefined();
   expect(sent.some((el) => el.is("auth", NS_SASL))).toBe(true);
+  expect(sent.find((el) => el.is("auth", NS_SASL))?.attrs.mechanism).toMatch(
+    /^SCRAM-SHA-(1|256)$/,
+  );
   expect(sent.some((el) => el.is("iq") && el.getChild("bind", NS_BIND))).toBe(
     true,
   );
@@ -70,7 +73,7 @@ test("client online with sasl and resource binding", async () => {
 });
 
 test("client online with sasl2 and bind2", async () => {
-  expect.assertions(6);
+  expect.assertions(7);
 
   await server.disableModules(["saslauth"]);
   await server.enableModules(["sasl2", "sasl2_bind2"]);
@@ -102,6 +105,7 @@ test("client online with sasl2 and bind2", async () => {
   expect(features.map(({ mechanisms }) => mechanisms)).toEqual([undefined]);
   expect(features[0]?.authentication).toBeDefined();
   expect(sent).toHaveLength(1);
+  expect(sent[0]?.attrs.mechanism).toMatch(/^SCRAM-SHA-(1|256)$/);
   expect(sent[0]?.getChild("bind", NS_BIND2)).toBeDefined();
   expect(address instanceof jid.JID).toBe(true);
   expect(address.bare().toString()).toBe(JID);

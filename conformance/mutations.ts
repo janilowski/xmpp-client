@@ -15,6 +15,30 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "ignore SCRAM server signature",
+    file: "src/sasl-scram/index.js",
+    before: "if (!valid) {",
+    after: "if (false) {",
+    suite: "conformance/rfc5802.test.js",
+    test: "reject missing, forged or ambiguous",
+  },
+  {
+    name: "skip SASL final verification",
+    file: "src/sasl/index.js",
+    before: "if (mech.final) {",
+    after: "if (false) {",
+    suite: "conformance/rfc5802-wire.test.ts",
+    test: "missing server proof",
+  },
+  {
+    name: "skip SASL2 verification when proof is absent",
+    file: "src/sasl2/index.js",
+    before: "if (mech.final) {",
+    after: "if (additionalData && mech.final) {",
+    suite: "conformance/rfc5802-wire.test.ts",
+    test: "missing server proof",
+  },
+  {
     name: "accept expired XRD metadata",
     file: "src/resolve/lib/http.js",
     before: "!isUnexpired(expires[0])",
@@ -223,6 +247,8 @@ for (const mutation of mutations) {
       "bunfig.toml",
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
+      "conformance/rfc5802.test.js",
+      "conformance/rfc5802-wire.test.ts",
       "conformance/xep0198.test.ts",
       "conformance/xep0156.test.js",
       "conformance/xep0156-https.test.ts",

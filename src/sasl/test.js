@@ -162,21 +162,21 @@ test("failure", async () => {
   expect(error.element).toBe(failure);
 });
 
-test("prefers PLAIN in web client build", async () => {
+test("prefers SCRAM over PLAIN in web client build", async () => {
   const { entity } = mockClient({ credentials });
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
       <mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl">
         <mechanism>ANONYMOUS</mechanism>
-        <mechanism>SCRAM-SHA-1</mechanism>
         <mechanism>PLAIN</mechanism>
+        <mechanism>SCRAM-SHA-1</mechanism>
       </mechanisms>
     </features>,
   );
 
   const result = await promise(entity, "send");
-  expect(result.attrs.mechanism).toEqual("PLAIN");
+  expect(result.attrs.mechanism).toEqual("SCRAM-SHA-1");
 });
 
 test("use ANONYMOUS if username and password are not provided", async () => {

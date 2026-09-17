@@ -30,6 +30,45 @@ function inspectFrames(frames) {
   });
 }
 
+// RFC 5802 §5: the shipped browser bundle must produce the independent vector.
+test("Chromium SCRAM uses Web Crypto and verifies the RFC server proof", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    /* eslint-disable n/no-unsupported-features/node-builtins -- browser Web Crypto */
+    const result = await page.evaluate(async () => {
+      const original = crypto.getRandomValues;
+      crypto.getRandomValues = () =>
+        Uint8Array.from(atob("fyko+d2lbbFgONRv9qkxdawL"), (c) =>
+          c.charCodeAt(0),
+        );
+      try {
+        const entity = globalThis.XMPP.client({ domain: "example.test" });
+        const mech = entity.saslMechanisms.create("SCRAM-SHA-1");
+        const credentials = { username: "user", password: "pencil" };
+        const first = await mech.response(credentials);
+        await mech.challenge(
+          "r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,s=QSXCR+Q6sek8bf92,i=4096",
+        );
+        const proof = await mech.response(credentials);
+        await mech.final("v=rmF9pqV8S7suAoZWja4dJRkFsKQ=");
+        return { first, proof };
+      } finally {
+        crypto.getRandomValues = original;
+      }
+    });
+    /* eslint-enable n/no-unsupported-features/node-builtins */
+    expect(result).toEqual({
+      first: "n,,n=user,r=fyko+d2lbbFgONRv9qkxdawL",
+      proof:
+        "c=biws,r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,p=v0X8v3Bz2T0CJGbJQyF0X+HI4Ts=",
+    });
+  } finally {
+    await page.close();
+  }
+});
+
 let browser;
 const origin = createServer((_request, response) =>
   response.end("<!doctype html><title>XMPP test</title>"),

@@ -76,8 +76,9 @@ async function authenticate({
       }
 
       if (element.name === "success") {
-        const additionalData = element.getChild("additional-data")?.text();
-        if (additionalData && mech.final) {
+        const additionalData =
+          element.getChild("additional-data", NS)?.text() ?? "";
+        if (mech.final) {
           await mech.final(
             mech.binary ? decodeBytes(additionalData) : decode(additionalData),
           );

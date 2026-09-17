@@ -141,6 +141,10 @@ Tests reference the applicable source clauses directly. The [client profile](doc
 documents runtime delegation and deliberate deviations, not blanket certification
 of inherited standards or browser engines. Outstanding work lives in GitHub.
 
+Password authentication supports SCRAM-SHA-256 and SCRAM-SHA-1 through SASL
+and SASL2, with mandatory server-proof verification. See the
+[ASCII credential and channel-binding boundaries](docs/profile.md#authentication).
+
 ### Additional protocol work
 
 These implementations are useful but are not required for the base Core and
