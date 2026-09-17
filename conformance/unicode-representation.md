@@ -129,4 +129,4 @@ up in `/tmp/xmpp-unicode-trie-experiment-dGVv0Z.tar.gz`. This temporary archive 
 not tracked or guaranteed to survive cleanup. To reproduce, overlay it on a fresh
 copy of `d7d09e16`, install dependencies and build both clients before running
 `bun benchmark.mjs`. Regeneration requires the checksum-pinned Unicode 16 UCD
-documented in [RFC 7622 coverage](rfc7622.md).
+documented in [Unicode maintenance](../docs/unicode.md).

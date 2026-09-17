@@ -1,7 +1,7 @@
 """Print independent golden digests; never import production code or update tests.
 
 Optional verification dependencies: precis-i18n==1.1.2,
-unicodedata2==16.0.0, idna==3.11. See conformance/rfc7622.md.
+unicodedata2==16.0.0, idna==3.11. See docs/unicode.md.
 """
 
 from hashlib import sha256

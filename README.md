@@ -102,11 +102,11 @@ Prosody package is supplied by your distribution, not lockfile-pinned; this run
 used 13.0.6. JavaScript implementation-wide type checking and protocol compliance
 remain separate work; `typecheck` currently checks the typed public boundary.
 
-The bounded defects in issues #11–#17 are fixed and closed. The
-[TLS/Web audit](conformance/tls.md) maps #8's tested profile and platform limits.
-The remaining Core audit is tracked in [#7](https://github.com/janilowski/xmpp-client/issues/7),
-with harness and requirements work in #9 and #10. See the
-[roadmap](conformance/roadmap.md) for the next steps.
+[Client profile](docs/profile.md) documents policy and platform limits.
+Project progress, priorities and outstanding findings live in
+[GitHub issues](https://github.com/janilowski/xmpp-client/issues) and
+[milestones](https://github.com/janilowski/xmpp-client/milestones), not a separate
+repository roadmap.
 
 ## Scope
 
@@ -123,39 +123,39 @@ The current target is a self-assessed **XMPP Core and Web Client Compliance
 
 ### Target profile
 
-| Standard                                              | Area                        | Status                                                                                   |
-| ----------------------------------------------------- | --------------------------- | ---------------------------------------------------------------------------------------- |
-| [RFC 6120](https://www.rfc-editor.org/info/rfc6120/)  | XMPP Core                   | [Lifecycle/IQ coverage](conformance/rfc6120.md); wider audit pending                     |
-| [RFC 7590](https://www.rfc-editor.org/info/rfc7590/)  | TLS for XMPP                | [Web profile audited](conformance/tls.md); TLS stack delegated                              |
-| [RFC 7622](https://www.rfc-editor.org/info/rfc7622/)  | XMPP addresses              | [Six address features covered](conformance/rfc7622.md); Unicode 16 profile               |
-| [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | Service Discovery           | Planned                                                                                  |
-| [XEP-0115](https://xmpp.org/extensions/xep-0115.html) | Entity Capabilities         | Planned                                                                                  |
-| [RFC 7395](https://www.rfc-editor.org/info/rfc7395/)  | XMPP over WebSocket         | [Direct client obligations mapped](conformance/rfc7395.md); platform boundaries explicit |
-| [XEP-0156](https://xmpp.org/extensions/xep-0156.html) | Connection Method Discovery | [XRD/WSS profile audited](conformance/xep0156.md); redirect deviation explicit              |
+| Standard                                              | Area                        | Status                                                                            |
+| ----------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------- |
+| [RFC 6120](https://www.rfc-editor.org/info/rfc6120/)  | XMPP Core                   | [Lifecycle/IQ tests](conformance/rfc6120.test.ts); partial Core support           |
+| [RFC 7590](https://www.rfc-editor.org/info/rfc7590/)  | TLS for XMPP                | [Web profile](docs/profile.md); TLS stack delegated                               |
+| [RFC 7622](https://www.rfc-editor.org/info/rfc7622/)  | XMPP addresses              | [Address tests](conformance/rfc7622.test.js); Unicode 16 profile                  |
+| [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | Service Discovery           | Planned                                                                           |
+| [XEP-0115](https://xmpp.org/extensions/xep-0115.html) | Entity Capabilities         | Planned                                                                           |
+| [RFC 7395](https://www.rfc-editor.org/info/rfc7395/)  | XMPP over WebSocket         | [Client-binding tests](conformance/rfc7395.test.ts); platform boundaries explicit |
+| [XEP-0156](https://xmpp.org/extensions/xep-0156.html) | Connection Method Discovery | [XRD/WSS tests](conformance/xep0156.test.js); redirects deliberately rejected     |
 
 RFC 6120 and the other top-level specifications have normative dependencies,
 including XML, XML Namespaces, UTF-8, SASL, Base64, and current TLS best
 practices. Applicable requirements from those dependencies are part of the
 audit even when they do not have their own project milestone.
-The coverage maps describe tested profiles and remaining boundaries, not blanket
-certification of all inherited standards or browser engines. The TLS/discovery
-maps retain runtime delegation, the redirect deviation and Bun's IPv6 limitation.
+Tests reference the applicable source clauses directly. The [client profile](docs/profile.md)
+documents runtime delegation and deliberate deviations, not blanket certification
+of inherited standards or browser engines. Outstanding work lives in GitHub.
 
 ### Additional protocol work
 
 These implementations are useful but are not required for the base Core and
 Web target:
 
-| Standard                                                                                                       | Feature           | Status                                                                     |
-| -------------------------------------------------------------------------------------------------------------- | ----------------- | -------------------------------------------------------------------------- |
-| [RFC 4616](https://www.rfc-editor.org/info/rfc4616/)                                                           | SASL PLAIN        | Implemented; audit pending                                                 |
-| [RFC 4505](https://www.rfc-editor.org/info/rfc4505/) and [XEP-0175](https://xmpp.org/extensions/xep-0175.html) | SASL ANONYMOUS    | Implemented; audit pending                                                 |
-| [XEP-0106](https://xmpp.org/extensions/xep-0106.html)                                                          | JID Escaping      | Implemented; audit pending                                                 |
-| [XEP-0198](https://xmpp.org/extensions/xep-0198.html)                                                          | Stream Management | [Counters/resumption covered](conformance/xep0198.md); wider audit pending |
-| [XEP-0199](https://xmpp.org/extensions/xep-0199.html)                                                          | XMPP Ping         | Responder implemented; audit pending                                       |
-| [XEP-0386](https://xmpp.org/extensions/xep-0386.html)                                                          | Bind 2            | Partial; audit pending                                                     |
-| [XEP-0388](https://xmpp.org/extensions/xep-0388.html)                                                          | SASL 2            | Partial; audit pending                                                     |
-| [XEP-0484](https://xmpp.org/extensions/xep-0484.html)                                                          | FAST              | Partial; audit pending                                                     |
+| Standard                                                                                                       | Feature           | Status                                                                   |
+| -------------------------------------------------------------------------------------------------------------- | ----------------- | ------------------------------------------------------------------------ |
+| [RFC 4616](https://www.rfc-editor.org/info/rfc4616/)                                                           | SASL PLAIN        | Implemented; audit pending                                               |
+| [RFC 4505](https://www.rfc-editor.org/info/rfc4505/) and [XEP-0175](https://xmpp.org/extensions/xep-0175.html) | SASL ANONYMOUS    | Implemented; audit pending                                               |
+| [XEP-0106](https://xmpp.org/extensions/xep-0106.html)                                                          | JID Escaping      | Implemented; audit pending                                               |
+| [XEP-0198](https://xmpp.org/extensions/xep-0198.html)                                                          | Stream Management | [Counter/resumption tests](conformance/xep0198.test.ts); partial support |
+| [XEP-0199](https://xmpp.org/extensions/xep-0199.html)                                                          | XMPP Ping         | Responder implemented; audit pending                                     |
+| [XEP-0386](https://xmpp.org/extensions/xep-0386.html)                                                          | Bind 2            | Partial; audit pending                                                   |
+| [XEP-0388](https://xmpp.org/extensions/xep-0388.html)                                                          | SASL 2            | Partial; audit pending                                                   |
+| [XEP-0484](https://xmpp.org/extensions/xep-0484.html)                                                          | FAST              | Partial; audit pending                                                   |
 
 ## Testing and compliance
 
@@ -166,11 +166,11 @@ conditions; execution produces results. `SHOULD` and `SHOULD
 NOT` deviations require a written justification; server-only or
 transport-replaced requirements must be explicitly marked not applicable.
 
-The [protocol suites and coverage maps](conformance/) cover RFC 7395 client
+The [protocol suites](conformance/) exercise RFC 7395 client
 binding, RFC 7622 addresses, and bounded RFC 6120/XEP-0198 behavior.
 Run `bun run test:conformance` for protocol tests and generated reports,
 and `bun run test:mutations` to check assertions against deliberate defects.
-The maps distinguish covered scenarios from remaining work.
+Tests carry source references; GitHub tracks uncovered requirements.
 
 Evidence can include:
 

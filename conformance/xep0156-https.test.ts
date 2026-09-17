@@ -6,6 +6,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generate } from "selfsigned";
 
+// XEP-0156 1.4.0 §§2.2, 4; RFC 6415 §§2–4.1:
+// redirect rejection deliberately departs from SHOULD-follow to prevent
+// uninspectable HTTP downgrade hops in browser Fetch (see docs/profile.md).
 const HTTP = {
   OK: 200,
   MOVED_PERMANENTLY: 301,

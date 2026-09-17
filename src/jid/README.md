@@ -86,7 +86,7 @@ jid("contact@example.net@xmpp.net");
 
 - [RFC 7622 XMPP Address Format](https://www.rfc-editor.org/rfc/rfc7622.html):
   Unicode 16 PRECIS and IDNA2008 preparation, validation and UTF-8 byte limits.
-  See the [coverage and compatibility map](../../conformance/rfc7622.md).
+  See the [client profile and compatibility boundaries](../../docs/profile.md#address-preparation).
 - [XEP-0106 JID Escaping](https://xmpp.org/extensions/xep-0106.html) implemented
 
 Complete wire addresses are parsed strictly and invalid ones throw `TypeError`.

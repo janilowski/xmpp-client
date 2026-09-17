@@ -4,6 +4,8 @@ import { disconnectClients } from "../../test/support/mockClient.js";
 import { tick } from "../events/index.js";
 
 afterEach(disconnectClients);
+// XEP-0198 1.6.3 §§4–6 and §13 schema: counts, rollover and resumption.
+// Malformed counts use bad-format by local policy; over-ack uses §6's error.
 const NS = "urn:xmpp:sm:3";
 const MAX_H = 4_294_967_295;
 

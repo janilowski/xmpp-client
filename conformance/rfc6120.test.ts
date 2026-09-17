@@ -10,6 +10,8 @@ const FEATURES =
   '<features xmlns="http://etherx.jabber.org/streams"><mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl"><mechanism>PLAIN</mechanism></mechanisms></features>';
 const NEGOTIATION_TIMEOUT_MS = 100;
 
+// RFC 6120 §§8.1.2.1, 8.2.3, 8.3.1: sender correlation is our security policy
+// derived from addressing/reply rules, not a verbatim RFC matching algorithm.
 test.each(["result", "error"])(
   "IQ ignores a forged %s before the authentic wire reply",
   async (type) => {

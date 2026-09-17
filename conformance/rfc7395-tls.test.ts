@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generate } from "selfsigned";
 
+// RFC 7395 §§3.9, 6; RFC 7590 §3.4; XEP-0156 1.4.0 §2.2:
+// authenticate HTTPS discovery and WSS endpoint identities independently of the
+// XMPP domain. PKIX belongs to the runtime; these are integration scenarios.
 const HTTP_BAD_REQUEST = 400;
 const DAY_MS = 86_400_000;
 let directory: string;

@@ -2,7 +2,8 @@ import { describe, expect, test } from "bun:test";
 import jid, { JID, escapeLocal } from "../src/jid/index.js";
 
 // RFC 7622 §§3–4, verified errata 4534/4560, RFC 9844 §3.
-describe("RFC 7622 address structure and comparison", () => {
+// RFC 8264/8265 replace RFC 7564/7613; Unicode 16 is the selected repertoire.
+describe("RFC 7622 §§3.1, 3.5, 4 — address structure and comparison", () => {
   for (const value of [
     "juliet@example.com",
     "juliet@example.com/foo",
@@ -97,7 +98,7 @@ describe("RFC 7622 address structure and comparison", () => {
 });
 
 // RFC 8265 UsernameCaseMapped / OpaqueString and RFC 5892 Appendix A.
-describe("RFC 7622 PRECIS profiles", () => {
+describe("RFC 7622 §§3.3–3.4 — PRECIS profiles", () => {
   test("applies profile mappings before contextual and repertoire checks", () => {
     for (const [input, output] of [
       ["L·L", "l·l"],
@@ -202,7 +203,7 @@ describe("RFC 7622 PRECIS profiles", () => {
   }
 });
 
-describe("RFC 7622 IDNA2008 domains", () => {
+describe("RFC 7622 §3.2 — IDNA2008 domains", () => {
   for (const [input, output] of [
     ["EXAMPLE.COM.", "example.com"],
     ["XN--BCHER-KVA.example", "bücher.example"],

@@ -6,6 +6,8 @@ afterEach(disconnectClients);
 import { expect, test } from "bun:test";
 import { mockClient, xml } from "../../test/support/index.js";
 
+// RFC 6120 §§4.4, 4.6, 6–7: cancelled negotiation must not affect a new stream.
+// Also exercises XEP-0388/0198 integration, not full coverage of either XEP.
 const STREAMS = "http://etherx.jabber.org/streams";
 const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const SASL2 = "urn:xmpp:sasl:2";

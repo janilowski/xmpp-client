@@ -1,6 +1,9 @@
 import { afterEach, expect, spyOn, test } from "bun:test";
 import { resolve } from "../src/resolve/lib/http.js";
 
+// Sources: XEP-0156 1.4.0 §2.2, RFC 6415 §4.1,
+// XRD 1.0 (2010-11-01) §§1.5–4 and RFC 8288 §2.1.2.
+// Unknown metadata is not a trust assertion; this is not a general XSD validator.
 let fetchMock;
 let clockMock;
 afterEach(() => {
