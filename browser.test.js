@@ -13,6 +13,8 @@ import { rolldown } from "rolldown";
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="browser-peer"/>';
 const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';
+const HTTP_OK = 200;
+const HTTP_FOUND = 302;
 
 // Native browser XML parsing is independent of both saxes and ltx.
 function inspectFrames(frames) {
@@ -75,6 +77,91 @@ test("Chromium rejects the fixture certificate without explicit trust", async ()
 afterAll(async () => {
   await browser?.close();
   origin.close();
+});
+
+test("Chromium discovery rejects redirects whose target the Fetch API conceals", async () => {
+  let targetRequests = 0;
+  const target = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch() {
+      targetRequests += 1;
+      return new Response("unexpected downgrade");
+    },
+  });
+  const source = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    tls: {
+      cert: await readFile(
+        path.join(process.env.XMPP_TEST_DIR, "certs/localhost.crt"),
+      ),
+      key: await readFile(
+        path.join(process.env.XMPP_TEST_DIR, "certs/localhost.key"),
+      ),
+    },
+    fetch(request) {
+      const headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Expose-Headers": "Location",
+      };
+      if (new URL(request.url).pathname === "/positive-control") {
+        return new Response("reachable", { headers });
+      }
+      return new Response(null, {
+        status: HTTP_FOUND,
+        headers: {
+          ...headers,
+          Location: `http://localhost:${target.port}/metadata`,
+        },
+      });
+    },
+  });
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(async (port) => {
+      const base = `https://localhost:${port}`;
+      const control = await fetch(`${base}/positive-control`);
+      const manual = await fetch(`${base}/.well-known/host-meta`, {
+        redirect: "manual",
+      });
+      const xmpp = globalThis.XMPP.client({
+        service: `localhost:${port}`,
+        domain: "example.test",
+      });
+      xmpp.reconnect.stop();
+      xmpp.on("error", () => {});
+      let outcome = "accepted";
+      try {
+        await xmpp.connect(xmpp.options.service);
+      } catch (error) {
+        outcome = error.message;
+      } finally {
+        await xmpp.stop();
+      }
+      return {
+        control: control.status,
+        type: manual.type,
+        status: manual.status,
+        location: manual.headers.get("Location"),
+        outcome,
+      };
+    }, source.port);
+    expect(result).toEqual({
+      control: HTTP_OK,
+      type: "opaqueredirect",
+      status: 0,
+      location: null,
+      outcome: "No compatible secure transport found.",
+    });
+    expect(targetRequests).toBe(0);
+  } finally {
+    await page.close();
+    await source.stop(true);
+    await target.stop(true);
+  }
 });
 
 test("Chromium decodes every Unicode property without changing its repertoire", async () => {

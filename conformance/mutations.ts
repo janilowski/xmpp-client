@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "remove the HTTPS discovery deadline",
+    file: "src/resolve/lib/http.js",
+    before: "signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),",
+    after: "",
+    suite: "conformance/xep0156-https.test.ts",
+    test: "local deadline bounds HTTPS discovery: body",
+  },
+  {
+    name: "follow discovery redirects including plaintext targets",
+    file: "src/resolve/lib/http.js",
+    before: 'redirect: "error",',
+    after: 'redirect: "follow",',
+    suite: "conformance/xep0156-https.test.ts",
+    test: "redirect policy never contacts",
+  },
+  {
     name: "treat discovery document order as priority",
     file: "src/resolve/lib/alt-connections.js",
     before: "return a.uri < b.uri ? -1 : a.uri > b.uri ? 1 : 0;",
@@ -193,6 +209,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120.test.ts",
       "conformance/xep0198.test.ts",
       "conformance/xep0156.test.js",
+      "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",
       "conformance/peer.ts",
       "conformance/xml.ts",
