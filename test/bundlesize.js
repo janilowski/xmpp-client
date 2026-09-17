@@ -12,8 +12,8 @@ const path = "dist/xmpp.min.js";
 const buffer = await readFile(path);
 const compressed = await brotliCompress(buffer);
 
-// Independently packed Unicode ranges retain full validation below 27 KiB.
-const max_size = "27 KB";
+// Brotli budget includes SCRAM and Unicode 3.2 SASLprep; bytes uses 1024-byte KB.
+const max_size = "30 KB";
 
 console.log(`${path}:`);
 if (compressed.length > bytes(max_size)) {
