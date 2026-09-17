@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept expired XRD metadata",
+    file: "src/resolve/lib/http.js",
+    before: "!isUnexpired(expires[0])",
+    after: "false",
+    suite: "conformance/xep0156.test.js",
+    test: "XRD expiry:",
+  },
+  {
+    name: "compare XRD relation types case-sensitively",
+    file: "src/resolve/lib/http.js",
+    before: "METHODS.get(attrs.rel?.toLowerCase())",
+    after: "METHODS.get(attrs.rel)",
+    suite: "conformance/xep0156.test.js",
+    test: "relation and URI scheme comparisons",
+  },
+  {
     name: "remove the HTTPS discovery deadline",
     file: "src/resolve/lib/http.js",
     before: "signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),",

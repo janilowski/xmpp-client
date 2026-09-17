@@ -1,6 +1,7 @@
 import parse, { MAX_XML_BYTES } from "../../xml/lib/parseDocument.js";
 
 import { compare as compareAltConnections } from "./alt-connections.js";
+import isUnexpired from "./xrdExpiry.js";
 
 const NS_XRD = "http://docs.oasis-open.org/ns/xri/xrd-1.0";
 const DISCOVERY_TIMEOUT_MS = 5000;
@@ -49,6 +50,13 @@ export async function resolve(domain) {
     if (!document.is("XRD", NS_XRD)) {
       return [];
     }
+    const expires = document.getChildren("Expires", NS_XRD);
+    if (
+      expires.length > 1 ||
+      (expires.length === 1 && !isUnexpired(expires[0]))
+    ) {
+      return [];
+    }
     return document
       .getChildren("Link", NS_XRD)
       .filter(({ attrs }) => {
@@ -59,7 +67,7 @@ export async function resolve(domain) {
         try {
           const uri = new URL(attrs.href);
           return (
-            METHODS.get(attrs.rel)?.has(uri.protocol) &&
+            METHODS.get(attrs.rel?.toLowerCase())?.has(uri.protocol) &&
             !uri.username &&
             !uri.password
           );
@@ -70,8 +78,8 @@ export async function resolve(domain) {
       .map(({ attrs }) => ({
         rel: attrs.rel,
         href: attrs.href,
-        method: attrs.rel.split(":").pop(),
-        uri: attrs.href,
+        method: attrs.rel.toLowerCase().split(":").pop(),
+        uri: new URL(attrs.href).href,
       }))
       .toSorted(compareAltConnections);
   } catch {
