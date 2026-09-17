@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 
-import SASLMechanismRegistry from "../sasl/registry.js";
-import registerAnonymous from "./index.js";
+import SASLMechanismRegistry from "../sasl/registry.ts";
+import registerAnonymous from "./index.ts";
 
-test("creates an ANONYMOUS initial response", () => {
+test("RFC 4505 §2: creates an ANONYMOUS initial response", () => {
   const registry = new SASLMechanismRegistry();
   registerAnonymous(registry);
 

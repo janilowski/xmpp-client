@@ -2,7 +2,7 @@ import { EventEmitter } from "../../../events/index.js";
 import { getAvailableMechanisms } from "../../../sasl/index.js";
 import SASLError from "../../../sasl/lib/SASLError.js";
 import xml from "../../../xml/index.js";
-import SASLMechanismRegistry from "../../../sasl/registry.js";
+import SASLMechanismRegistry from "../../../sasl/registry.ts";
 
 const NS = "urn:xmpp:fast:0";
 

@@ -1,11 +1,13 @@
+import type { SASLMechanism, SASLMechanismFactory } from "./mechanism.ts";
+
 export default class SASLMechanismRegistry {
-  #mechanisms = new Map();
+  #mechanisms = new Map<string, SASLMechanismFactory>();
 
   get names() {
     return [...this.#mechanisms.keys()];
   }
 
-  register(name, create) {
+  register(name: string, create: SASLMechanismFactory): this {
     if (typeof name !== "string" || name.length === 0) {
       throw new TypeError("A SASL mechanism must have a name.");
     }
@@ -20,7 +22,7 @@ export default class SASLMechanismRegistry {
     return this;
   }
 
-  create(name) {
+  create(name: string): SASLMechanism | null {
     return this.#mechanisms.get(name)?.() ?? null;
   }
 }
