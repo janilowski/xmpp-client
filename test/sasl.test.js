@@ -36,7 +36,11 @@ test("client online with sasl and resource binding", async () => {
   await server.enableModules(["saslauth"]);
   await server.restart();
 
-  xmpp = client({ credentials, service });
+  // SASLprep must recover the fixture password before deriving the proof.
+  xmpp = client({
+    credentials: { username, password: `${password}\u00ad` },
+    service,
+  });
   debug(xmpp);
 
   const features = [];
@@ -79,7 +83,10 @@ test("client online with sasl2 and bind2", async () => {
   await server.enableModules(["sasl2", "sasl2_bind2"]);
   await server.restart();
 
-  xmpp = client({ credentials, service });
+  xmpp = client({
+    credentials: { username, password: `${password}\u00ad` },
+    service,
+  });
   debug(xmpp);
 
   const features = [];

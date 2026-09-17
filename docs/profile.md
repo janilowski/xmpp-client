@@ -77,9 +77,12 @@ independently of the server's advertisement order. Both SCRAM variants use nativ
 Web Crypto and verify the server proof before stream restart, binding or online.
 Use HTTPS/WSS: SCRAM does not replace authenticated transport.
 
-The current SCRAM credential profile is printable ASCII (an empty password is
-allowed). Non-ASCII credentials fail explicitly, without automatic downgrade to
-PLAIN. Full SASLprep is separate work in #18; JID PRECIS is not a substitute.
+SCRAM uses Unicode 3.2 SASLprep: query preparation for usernames and stored-string
+preparation for passwords (an empty password is allowed). Prohibited characters,
+invalid bidirectional strings and unassigned password characters fail explicitly,
+without automatic downgrade to PLAIN. JID PRECIS is not a substitute. GS2
+authorization identities are escaped, not normalized as simple usernames;
+their application-specific validation belongs to the authorization profile.
 Web APIs provide no channel-binding material, so the client uses the GS2 `n`
 flag and does not advertise or select `-PLUS`. This is an explicit platform
 boundary, not a claim of full RFC 6120 mandatory mechanism compliance.

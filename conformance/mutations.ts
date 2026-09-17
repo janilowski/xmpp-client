@@ -15,6 +15,30 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "omit SASLprep password normalization",
+    file: "src/sasl-scram/index.js",
+    before: 'password = saslprep(password, "stored");',
+    after: "",
+    suite: "conformance/rfc5802.test.js",
+    test: "prepares credentials before hashing",
+  },
+  {
+    name: "allow unassigned stored SCRAM passwords",
+    file: "src/sasl-scram/saslprep.js",
+    before: 'if (profile === "stored") {',
+    after: "if (false) {",
+    suite: "conformance/rfc4013.test.js",
+    test: "stored password rejects",
+  },
+  {
+    name: "omit SASLprep bidi enforcement",
+    file: "src/sasl-scram/saslprep.js",
+    before: "if (RANDAL.test(normalized)) {",
+    after: "if (false) {",
+    suite: "conformance/rfc4013.test.js",
+    test: "prohibited output / bidi",
+  },
+  {
     name: "ignore SCRAM server signature",
     file: "src/sasl-scram/index.js",
     before: "if (!valid) {",
@@ -88,7 +112,7 @@ const mutations = [
   },
   {
     name: "drop decoded Unicode ranges",
-    file: "src/jid/lib/unicode-ranges.js",
+    file: "src/util/unicode-ranges.js",
     before: 'return new RegExp(`[${parts.join("")}]`, "u");',
     after: 'return new RegExp("[]", "u");',
     suite: "src/jid/test/unicode.test.js",
@@ -248,6 +272,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc5802.test.js",
+      "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",
       "conformance/xep0198.test.ts",
       "conformance/xep0156.test.js",

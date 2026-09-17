@@ -48,6 +48,6 @@ export function decodeRanges(data) {
     throw new Error("Incomplete Unicode range.");
   }
 
-  // Preserve native RegExp matching; decoding adds no work to JID validation.
+  // Preserve native RegExp matching; decode once, not during validation.
   return new RegExp(`[${parts.join("")}]`, "u");
 }

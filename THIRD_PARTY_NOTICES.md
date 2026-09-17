@@ -2,7 +2,7 @@
 
 The distributed bundles include code from the following projects.
 
-## Unicode 16.0.0 data
+## Unicode 16.0.0 and 3.2.0 data
 
 UNICODE LICENSE V3
 

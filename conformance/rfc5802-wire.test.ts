@@ -18,6 +18,7 @@ for (const ns of [SASL, SASL2]) {
   for (const name of ["SCRAM-SHA-1", "SCRAM-SHA-256"]) {
     test.each([
       "valid",
+      "unicode",
       "extensions",
       "challenge-final",
       "missing",
@@ -131,8 +132,8 @@ for (const ns of [SASL, SASL2]) {
       const xmpp = client({
         service: peer.url,
         domain: "example.test",
-        username: "user",
-        password: "pencil",
+        username: outcome === "unicode" ? "u\u00adser" : "user",
+        password: outcome === "unicode" ? "\uff50en\u00adcil" : "pencil",
       });
       xmpp.reconnect.stop();
       let online = 0;
@@ -145,7 +146,11 @@ for (const ns of [SASL, SASL2]) {
         );
         expect(peer.errors).toEqual([]);
         expect(selected).toBe(name);
-        if (["valid", "extensions", "challenge-final"].includes(outcome)) {
+        if (
+          ["valid", "unicode", "extensions", "challenge-final"].includes(
+            outcome,
+          )
+        ) {
           expect(result).toBe("user@example.test/test");
           expect(verifiedClientProof).toBe(true);
           expect(online).toBe(1);

@@ -34,6 +34,18 @@ function mechanism(name = "SCRAM-SHA-1", nonce = vectors[0][1]) {
 }
 
 test.each(vectors)(
+  "RFC 5802 / RFC 4013: %s prepares credentials before hashing",
+  async (name, nonce, first, response, final) => {
+    const mech = mechanism(name, nonce);
+    const unicode = { username: "u\u00adser", password: "\uff50en\u00adcil" };
+    expect(await mech.response(unicode)).toBe(`n,,n=user,r=${nonce}`);
+    await mech.challenge(first);
+    expect(await mech.response(unicode)).toBe(response);
+    await mech.final(final);
+  },
+);
+
+test.each(vectors)(
   "RFC vector %s: client proof and server verification",
   async (name, nonce, first, response, final) => {
     const mech = mechanism(name, nonce);
@@ -167,17 +179,12 @@ test("RFC 5802 §§2.2, 5.1: ASCII credentials retain case and escape GS2 delimi
 test.each([
   { username: "", password: "x" },
   { username: "u\0ser", password: "x" },
-  { username: "I\u00ADX", password: "x" },
-  { username: "user", password: "péncil" },
   { username: "user\n", password: "x" },
   { username: "user", password: "x\n" },
   { username: "user", password: "x", authzid: "other\0user" },
-])(
-  "ASCII profile rejects unsupported credentials instead of silently changing them: %j",
-  async (creds) => {
-    await expect(mechanism().response(creds)).rejects.toThrow("SCRAM");
-  },
-);
+])("SCRAM rejects invalid credentials: %j", async (creds) => {
+  await expect(mechanism().response(creds)).rejects.toThrow("SCRAM");
+});
 
 test("RFC 5802 §6: no fabricated PLUS support; independent per-exchange nonces", async () => {
   const entity = client({ domain: "example.test" });

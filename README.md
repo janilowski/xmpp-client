@@ -143,7 +143,7 @@ of inherited standards or browser engines. Outstanding work lives in GitHub.
 
 Password authentication supports SCRAM-SHA-256 and SCRAM-SHA-1 through SASL
 and SASL2, with mandatory server-proof verification. See the
-[ASCII credential and channel-binding boundaries](docs/profile.md#authentication).
+[credential preparation and channel-binding boundaries](docs/profile.md#authentication).
 
 ### Additional protocol work
 

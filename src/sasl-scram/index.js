@@ -1,5 +1,6 @@
 /* eslint-disable n/no-unsupported-features/node-builtins */
 import { encode, decodeBytes } from "../util/base64.js";
+import saslprep from "./saslprep.js";
 
 const NONCE_BYTES = 18;
 const MAX_ITERATIONS = 1_000_000;
@@ -73,6 +74,7 @@ class Scram {
   #iterations;
   #serverKey;
   #auth;
+  #password;
 
   constructor(hash, bits) {
     this.name = `SCRAM-${hash}`;
@@ -95,21 +97,18 @@ class Scram {
 
   async response({ username, password, authzid }) {
     if (this.#state === STATE.INITIAL) {
-      // RFC 5802 §2.2 permits ASCII-only until full SASLprep is implemented.
-      // Never substitute JID PRECIS or silently fall back to PLAIN.
+      this.#state = STATE.FAILED;
+      username = saslprep(username, "query");
+      password = saslprep(password, "stored");
+      // Authorization identities belong to the application profile, not SASLprep.
       if (
-        typeof username !== "string" ||
-        !/^[\x20-\x7e]+$/.test(username) ||
-        typeof password !== "string" ||
-        /[^\x20-\x7e]/.test(password) ||
+        !username ||
         (authzid != null &&
-          (typeof authzid !== "string" || !/^[\x20-\x7e]*$/.test(authzid)))
+          (typeof authzid !== "string" || /[\0\uD800-\uDFFF]/u.test(authzid)))
       ) {
-        this.#state = STATE.FAILED;
-        throw new Error(
-          "SCRAM: credentials require the supported ASCII profile",
-        );
+        throw new Error("SCRAM: invalid identity");
       }
+      this.#password = password;
       const escaped = username.replaceAll("=", "=3D").replaceAll(",", "=2C");
       const authorization = authzid
         ? "a=" + authzid.replaceAll("=", "=3D").replaceAll(",", "=2C")
@@ -130,11 +129,12 @@ class Scram {
     this.#state = STATE.DERIVING;
     const key = await crypto.subtle.importKey(
       "raw",
-      encoder.encode(password),
+      encoder.encode(this.#password),
       "PBKDF2",
       false,
       ["deriveBits"],
     );
+    this.#password = undefined;
     const salted = await crypto.subtle.deriveBits(
       {
         name: "PBKDF2",

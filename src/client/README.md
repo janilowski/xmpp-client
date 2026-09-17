@@ -283,8 +283,8 @@ XMPP supports multiple transports, this table list `@xmpp/client` supported and 
 
 Password mechanism preference is SCRAM-SHA-256, SCRAM-SHA-1, then PLAIN.
 ANONYMOUS is selected when credentials are absent and the server offers it.
-SCRAM requires Web Crypto and currently accepts printable ASCII credentials;
-non-ASCII fails explicitly until SASLprep is implemented. Neither PLUS mechanism
+SCRAM requires Web Crypto and prepares Unicode credentials with SASLprep
+(Unicode 3.2), not JID PRECIS. Neither PLUS mechanism
 is offered because browser APIs do not expose channel-binding material.
 FAST's HT-SHA-256-NONE is a separate token mechanism, not initial password login.
 

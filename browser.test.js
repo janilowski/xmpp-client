@@ -46,7 +46,10 @@ test("Chromium SCRAM uses Web Crypto and verifies the RFC server proof", async (
       try {
         const entity = globalThis.XMPP.client({ domain: "example.test" });
         const mech = entity.saslMechanisms.create("SCRAM-SHA-1");
-        const credentials = { username: "user", password: "pencil" };
+        const credentials = {
+          username: "u\u00adser",
+          password: "\uff50en\u00adcil",
+        };
         const first = await mech.response(credentials);
         await mech.challenge(
           "r=fyko+d2lbbFgONRv9qkxdawL3rfcNHYJY1ZVvWVs7j,s=QSXCR+Q6sek8bf92,i=4096",

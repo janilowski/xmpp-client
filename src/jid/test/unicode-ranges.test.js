@@ -1,4 +1,4 @@
-import { decodeRanges } from "../lib/unicode-ranges.js";
+import { decodeRanges } from "../../util/unicode-ranges.js";
 
 test("decodes gaps and lengths at both Unicode boundaries", () => {
   // Ranges: U+0000..0001, U+10FFFF; pairs: (0, 2), (0x10fffd, 1).

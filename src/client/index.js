@@ -35,7 +35,14 @@ function client(options = {}) {
 
   const entity = new Client(params);
   if (username && params.domain) {
-    entity.jid = jid(username, params.domain);
+    // The optional stream identity hint must not reject a valid SASL identity.
+    try {
+      entity.jid = jid(username, params.domain);
+    } catch (error) {
+      if (!(error instanceof TypeError)) {
+        throw error;
+      }
+    }
   }
 
   const reconnect = _reconnect({ entity });

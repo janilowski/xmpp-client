@@ -38,3 +38,21 @@ smaller shared-mask prototype. See the dated
 [Unicode representation experiment](../conformance/unicode-representation.md)
 for measured alternatives and limitations; run `bun run size` and
 `bun tools/bench-jid.js` for fresh local measurements.
+
+## SASLprep (Unicode 3.2)
+
+SCRAM deliberately uses the RFC 3454/4013 repertoire, not the JID tables.
+`python3 tools/saslprep-data.py` emits its table module to stdout; format it with
+Prettier before replacing `src/sasl-scram/unicode.js`. Python's standard-library
+`stringprep` and `unicodedata.ucd_3_2_0` are generation-only dependencies.
+`python3 tools/saslprep-data.py --oracle` prints independent golden digests for
+every code point, alone and between `a` and U+0301, in both preparation profiles.
+
+The oracle protects unassigned 3.2 characters during normalization: CPython's
+3.2 normalizer otherwise leaks modern combining classes (for example U+0353).
+[UAX #15 versioning](https://www.unicode.org/reports/tr15/#Versioning) requires
+these characters to have combining class zero. Production keeps them as
+normalization barriers and retains the five pre-4.0 mappings from
+[NormalizationCorrections](https://www.unicode.org/Public/UNIDATA/NormalizationCorrections.txt).
+Do not replace these safeguards with unrestricted modern NFKC or refresh the
+golden digests to hide a mismatch.
