@@ -41,16 +41,14 @@ async function authenticate({
     ...credentials,
   };
 
-  const response = mech.clientFirst && encode(await mech.response(creds));
+  // RFC 6120 §6.4.2 distinguishes an empty response from no initial response.
+  const response = mech.clientFirst
+    ? encode(await mech.response(creds)) || "="
+    : "";
   signal.throwIfAborted();
   await procedure(
     entity,
-    mech.clientFirst &&
-      xml(
-        "auth",
-        { xmlns: NS, mechanism: mech.name },
-        response,
-      ),
+    xml("auth", { xmlns: NS, mechanism: mech.name }, response),
     async (element, done, exchange) => {
       if (element.getNS() !== NS) return;
 
@@ -65,7 +63,7 @@ async function authenticate({
           xml(
             "response",
             { xmlns: NS, mechanism: mech.name },
-            typeof resp === "string" ? encode(resp) : "",
+            resp == null ? "" : encode(resp),
           ),
         );
         return;
@@ -77,9 +75,9 @@ async function authenticate({
 
       if (element.name === "success") {
         if (mech.final) {
-          await mech.final(
-            mech.binary ? decodeBytes(element.text()) : decode(element.text()),
-          );
+          // RFC 6120 §6.4.6 uses '=' for explicitly empty additional data.
+          const data = element.text() === "=" ? "" : element.text();
+          await mech.final(mech.binary ? decodeBytes(data) : decode(data));
           exchange.throwIfAborted();
         }
         return done();

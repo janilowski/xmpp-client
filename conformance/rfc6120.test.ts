@@ -3,6 +3,9 @@ import { client } from "../src/client/index.js";
 import xml from "../src/xml/index.js";
 import { ScriptedPeer } from "./peer.ts";
 
+// SASL wire encoding and restart cases: rfc6120-sasl.test.ts.
+// SCRAM authentication proofs: rfc5802-wire.test.ts.
+
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="session"/>';
 const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';

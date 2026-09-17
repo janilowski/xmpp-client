@@ -15,6 +15,39 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "omit server-first SASL initiation",
+    file: "src/sasl/index.js",
+    before: 'xml("auth", { xmlns: NS, mechanism: mech.name }, response)',
+    after:
+      'mech.clientFirst && xml("auth", { xmlns: NS, mechanism: mech.name }, response)',
+    suite: "conformance/rfc6120-sasl.test.ts",
+    test: "server-first exchange",
+  },
+  {
+    name: "omit explicit empty SASL initial response",
+    file: "src/sasl/index.js",
+    before: 'encode(await mech.response(creds)) || "="',
+    after: "encode(await mech.response(creds))",
+    suite: "conformance/rfc6120-sasl.test.ts",
+    test: "empty-initial exchange",
+  },
+  {
+    name: "discard binary SASL responses",
+    file: "src/sasl/index.js",
+    before: 'resp == null ? "" : encode(resp)',
+    after: 'typeof resp === "string" ? encode(resp) : ""',
+    suite: "conformance/rfc6120-sasl.test.ts",
+    test: "binary exchange",
+  },
+  {
+    name: "reject explicit empty SASL success data",
+    file: "src/sasl/index.js",
+    before: 'element.text() === "=" ? "" : element.text()',
+    after: "element.text()",
+    suite: "conformance/rfc6120-sasl.test.ts",
+    test: "empty-final exchange",
+  },
+  {
     name: "omit SASLprep password normalization",
     file: "src/sasl-scram/index.js",
     before: 'password = saslprep(password, "stored");',
@@ -271,6 +304,7 @@ for (const mutation of mutations) {
       "bunfig.toml",
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
+      "conformance/rfc6120-sasl.test.ts",
       "conformance/rfc5802.test.js",
       "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",
