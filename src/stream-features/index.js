@@ -7,7 +7,10 @@
 
 import operation from "../events/lib/operation.js";
 
+const NS = "http://etherx.jabber.org/streams";
+
 export default function streamFeatures({ middleware, entity }) {
+  const handlers = [];
   // SASL stream restarts preserve authentication; a new connection never does.
   const features = {
     use,
@@ -22,13 +25,52 @@ export default function streamFeatures({ middleware, entity }) {
   };
   entity.on("connect", reset);
   entity.on("disconnect", reset);
+
+  middleware.use((ctx, next) => {
+    const { stanza } = ctx;
+    if (!stanza.is("features", NS)) {
+      return next();
+    }
+    if (
+      stanza
+        .getChildElements()
+        .some(
+          (child) =>
+            !child.getNS() ||
+            child.getNS() === NS ||
+            child.getNS() === entity.NS,
+        )
+    ) {
+      entity.disconnect().catch(() => {});
+      throw new Error("Invalid stream feature namespace");
+    }
+    if (handlers.some(([name, xmlns]) => stanza.getChild(name, xmlns))) {
+      return next();
+    }
+    return operation(entity, async (signal) => {
+      // SASL2 inline binding may still be verifying its server proof.
+      await features.authentication;
+      signal.throwIfAborted();
+      // A final empty offer can arrive while the application is already closing.
+      if (entity.status === "open") {
+        entity.disconnect().catch(() => {});
+        throw new Error("Unsupported stream features");
+      }
+      return next();
+    });
+  });
+
   function use(name, xmlns, handler) {
+    handlers.push([name, xmlns]);
     return middleware.use((ctx, next) => {
       const { stanza } = ctx;
-      if (!stanza.is("features", "http://etherx.jabber.org/streams"))
+      if (!stanza.is("features", NS)) {
         return next();
+      }
       const feature = stanza.getChild(name, xmlns);
-      if (!feature) return next();
+      if (!feature) {
+        return next();
+      }
       return operation(ctx.entity, (signal) =>
         handler(
           ctx,

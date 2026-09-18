@@ -8,6 +8,8 @@ import { ScriptedPeer } from "./peer.ts";
 // Hostile SASL Base64 input: rfc6120-sasl-base64.test.ts.
 // SCRAM authentication proofs: rfc5802-wire.test.ts.
 // Resource binding and completion: rfc6120-binding.test.ts.
+// IQ envelopes and stanza errors: rfc6120-iq.test.ts.
+// Feature negotiation and stream errors: rfc6120-streams.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).
 
 const OPEN =

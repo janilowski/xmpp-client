@@ -9,25 +9,19 @@ class XMPPError extends Error {
     this.application = application;
   }
 
-  static fromElement(element) {
-    const [condition, second, third] = element.getChildElements();
-    let text;
-    let application;
-
-    if (second) {
-      if (second.is("text")) {
-        text = second;
-      } else if (second) {
-        application = second;
-      }
-
-      if (third) application = third;
-    }
-
+  static fromElement(element, namespace, known) {
+    const children = element.getChildElements();
+    namespace ??= children[0]?.getNS();
+    const conditions = children.filter(
+      (child) => child.getNS() === namespace && !child.is("text", namespace),
+    );
+    const condition = conditions.length === 1 && conditions[0].getName();
     const error = new this(
-      condition.name,
-      text ? text.text() : "",
-      application,
+      condition && (!known || known.has(condition))
+        ? condition
+        : "undefined-condition",
+      element.getChildText("text", namespace) ?? "",
+      children.find((child) => child.getNS() !== namespace),
     );
     error.element = element;
     return error;

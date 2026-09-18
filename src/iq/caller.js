@@ -48,10 +48,23 @@ class IQCaller {
       return next();
     }
 
-    if (type === "error") {
-      deferred.reject(StanzaError.fromElement(stanza.getChild("error")));
-    } else {
-      deferred.resolve(stanza);
+    try {
+      const children = stanza.getChildElements();
+      const errors = stanza.getChildren("error", stanza.getNS());
+      if (type === "error") {
+        if (errors.length !== 1 || children.length > 2) {
+          throw new Error("Invalid IQ response");
+        }
+        deferred.reject(StanzaError.fromElement(errors[0]));
+      } else {
+        if (children.length > 1 || errors.length !== 0) {
+          throw new Error("Invalid IQ response");
+        }
+        deferred.resolve(stanza);
+      }
+    } catch (error) {
+      // Bad replies fail this request, never generate a response loop.
+      deferred.reject(error);
     }
 
     this.handlers.delete(id);

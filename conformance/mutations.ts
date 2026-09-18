@@ -15,6 +15,38 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept multi-payload IQ results",
+    file: "src/iq/caller.js",
+    before: "children.length > 1 || errors.length !== 0",
+    after: "errors.length !== 0",
+    suite: "conformance/rfc6120-iq.test.ts",
+    test: "two result payloads",
+  },
+  {
+    name: "omit required IQ response ID",
+    file: "src/iq/callee.js",
+    before: 'id: stanza.attrs.id ?? "",',
+    after: "id: stanza.attrs.id,",
+    suite: "conformance/rfc6120-iq.test.ts",
+    test: "request get $",
+  },
+  {
+    name: "accept unknown stanza error conditions as understood",
+    file: "src/error/index.js",
+    before: "(!known || known.has(condition))",
+    after: "true",
+    suite: "conformance/rfc6120-iq.test.ts",
+    test: "namespaced stanza error / future-condition",
+  },
+  {
+    name: "leave unsupported features pending",
+    file: "src/stream-features/index.js",
+    before: 'entity.status === "open"',
+    after: "false",
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "empty before authentication",
+  },
+  {
     name: "remove reconnect jitter",
     file: "src/reconnect/index.js",
     before: "0.5 + Math.random() / 2",
@@ -466,6 +498,8 @@ for (const mutation of mutations) {
       "bunfig.toml",
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
+      "conformance/rfc6120-iq.test.ts",
+      "conformance/rfc6120-streams.test.ts",
       "conformance/rfc6120-binding.test.ts",
       "conformance/rfc6120-sasl.test.ts",
       "conformance/rfc6120-sasl-negotiation.test.ts",

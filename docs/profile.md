@@ -52,6 +52,13 @@ remain executable test markers, not evidence of successful validation.
 - Reconnect uses exponential backoff with equal jitter and a 60-second cap;
   the base window defaults to one second. These are local choices implementing
   RFC 6120 §3.3's recommendations, not mandatory RFC durations.
+- Unknown stream features are ignored alongside supported negotiation features.
+  An offer with no supported feature cannot complete an unauthenticated or
+  unbound client session and fails explicitly. There is no universal `required`
+  marker (RFC 6120 §4.3.2); feature-specific requirements remain authoritative.
+- Malformed correlated IQ responses reject that request locally without replying
+  to a result/error stanza. Stanza errors are recoverable; stream errors close
+  the transport. Unknown standard error conditions map to `undefined-condition`.
 - XML limits are 1 MiB UTF-8 and 64 element levels, not RFC-prescribed values.
   Browser messages are buffered before delivery; these checks cannot bound
   native allocation before the library receives them.

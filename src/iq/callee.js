@@ -14,18 +14,20 @@ function isQuery({ name, type }) {
   return true;
 }
 
-function isValidQuery({ type }, children, child) {
-  if (type !== "get" && type !== "set") return false;
-  if (children.length !== 1) return false;
-  if (!child) return false;
-  return true;
+function isValidQuery({ type, stanza }, children, child) {
+  return (
+    stanza.attrs.id !== undefined &&
+    (type === "get" || type === "set") &&
+    children.length === 1 &&
+    !child.is("error", stanza.getNS())
+  );
 }
 
 function buildReply({ stanza }) {
   return xml("iq", {
     to: stanza.attrs.from,
     from: stanza.attrs.to,
-    id: stanza.attrs.id,
+    id: stanza.attrs.id ?? "",
   });
 }
 
@@ -42,7 +44,7 @@ function buildReplyResult(ctx, child) {
 function buildReplyError(ctx, error, child) {
   const reply = buildReply(ctx);
   reply.attrs.type = "error";
-  if (child) {
+  if (child && !child.is("error", ctx.stanza.getNS())) {
     reply.append(child);
   }
 

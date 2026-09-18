@@ -21,11 +21,11 @@ test("#_onElement stream:error", (done) => {
   expect.assertions(7);
   // prettier-ignore
 
-  const application = xml('application')
+  const application = xml('application', {xmlns: 'urn:test:application'});
 
   const foo = xml("error", { xmlns: "http://etherx.jabber.org/streams" }, [
     xml("foo-bar", { xmlns: "urn:ietf:params:xml:ns:xmpp-streams" }),
-    xml("text", {}, "hello"),
+    xml("text", { xmlns: "urn:ietf:params:xml:ns:xmpp-streams" }, "hello"),
     application,
   ]);
   const conn = new Connection();
@@ -42,8 +42,8 @@ test("#_onElement stream:error", (done) => {
   });
   conn.on("error", (error) => {
     expect(error.name).toBe("StreamError");
-    expect(error.condition).toBe("foo-bar");
-    expect(error.message).toBe("foo-bar - hello");
+    expect(error.condition).toBe("undefined-condition");
+    expect(error.message).toBe("undefined-condition - hello");
     expect(error.application).toBe(application);
     expect(error.element).toBe(foo);
   });

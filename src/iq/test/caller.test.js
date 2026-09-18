@@ -99,7 +99,7 @@ test("rejects with a StanzaError for error reply", async () => {
 
   const errorElement = (
     <error type="modify">
-      <service-unavailable />
+      <service-unavailable xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
     </error>
   );
   const stanzaElement = (
