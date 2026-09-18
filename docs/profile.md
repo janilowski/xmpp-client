@@ -49,6 +49,9 @@ remain executable test markers, not evidence of successful validation.
 
 ## Library policies
 
+- Reconnect uses exponential backoff with equal jitter and a 60-second cap;
+  the base window defaults to one second. These are local choices implementing
+  RFC 6120 §3.3's recommendations, not mandatory RFC durations.
 - XML limits are 1 MiB UTF-8 and 64 element levels, not RFC-prescribed values.
   Browser messages are buffered before delivery; these checks cannot bound
   native allocation before the library receives them.

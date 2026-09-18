@@ -10,8 +10,14 @@ Each reconnect will re-use the options provided to the entity `start` method.
 
 ## delay property
 
-Property to set/get the delay in milliseconds between connection closed and
-reconnecting.
+Base retry window in milliseconds. RFC 6120 §3.3 recommends randomized delays
+and increasing backoff. Each retry waits uniformly between half and all of
+`min(delay × 2^attempt, 60000)` milliseconds. The first attempt uses exponent 0.
+Only reaching the `online` status resets the retry count, including resumption;
+opening a transport is not authentication. Resumption emits `status: online`
+without emitting another `online` event.
+Duplicate disconnect events share one timer. `stop()` cancels pending retries;
+an entity's `offline` event also cancels them without disabling future sessions.
 
 Default is `1000`.
 

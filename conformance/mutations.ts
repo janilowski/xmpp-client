@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "remove reconnect jitter",
+    file: "src/reconnect/index.js",
+    before: "0.5 + Math.random() / 2",
+    after: "1",
+    suite: "./src/reconnect/test.js",
+    test: "randomizes the initial delay",
+  },
+  {
+    name: "remove reconnect backoff",
+    file: "src/reconnect/index.js",
+    before: "this.#attempt++;",
+    after: "",
+    suite: "./src/reconnect/test.js",
+    test: "grows to a cap",
+  },
+  {
     name: "bind before asynchronous SASL2 proof verification completes",
     file: "src/resource-binding/index.js",
     before: "await streamFeatures.authentication;",

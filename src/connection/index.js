@@ -213,6 +213,7 @@ class Connection extends EventEmitter {
   _ready(resumed = false) {
     if (resumed) {
       this.status = "online";
+      this.emit("status", "online");
     } else {
       this._status("online", this.jid);
     }
