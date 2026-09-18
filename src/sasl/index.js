@@ -74,10 +74,12 @@ async function authenticate({
       }
 
       if (element.name === "success") {
+        // Validate additional data even when the mechanism has no final hook.
+        // RFC 6120 §6.4.6 uses '=' for explicitly empty additional data.
+        const data = element.text() === "=" ? "" : element.text();
+        const final = mech.binary ? decodeBytes(data) : decode(data);
         if (mech.final) {
-          // RFC 6120 §6.4.6 uses '=' for explicitly empty additional data.
-          const data = element.text() === "=" ? "" : element.text();
-          await mech.final(mech.binary ? decodeBytes(data) : decode(data));
+          await mech.final(final);
           exchange.throwIfAborted();
         }
         return done();

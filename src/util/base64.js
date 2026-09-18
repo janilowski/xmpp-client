@@ -18,12 +18,19 @@ export function decode(data) {
 }
 
 export function decodeBytes(data) {
+  let bytes;
   if (typeof Uint8Array.fromBase64 === "function") {
-    return Uint8Array.fromBase64(data);
+    bytes = Uint8Array.fromBase64(data);
+  } else {
+    const binary = globalThis.atob(data);
+    bytes = Uint8Array.from(binary, (character) =>
+      character.codePointAt(0),
+    );
   }
 
-  const binary = globalThis.atob(data);
-  return Uint8Array.from(binary, (character) =>
-    character.codePointAt(0),
-  );
+  // RFC 6120 §13.9.1: runtime decoders can ignore whitespace, padding or pad bits.
+  if (encode(bytes) !== data) {
+    throw new TypeError("Invalid Base64 encoding");
+  }
+  return bytes;
 }

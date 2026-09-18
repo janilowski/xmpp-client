@@ -4,6 +4,7 @@ import xml from "../src/xml/index.js";
 import { ScriptedPeer } from "./peer.ts";
 
 // SASL wire encoding and restart cases: rfc6120-sasl.test.ts.
+// Hostile SASL Base64 input: rfc6120-sasl-base64.test.ts.
 // SCRAM authentication proofs: rfc5802-wire.test.ts.
 
 const OPEN =

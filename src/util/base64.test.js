@@ -1,5 +1,54 @@
 import { decode, decodeBytes, encode } from "./base64.js";
 
+test("fallback decoder preserves the same strict Base64 contract", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(Uint8Array, "fromBase64");
+  Object.defineProperty(Uint8Array, "fromBase64", {
+    configurable: true,
+    value: undefined,
+  });
+  try {
+    expect(decodeBytes("AP8=")).toEqual(new Uint8Array([0, 255]));
+    expect(decodeBytes("")).toEqual(new Uint8Array());
+    for (const value of [" Zg==", "Zg==\n", "Zg", "Zh==", "Zm9=", "=AAA"]) {
+      expect(() => decodeBytes(value)).toThrow();
+    }
+  } finally {
+    if (descriptor) {
+      Object.defineProperty(Uint8Array, "fromBase64", descriptor);
+    } else {
+      delete Uint8Array.fromBase64;
+    }
+  }
+});
+
+// RFC 6120 §13.9.1 / RFC 4648 §4: no ignored characters or malformed padding.
+test.each([
+  " Zg==",
+  "Zg==\n",
+  "Z\tg==",
+  "Zg",
+  "Zg=",
+  "Zg===",
+  "=AAA",
+  "AA=A",
+  "AA-_",
+  "Zh==",
+  "Zm9=",
+])("rejects invalid SASL Base64: %j", (value) => {
+  expect(() => decodeBytes(value)).toThrow();
+  expect(() => decode(value)).toThrow();
+});
+
+test.each([
+  ["", []],
+  ["Zg==", [102]],
+  ["Zm8=", [102, 111]],
+  ["Zm9v", [102, 111, 111]],
+  ["AP8=", [0, 255]],
+])("accepts canonical Base64: %s", (value, bytes) => {
+  expect(decodeBytes(value)).toEqual(Uint8Array.from(bytes));
+});
+
 test("encodes and decodes ASCII", () => {
   expect(encode("hello")).toBe("aGVsbG8=");
   expect(decode("aGVsbG8=")).toBe("hello");

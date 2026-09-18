@@ -19,20 +19,13 @@ const STATE = {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 
-// RFC 5802 §2.1: canonical Base64, including pad bits, with no whitespace.
+// Keep mechanism error context while sharing the strict wire decoder.
 function base64(value) {
-  if (
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(
-      value,
-    )
-  ) {
-    throw new Error("SCRAM: invalid Base64");
+  try {
+    return decodeBytes(value);
+  } catch (error) {
+    throw new Error("SCRAM: invalid Base64", { cause: error });
   }
-  const bytes = decodeBytes(value);
-  if (encode(bytes) !== value) {
-    throw new Error("SCRAM: noncanonical Base64");
-  }
-  return bytes;
 }
 
 // Preserve the original message for AuthMessage; do not rebuild from attributes.

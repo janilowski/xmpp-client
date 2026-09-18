@@ -15,6 +15,33 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "skip SASL success encoding validation without final hook",
+    file: "src/sasl/index.js",
+    before: "const final = mech.binary ? decodeBytes(data) : decode(data);",
+    after:
+      "const final = !mech.final ? null : mech.binary ? decodeBytes(data) : decode(data);",
+    suite: "conformance/rfc6120-sasl-base64.test.ts",
+    test: "success-without-hook",
+  },
+  {
+    name: "skip SASL2 success encoding validation without final hook",
+    file: "src/sasl2/index.js",
+    before:
+      "const final = mech.binary ? decodeBytes(additionalData) : decode(additionalData);",
+    after:
+      "const final = !mech.final ? null : mech.binary ? decodeBytes(additionalData) : decode(additionalData);",
+    suite: "conformance/rfc6120-sasl-base64.test.ts",
+    test: "success-without-hook",
+  },
+  {
+    name: "accept noncanonical SASL Base64",
+    file: "src/util/base64.js",
+    before: "if (encode(bytes) !== data)",
+    after: "if (false)",
+    suite: "conformance/rfc6120-sasl-base64.test.ts",
+    test: "rejects invalid Base64",
+  },
+  {
     name: "allow callback to bypass PLAIN transport policy",
     file: "src/client/lib/createOnAuthenticate.js",
     before: "mechanism === PLAIN && !entity.isSecure()",
@@ -329,6 +356,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-sasl.test.ts",
+      "conformance/rfc6120-sasl-base64.test.ts",
       "conformance/rfc5802.test.js",
       "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",
