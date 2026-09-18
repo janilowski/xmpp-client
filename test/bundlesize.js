@@ -13,7 +13,7 @@ const buffer = await readFile(path);
 const compressed = await brotliCompress(buffer);
 
 // Brotli budget includes SCRAM and Unicode 3.2 SASLprep; bytes uses 1024-byte KB.
-const max_size = "30 KB";
+const max_size = "50 KB";
 
 console.log(`${path}:`);
 if (compressed.length > bytes(max_size)) {

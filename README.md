@@ -7,8 +7,10 @@ This is an active, browser-focused fork of
 Core compliance, followed by carefully selected XMPP extensions needed by a
 useful web client.
 
-The minified browser bundle is continuously checked against a **30 KiB**
-Brotli-compressed budget. Run `bun run size` for a fresh measurement and check.
+The minified browser bundle is continuously checked against a **50 KiB**
+Brotli-compressed budget, temporarily increased while completing Core behavior.
+We will lower the budget after measured optimizations, without removing required
+behavior. Run `bun run size` for a fresh measurement and check.
 
 The project is in early development and is not yet published as a stable
 release.
