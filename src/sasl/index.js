@@ -112,6 +112,7 @@ export default function sasl(
     await onAuthenticate(done, mechanisms, null, entity);
 
     signal.throwIfAborted();
+    streamFeatures.authenticated = true;
     await entity.restart();
   });
 }

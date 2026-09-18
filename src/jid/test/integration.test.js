@@ -45,6 +45,7 @@ test("prepares stanza addresses before writing and rejects malformed destination
 
 test("prepares the requested resource before resource binding", async () => {
   const xmpp = mockClient({ resource: async () => "Re\u0301s\u00a0X" });
+  xmpp.streamFeatures.authenticated = true;
   const outgoing = xmpp.catchOutgoingSet();
   mockInput(
     xmpp,

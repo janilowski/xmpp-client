@@ -49,7 +49,7 @@ function client(options = {}) {
   const websocket = _websocket({ entity });
 
   const middleware = _middleware({ entity });
-  const streamFeatures = _streamFeatures({ middleware });
+  const streamFeatures = _streamFeatures({ middleware, entity });
   const iqCaller = _iqCaller({ middleware, entity });
   const iqCallee = _iqCallee({ middleware, entity });
   const resolve = _resolve({ entity });

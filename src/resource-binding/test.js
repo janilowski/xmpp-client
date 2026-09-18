@@ -10,6 +10,7 @@ test("without resource", async () => {
   const jid = "foo@bar/" + resource;
 
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -36,6 +37,7 @@ test("with string resource", async () => {
   const jid = "foo@bar/" + resource;
 
   const { entity } = mockClient({ resource });
+  entity.streamFeatures.authenticated = true;
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -70,6 +72,7 @@ test("with function resource", async () => {
       return resource;
     },
   });
+  entity.streamFeatures.authenticated = true;
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">

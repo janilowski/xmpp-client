@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept a bare binding identity",
+    file: "src/resource-binding/index.js",
+    before: "if (!jid.local || !jid.resource)",
+    after: "if (false)",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "invalid binding result",
+  },
+  {
+    name: "bind before authentication",
+    file: "src/resource-binding/index.js",
+    before: "if (!streamFeatures.authenticated)",
+    after: "if (false)",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "premature binding",
+  },
+  {
     name: "skip SASL success encoding validation without final hook",
     file: "src/sasl/index.js",
     before: "const final = mech.binary ? decodeBytes(data) : decode(data);",
@@ -355,6 +371,7 @@ for (const mutation of mutations) {
       "bunfig.toml",
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
+      "conformance/rfc6120-binding.test.ts",
       "conformance/rfc6120-sasl.test.ts",
       "conformance/rfc6120-sasl-base64.test.ts",
       "conformance/rfc5802.test.js",

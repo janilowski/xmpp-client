@@ -130,6 +130,8 @@ export default function sasl2(
         fast_available ? fast : null,
         entity,
       );
+      signal.throwIfAborted();
+      streamFeatures.authenticated = true;
 
       async function done(credentials, mechanism, userAgent) {
         signal.throwIfAborted();

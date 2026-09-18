@@ -200,6 +200,7 @@ test("a delayed resource callback cannot send binding on a replacement stream", 
     },
   });
   const sent = [];
+  entity.streamFeatures.authenticated = true;
   entity.send = async (stanza) => {
     sent.push(stanza);
   };
@@ -223,6 +224,7 @@ test.each([SASL, SASL2, BIND, SM])(
       password: "bar",
     });
     const errors = [];
+    entity.streamFeatures.authenticated = ns === BIND;
     entity.on("error", (error) => errors.push(error));
     const listeners = entity.listenerCount("nonza");
     const feature =
@@ -296,6 +298,7 @@ test.each([SASL, SASL2])(
 
 test("binding abandons its pending IQ on disconnect", async () => {
   const entity = mockClient();
+  entity.streamFeatures.authenticated = true;
   entity.on("error", () => {});
   entity.mockInput(
     xml("features", { xmlns: STREAMS }, xml("bind", { xmlns: BIND })),

@@ -72,6 +72,12 @@ remain executable test markers, not evidence of successful validation.
 
 ## Authentication
 
+Classic resource binding requires completed authentication and one unambiguous
+full client JID in the matching IQ result. Malformed binding results fail closed;
+server-selected replacement resources are accepted. Binding errors are surfaced
+as stanza errors, without automatic resource retries or credential replacement.
+RFC 6120 §7.7.3's retry allowance is a server obligation, not a client retry mandate.
+
 Password authentication prefers SCRAM-SHA-256, then SCRAM-SHA-1, then PLAIN,
 independently of the server's advertisement order. Both SCRAM variants use native
 Web Crypto and verify the server proof before stream restart, binding or online.

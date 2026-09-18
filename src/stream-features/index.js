@@ -7,7 +7,12 @@
 
 import operation from "../events/lib/operation.js";
 
-export default function streamFeatures({ middleware }) {
+export default function streamFeatures({ middleware, entity }) {
+  // SASL stream restarts preserve authentication; a new connection never does.
+  const features = { use, authenticated: false };
+  const reset = () => { features.authenticated = false; };
+  entity.on("connect", reset);
+  entity.on("disconnect", reset);
   function use(name, xmlns, handler) {
     return middleware.use((ctx, next) => {
       const { stanza } = ctx;
@@ -29,7 +34,5 @@ export default function streamFeatures({ middleware }) {
     });
   }
 
-  return {
-    use,
-  };
+  return features;
 }
