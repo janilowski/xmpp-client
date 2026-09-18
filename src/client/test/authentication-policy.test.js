@@ -10,6 +10,32 @@ const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const SASL2 = "urn:xmpp:sasl:2";
 const PLAIN = "PLAIN";
 
+test.each(["parallel", "after success"])(
+  "credential callback forbids a second exchange: %s",
+  async (mode) => {
+    let attempts = 0;
+    let second;
+    const callback = createOnAuthenticate(async (authenticate) => {
+      const first = authenticate({}, PLAIN);
+      if (mode === "after success") {
+        await first;
+      }
+      second = await authenticate({}, PLAIN).catch((error) => error);
+      await first;
+    });
+    await callback(
+      async () => {
+        attempts++;
+      },
+      [PLAIN],
+      null,
+      { isSecure: () => true },
+    );
+    expect(attempts).toBe(1);
+    expect(second).toBeInstanceOf(Error);
+  },
+);
+
 // RFC 6120 §6.4.6: returning from an application callback is not SASL success.
 test.each(["omit", "swallow failure"])(
   "credential callback cannot complete authentication: %s",
@@ -55,7 +81,7 @@ test("credential callback may retry after a rejected exchange", async () => {
 // but must not bypass the offered mechanisms or transport security policy.
 // Transport is a test seam here, not evidence of actual TLS protection.
 for (const ns of [SASL, SASL2]) {
-  test.each(["insecure", "unoffered", "allowed"])(
+  test.each(["insecure", "unoffered", "downgrade", "allowed"])(
     `${ns}: callback mechanism policy / %s`,
     async (mode) => {
       const entity = mockClient({
@@ -79,6 +105,7 @@ for (const ns of [SASL, SASL2]) {
           xml(
             ns === SASL ? "mechanisms" : "authentication",
             { xmlns: ns },
+            mode === "downgrade" && xml("mechanism", {}, "SCRAM-SHA-256"),
             xml(
               "mechanism",
               {},
@@ -98,7 +125,7 @@ for (const ns of [SASL, SASL2]) {
         expect(sent).toEqual([]);
         expect(result.name).toBe("SASLError");
         expect(result.message).toContain(
-          mode === "insecure" ? "secure transport" : "not offered",
+          mode === "insecure" ? "secure transport" : mode === "downgrade" ? "preferred mechanism" : "not offered",
         );
       }
     },

@@ -1,7 +1,8 @@
-import { encode, decode, decodeBytes } from "../util/base64.js";
+import { encode } from "../util/base64.js";
 import SASLError from "../sasl/lib/SASLError.js";
 import xml from "../xml/index.js";
-import { procedure } from "../events/index.js";
+import exchange from "../sasl/exchange.js";
+import prepareCredentials from "../sasl/credentials.js";
 import { getAvailableMechanisms } from "../sasl/index.js";
 
 // https://xmpp.org/extensions/xep-0388.html
@@ -24,80 +25,31 @@ async function authenticate({
     throw new Error(`SASL: Mechanism ${mechanism} not found.`);
   }
 
-  const { domain } = entity.options;
-  const creds = {
-    username: null,
-    password: null,
-    server: domain,
-    host: domain,
-    realm: domain,
-    serviceType: "xmpp",
-    serviceName: domain,
-    ...credentials,
-  };
+  const creds = prepareCredentials(entity, credentials);
 
   const response = mech.clientFirst && encode(await mech.response(creds));
   signal.throwIfAborted();
-  await procedure(
+  await exchange(
     entity,
     xml("authenticate", { xmlns: NS, mechanism: mech.name }, [
-      mech.clientFirst &&
-        xml("initial-response", {}, response),
+      mech.clientFirst && xml("initial-response", {}, response),
       userAgent,
       ...streamFeatures,
     ]),
-    async (element, done, exchange) => {
-      if (element.getNS() !== NS) return;
-
-      if (element.name === "challenge") {
-        const challenge = mech.binary
-          ? decodeBytes(element.text())
-          : decode(element.text());
-        await mech.challenge(challenge);
-        exchange.throwIfAborted();
-        const resp = await mech.response(creds);
-        exchange.throwIfAborted();
-        await entity.send(
-          xml(
-            "response",
-            { xmlns: NS, mechanism: mech.name },
-            resp == null ? "" : encode(resp),
-          ),
-        );
-        return;
+    mech,
+    creds,
+    async (element, signal) => {
+      // https://xmpp.org/extensions/xep-0388.html#success
+      // this is a bare JID, unless resource binding or stream resumption has occurred, in which case it is a full JID.
+      const aid = element.getChildText("authorization-identifier");
+      if (aid) {
+        entity._jid(aid);
       }
 
-      if (element.name === "failure") {
-        throw SASLError.fromElement(element);
-      }
-
-      if (element.name === "continue") {
-        throw new Error("SASL continue is not supported yet");
-      }
-
-      if (element.name === "success") {
-        const additionalData =
-          element.getChild("additional-data", NS)?.text() ?? "";
-        const final = mech.binary ? decodeBytes(additionalData) : decode(additionalData);
-        if (mech.final) {
-          await mech.final(final);
-          exchange.throwIfAborted();
-        }
-
-        // https://xmpp.org/extensions/xep-0388.html#success
-        // this is a bare JID, unless resource binding or stream resumption has occurred, in which case it is a full JID.
-        const aid = element.getChildText("authorization-identifier");
-        if (aid) {
-          entity._jid(aid);
-        }
-
-        for (const child of element.getChildElements()) {
-          exchange.throwIfAborted();
-          const feature = features.get(child.getNS());
-          await feature?.[1]?.(child, exchange);
-        }
-
-        return done();
+      for (const child of element.getChildElements()) {
+        signal.throwIfAborted();
+        const feature = features.get(child.getNS());
+        await feature?.[1]?.(child, signal);
       }
     },
     signal,
@@ -115,23 +67,34 @@ export default function sasl2(
     "authentication",
     NS,
     async ({ entity }, _next, element, signal) => {
+      if (streamFeatures.authenticating || streamFeatures.authenticated) {
+        throw new SASLError("SASL: Unexpected authentication features");
+      }
+      streamFeatures.authenticating = true;
       const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
-      const streamFeatures = await getStreamFeatures({ element, features });
+      const inlineFeatures = await getStreamFeatures({ element, features });
       signal.throwIfAborted();
       const fast_available = !!fast?.mechanism;
 
       if (mechanisms.length === 0 && !fast_available) {
+        entity.disconnect().catch(() => {});
         throw new SASLError("SASL: No compatible mechanism available.");
       }
 
-      await onAuthenticate(
+      // SASL2 sends features immediately after success, while proof verification
+      // can still be asynchronous. Binding must await the completed exchange.
+      streamFeatures.authentication = onAuthenticate(
         done,
         mechanisms,
         fast_available ? fast : null,
         entity,
-      );
-      signal.throwIfAborted();
-      streamFeatures.authenticated = true;
+      ).then(() => {
+        signal.throwIfAborted();
+        streamFeatures.authenticated = true;
+        streamFeatures.authenticating = false;
+        return undefined;
+      });
+      await streamFeatures.authentication;
 
       async function done(credentials, mechanism, userAgent) {
         signal.throwIfAborted();
@@ -140,7 +103,7 @@ export default function sasl2(
           authenticate: (options) => authenticate({ ...options, signal }),
           entity,
           userAgent,
-          streamFeatures,
+          streamFeatures: inlineFeatures,
           features,
           credentials,
         });
@@ -153,7 +116,7 @@ export default function sasl2(
         await authenticate({
           entity,
           userAgent,
-          streamFeatures,
+          streamFeatures: inlineFeatures,
           features,
           saslMechanisms,
           mechanism,

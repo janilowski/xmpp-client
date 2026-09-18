@@ -83,12 +83,29 @@ independently of the server's advertisement order. Both SCRAM variants use nativ
 Web Crypto and verify the server proof before stream restart, binding or online.
 Use HTTPS/WSS: SCRAM does not replace authenticated transport.
 
+The XMPP adapter prepares nonempty authorization identities as bare client JIDs;
+it does not interpret authentication usernames as JIDs or invent a realm from
+the XMPP domain (RFC 6120 §§6.3.7–6.3.9). Realms require caller/server input.
+Credential callbacks can explicitly retry failed exchanges on the same connection,
+but cannot overlap attempts, select unoffered mechanisms, or choose PLAIN while
+a preferred mechanism is offered. No automatic password downgrade is performed.
+Exhausted attempts close the connection. Sending SASL `<abort/>` waits for the
+server's failure response; transport cancellation instead terminates the exchange.
+
+Built-in mechanisms negotiate no SASL security layer (RFC 4422 §3.7); custom
+mechanisms requiring one are unsupported. EXTERNAL is not implemented: this
+browser profile does not integrate certificate provisioning or externally
+authenticated identities. This is a scoped departure from RFC 6120 §§6.3.4,
+13.8.4's SHOULDs, not a claim that browsers can never use client certificates.
+The explicit loopback PLAIN exception is outside RFC 6120 §13.8.3's TLS
+requirement. Only authenticated WSS belongs to the secure deployment profile.
+
 SCRAM uses Unicode 3.2 SASLprep: query preparation for usernames and stored-string
 preparation for passwords (an empty password is allowed). Prohibited characters,
 invalid bidirectional strings and unassigned password characters fail explicitly,
 without automatic downgrade to PLAIN. JID PRECIS is not a substitute. GS2
 authorization identities are escaped, not normalized as simple usernames;
-their application-specific validation belongs to the authorization profile.
+the XMPP adapter applies the bare-JID authorization profile described above.
 Web APIs provide no channel-binding material, so the client uses the GS2 `n`
 flag and does not advertise or select `-PLUS`. This is an explicit platform
 boundary, not a claim of full RFC 6120 mandatory mechanism compliance.

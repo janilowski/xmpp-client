@@ -158,7 +158,7 @@ test("failure", async () => {
   const error = await promise(entity, "error");
   expect(error instanceof Error).toBe(true);
   expect(error.name).toBe("SASLError");
-  expect(error.condition).toBe("some-condition");
+  expect(error.condition).toBe("not-authorized");
   expect(error.element).toBe(failure);
 });
 

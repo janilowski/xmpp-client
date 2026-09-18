@@ -9,8 +9,17 @@ import operation from "../events/lib/operation.js";
 
 export default function streamFeatures({ middleware, entity }) {
   // SASL stream restarts preserve authentication; a new connection never does.
-  const features = { use, authenticated: false };
-  const reset = () => { features.authenticated = false; };
+  const features = {
+    use,
+    authenticated: false,
+    authenticating: false,
+    authentication: null,
+  };
+  const reset = () => {
+    features.authenticated = false;
+    features.authenticating = false;
+    features.authentication = null;
+  };
   entity.on("connect", reset);
   entity.on("disconnect", reset);
   function use(name, xmlns, handler) {

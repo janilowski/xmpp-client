@@ -44,6 +44,8 @@ async function bind(entity, iqCaller, resource, signal) {
 
 function route({ iqCaller, streamFeatures }, resource) {
   return async ({ entity }, next, _feature, signal) => {
+    await streamFeatures.authentication;
+    signal.throwIfAborted();
     if (!streamFeatures.authenticated) {
       throw new Error("Resource binding requires authentication");
     }

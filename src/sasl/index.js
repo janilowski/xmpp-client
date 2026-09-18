@@ -1,6 +1,7 @@
-import { encode, decode, decodeBytes } from "../util/base64.js";
+import { encode } from "../util/base64.js";
 import xml from "../xml/index.js";
-import { procedure } from "../events/index.js";
+import exchange from "./exchange.js";
+import prepareCredentials from "./credentials.js";
 
 import SASLError from "./lib/SASLError.js";
 
@@ -10,7 +11,10 @@ const NS = "urn:ietf:params:xml:ns:xmpp-sasl";
 
 export function getAvailableMechanisms(element, NS, saslMechanisms) {
   const offered = new Set(
-    element.getChildren("mechanism", NS).map((m) => m.text()),
+    element
+      .getChildren("mechanism", NS)
+      .filter((m) => m.getChildElements().length === 0)
+      .map((m) => m.text()),
   );
   const supported = saslMechanisms.names;
   return supported.filter((mech) => offered.has(mech));
@@ -29,62 +33,19 @@ async function authenticate({
     throw new Error(`SASL: Mechanism ${mechanism} not found.`);
   }
 
-  const { domain } = entity.options;
-  const creds = {
-    username: null,
-    password: null,
-    server: domain,
-    host: domain,
-    realm: domain,
-    serviceType: "xmpp",
-    serviceName: domain,
-    ...credentials,
-  };
+  const creds = prepareCredentials(entity, credentials);
 
   // RFC 6120 §6.4.2 distinguishes an empty response from no initial response.
   const response = mech.clientFirst
     ? encode(await mech.response(creds)) || "="
     : "";
   signal.throwIfAborted();
-  await procedure(
+  await exchange(
     entity,
     xml("auth", { xmlns: NS, mechanism: mech.name }, response),
-    async (element, done, exchange) => {
-      if (element.getNS() !== NS) return;
-
-      if (element.name === "challenge") {
-        await mech.challenge(
-          mech.binary ? decodeBytes(element.text()) : decode(element.text()),
-        );
-        exchange.throwIfAborted();
-        const resp = await mech.response(creds);
-        exchange.throwIfAborted();
-        await entity.send(
-          xml(
-            "response",
-            { xmlns: NS, mechanism: mech.name },
-            resp == null ? "" : encode(resp),
-          ),
-        );
-        return;
-      }
-
-      if (element.name === "failure") {
-        throw SASLError.fromElement(element);
-      }
-
-      if (element.name === "success") {
-        // Validate additional data even when the mechanism has no final hook.
-        // RFC 6120 §6.4.6 uses '=' for explicitly empty additional data.
-        const data = element.text() === "=" ? "" : element.text();
-        const final = mech.binary ? decodeBytes(data) : decode(data);
-        if (mech.final) {
-          await mech.final(final);
-          exchange.throwIfAborted();
-        }
-        return done();
-      }
-    },
+    mech,
+    creds,
+    null,
     signal,
   );
 }
@@ -93,26 +54,37 @@ export default function sasl(
   { streamFeatures, saslMechanisms },
   onAuthenticate,
 ) {
-  streamFeatures.use("mechanisms", NS, async ({ entity }, _next, element, signal) => {
-    const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
-    if (mechanisms.length === 0) {
-      throw new SASLError("SASL: No compatible mechanism available.");
-    }
+  streamFeatures.use(
+    "mechanisms",
+    NS,
+    async ({ entity }, _next, element, signal) => {
+      if (streamFeatures.authenticating || streamFeatures.authenticated) {
+        throw new SASLError("SASL: Unexpected authentication features");
+      }
+      streamFeatures.authenticating = true;
+      const mechanisms = getAvailableMechanisms(element, NS, saslMechanisms);
+      if (mechanisms.length === 0) {
+        // RFC 6120 §6.4.2: no acceptable mechanism leaves no exchange to retry.
+        entity.disconnect().catch(() => {});
+        throw new SASLError("SASL: No compatible mechanism available.");
+      }
 
-    async function done(credentials, mechanism) {
-      await authenticate({
-        saslMechanisms,
-        entity,
-        mechanism,
-        credentials,
-        signal,
-      });
-    }
+      async function done(credentials, mechanism) {
+        await authenticate({
+          saslMechanisms,
+          entity,
+          mechanism,
+          credentials,
+          signal,
+        });
+      }
 
-    await onAuthenticate(done, mechanisms, null, entity);
+      await onAuthenticate(done, mechanisms, null, entity);
 
-    signal.throwIfAborted();
-    streamFeatures.authenticated = true;
-    await entity.restart();
-  });
+      signal.throwIfAborted();
+      streamFeatures.authenticated = true;
+      streamFeatures.authenticating = false;
+      await entity.restart();
+    },
+  );
 }
