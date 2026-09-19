@@ -23,6 +23,14 @@ const mutations = [
     test: "clear features deadline / silent stop",
   },
   {
+    name: "enable SM before SASL2 inline binding finishes",
+    file: "src/stream-management/stream-feature.js",
+    before: "await streamFeatures.authentication;",
+    after: "",
+    suite: "conformance/rfc6120-sasl-negotiation.test.ts",
+    test: "permits inline binding only after verification / TEST-NEGOTIATION",
+  },
+  {
     name: "leave stream features unbounded",
     file: "src/stream-features/index.js",
     before: 'entity.on("open", () => {',
@@ -37,6 +45,14 @@ const mutations = [
     after: "    if (\n      stanza",
     suite: "conformance/rfc6120-streams.test.ts",
     test: "clear features deadline / online",
+  },
+  {
+    name: "enable Stream Management before binding",
+    file: "src/stream-management/stream-feature.js",
+    before: 'if (entity.status !== "online")',
+    after: "if (false)",
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "SM without binding",
   },
   {
     name: "accept multi-payload IQ results",

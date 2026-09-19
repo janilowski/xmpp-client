@@ -8,6 +8,8 @@ const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const STREAM = "http://etherx.jabber.org/streams";
 const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
+const BIND2 = "urn:xmpp:bind:0";
+const SM = "urn:xmpp:sm:3";
 const MECHANISM = "TEST-NEGOTIATION";
 const TIMEOUT_MS = 300;
 
@@ -56,9 +58,16 @@ test("RFC 6120 §6.4.3: ordered rounds and foreign extensions remain valid", asy
   }
 });
 
-test.each(["PLAIN", MECHANISM, "invalid-proof"])(
-  "XEP-0388 §5 / RFC 6120 §7: SASL2 success permits classic binding only after verification / %s",
-  async (mode) => {
+test.each([
+  ["classic", "PLAIN"],
+  ["classic", MECHANISM],
+  ["classic", "invalid-proof"],
+  ["inline", "PLAIN"],
+  ["inline", MECHANISM],
+  ["inline", "invalid-proof"],
+])(
+  "XEP-0388 §5 / RFC 6120 §7: SASL2 success permits %s binding only after verification / %s",
+  async (binding, mode) => {
     const mechanism = mode === "PLAIN" ? "PLAIN" : MECHANISM;
     const sasl2 = "urn:xmpp:sasl:2";
     const receivedFeatures = Promise.withResolvers<void>();
@@ -72,19 +81,21 @@ test.each(["PLAIN", MECHANISM, "invalid-proof"])(
           `<open xmlns="${FRAMING}" from="example.test" id="sasl2" version="1.0"/>`,
         );
         remote.send(
-          `<features xmlns="${STREAM}"><authentication xmlns="${sasl2}"><mechanism>${mechanism}</mechanism></authentication></features>`,
+          `<features xmlns="${STREAM}"><authentication xmlns="${sasl2}"><mechanism>${mechanism}</mechanism>${binding === "inline" ? `<inline><bind xmlns="${BIND2}"/></inline>` : ""}</authentication></features>`,
         );
       } else if (el.is("authenticate", sasl2)) {
         remote.send(
-          `<success xmlns="${sasl2}"><authorization-identifier>user@example.test</authorization-identifier></success>`,
+          `<success xmlns="${sasl2}"><authorization-identifier>user@example.test${binding === "inline" ? "/r" : ""}</authorization-identifier>${binding === "inline" ? `<bound xmlns="${BIND2}"/>` : ""}</success>`,
         );
         remote.send(
-          `<features xmlns="${STREAM}"><bind xmlns="${BIND}"/></features>`,
+          `<features xmlns="${STREAM}">${binding === "inline" ? `<sm xmlns="${SM}"/>` : `<bind xmlns="${BIND}"/>`}</features>`,
         );
       } else if (el.is("iq")) {
         remote.send(
           `<iq xmlns="jabber:client" type="result" id="${el.attrs.id}"><bind xmlns="${BIND}"><jid>user@example.test/r</jid></bind></iq>`,
         );
+      } else if (el.is("enable", SM)) {
+        remote.send(`<enabled xmlns="${SM}"/>`);
       } else if (el.is("close", FRAMING)) {
         remote.send(`<close xmlns="${FRAMING}"/>`);
       }
@@ -102,18 +113,24 @@ test.each(["PLAIN", MECHANISM, "invalid-proof"])(
       response: () => "",
       final: async () => {
         await receivedFeatures.promise;
+        // Proof verification may outlive receipt/dispatch of the next features.
+        await Bun.sleep(10);
         if (mode === "invalid-proof") {
           throw new Error("Invalid test proof");
         }
       },
     }));
     xmpp.on("nonza", (el: Element) => {
-      if (el.is("features", STREAM) && el.getChild("bind", BIND)) {
+      if (
+        el.is("features", STREAM) &&
+        (el.getChild("bind", BIND) || el.getChild("sm", SM))
+      ) {
         receivedFeatures.resolve();
       }
     });
     xmpp.reconnect.stop();
-    xmpp.on("error", () => {});
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
     try {
       const result = await xmpp.start().then(
         (jid) => jid.toString(),
@@ -121,11 +138,22 @@ test.each(["PLAIN", MECHANISM, "invalid-proof"])(
       );
       if (mode === "invalid-proof") {
         expect(result).toBeInstanceOf(Error);
+        expect((result as Error).message).toBe("Invalid test proof");
         expect(peer.transcript.some((frame) => frame.startsWith("<iq"))).toBe(
           false,
         );
+        expect(
+          peer.transcript.some((frame) => frame.startsWith("<enable")),
+        ).toBe(false);
       } else {
         expect(result).toBe("user@example.test/r");
+        if (binding === "inline") {
+          let frame;
+          do {
+            frame = await peer.next();
+          } while (!frame.startsWith("<enable"));
+        }
+        expect(errors).toEqual([]);
       }
       expect(
         peer.transcript.filter((frame) => frame.startsWith("<open")),

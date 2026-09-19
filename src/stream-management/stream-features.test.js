@@ -8,6 +8,7 @@ import { tick } from "../events/index.js";
 
 test("enable - enabled", async () => {
   const { entity } = mockClient();
+  entity.status = "online"; // Resource binding has completed.
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -60,6 +61,7 @@ test("enable - send rejects", async () => {
 
 test("enable - message - enabled", async () => {
   const { entity } = mockClient();
+  entity.status = "online";
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -100,6 +102,7 @@ test("enable - message - enabled", async () => {
 
 test("enable - failed", async () => {
   const { entity } = mockClient();
+  entity.status = "online";
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -241,7 +244,9 @@ test("resumed event", async () => {
 test("resume - failed", async () => {
   const { entity } = mockClient();
 
-  entity.status = "bar";
+  entity.status = "open";
+  const errors = [];
+  entity.on("error", (error) => errors.push(error.message));
   entity.streamManagement.id = "bar";
   entity.streamManagement.enabled = true;
   entity.streamManagement.outbound = 45;
@@ -265,7 +270,8 @@ test("resume - failed", async () => {
 
   await tick();
 
-  expect(entity.status).toBe("bar");
+  expect(entity.status).not.toBe("online");
+  expect(errors).toEqual(["Stream Management requires resource binding"]);
   expect(entity.streamManagement.id).toBe("");
   expect(entity.streamManagement.enabled).toBe(false);
   expect(entity.streamManagement.outbound).toBe(0);
@@ -275,7 +281,9 @@ test("resume - failed", async () => {
 test("resume - failed with something in queue", async () => {
   const { entity } = mockClient();
 
-  entity.status = "bar";
+  entity.status = "open";
+  const errors = [];
+  entity.on("error", (error) => errors.push(error.message));
   entity.streamManagement.id = "bar";
   entity.streamManagement.enabled = true;
   entity.streamManagement.outbound = 45;
@@ -306,7 +314,8 @@ test("resume - failed with something in queue", async () => {
   await tick();
 
   expect(failures).toBe(1);
-  expect(entity.status).toBe("bar");
+  expect(entity.status).not.toBe("online");
+  expect(errors).toEqual(["Stream Management requires resource binding"]);
   expect(entity.streamManagement.id).toBe("");
   expect(entity.streamManagement.enabled).toBe(false);
   expect(entity.streamManagement.outbound).toBe(0);
@@ -363,6 +372,7 @@ test("sends an <a/> element before closing", async () => {
 
 test("enable - outbound stanza - enabled", async () => {
   const { entity } = mockClient();
+  entity.status = "online";
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">

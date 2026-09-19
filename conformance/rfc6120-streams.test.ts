@@ -8,6 +8,7 @@ const STREAM = "http://etherx.jabber.org/streams";
 const ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
+const SM = "urn:xmpp:sm:3";
 const AUTH = `<mechanisms xmlns="${SASL}"><mechanism>PLAIN</mechanism></mechanisms>`;
 const BINDING = `<bind xmlns="${BIND}"/>`;
 const OPTIONAL = '<future xmlns="urn:test:optional"/>';
@@ -41,32 +42,41 @@ function negotiationPeer(
         `<iq xmlns="jabber:client" id="${root.attributes["{}id"]}" type="result"><bind xmlns="${BIND}"><jid>user@example.test/r</jid></bind></iq>`,
       );
       peer.send(`<features xmlns="${STREAM}"/>`);
+    } else if (root.open === `{${SM}}enable`) {
+      peer.send(`<enabled xmlns="${SM}"/>`);
+    } else if (root.open === `{${SM}}resume`) {
+      peer.send(
+        `<failed xmlns="${SM}"><item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></failed>`,
+      );
     } else if (root.open === `{${FRAMING}}close` && closing === "reply") {
       peer.send(`<close xmlns="${FRAMING}"/>`);
     }
   });
 }
 
-test("RFC 6120 §§4.3.5/4.4: completion features cannot poison immediate stop", async () => {
-  const peer = negotiationPeer(AUTH, BINDING);
-  const xmpp = client({
-    service: peer.url,
-    domain: "example.test",
-    username: "user",
-    password: "secret",
-  });
-  xmpp.reconnect.stop();
-  const errors: Error[] = [];
-  xmpp.on("error", (error: Error) => errors.push(error));
-  try {
-    await xmpp.start();
-    await xmpp.stop();
-    expect(errors).toEqual([]);
-    expect(xmpp.status).toBe("offline");
-  } finally {
-    await peer.stop();
-  }
-});
+test.each([BINDING, BINDING + `<sm xmlns="${SM}"/>`])(
+  "RFC 6120 §§4.3.5/4.4: completion features cannot poison immediate stop / %s",
+  async (features) => {
+    const peer = negotiationPeer(AUTH, features);
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    try {
+      await xmpp.start();
+      await xmpp.stop();
+      expect(errors).toEqual([]);
+      expect(xmpp.status).toBe("offline");
+    } finally {
+      await peer.stop();
+    }
+  },
+);
 
 test.each(["before", "after"])(
   "RFC 6120 §§4.3.2–4.3.5/7: optional features %s mandatory features",
@@ -101,6 +111,52 @@ test.each(["before", "after"])(
         `{${FRAMING}}open`,
         "{jabber:client}iq",
       ]);
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
+test.each(["enable", "failed resumption"])(
+  "RFC 6120 §7 / XEP-0198 §3: bind before SM / %s",
+  async (mode) => {
+    const peer = negotiationPeer(AUTH, BINDING + `<sm xmlns="${SM}"/>`);
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    if (mode === "failed resumption") {
+      xmpp.streamManagement.id = "previous-session";
+    }
+    try {
+      expect((await xmpp.start()).toString()).toBe("user@example.test/r");
+      const frames = [];
+      // next() has its own watchdog. Read the actual outbound enable, not a timer.
+      while (true) {
+        const frame = await peer.next();
+        const root = readFrame(frame)[0];
+        frames.push("open" in root ? root.open : "");
+        if (frames.at(-1) === `{${SM}}enable`) {
+          break;
+        }
+      }
+      expect(frames).toEqual([
+        `{${FRAMING}}open`,
+        `{${SASL}}auth`,
+        `{${FRAMING}}open`,
+        ...(mode === "failed resumption" ? [`{${SM}}resume`] : []),
+        "{jabber:client}iq",
+        `{${SM}}enable`,
+      ]);
+      expect(xmpp.status).toBe("online");
       expect(errors).toEqual([]);
       expect(peer.errors).toEqual([]);
     } finally {
@@ -217,6 +273,8 @@ test.each([
   ],
   ["empty before binding", AUTH, ""],
   ["unknown before binding", AUTH, OPTIONAL],
+  ["SM before authentication (XEP-0198 §3)", `<sm xmlns="${SM}"/>`, BINDING],
+  ["SM without binding (XEP-0198 §3)", AUTH, `<sm xmlns="${SM}"/>`],
   ["stream namespace child", AUTH + "<future/>", BINDING],
   [
     "content namespace child",
@@ -250,9 +308,12 @@ test.each([
           );
         }),
       ]);
+      expect(peer.transcript.some((frame) => frame.startsWith("<enable"))).toBe(
+        false,
+      );
       // A watchdog is only a test guard: timeout alone never proves rejection.
       expect(result.message).toMatch(
-        /^(Unsupported stream features|Invalid stream feature namespace)$/,
+        /^(Unsupported stream features|Invalid stream feature namespace|Stream Management requires resource binding)$/,
       );
       expect(online).toBe(0);
       await peer.waitForClose();

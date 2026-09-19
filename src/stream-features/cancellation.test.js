@@ -225,6 +225,9 @@ test.each([SASL, SASL2, BIND, SM])(
     });
     const errors = [];
     entity.streamFeatures.authenticated = ns === BIND;
+    if (ns === SM) {
+      entity.status = "online"; // This test waits for enable after binding.
+    }
     entity.on("error", (error) => errors.push(error));
     const listeners = entity.listenerCount("nonza");
     const feature =
