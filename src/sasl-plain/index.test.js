@@ -1,9 +1,9 @@
 import { expect, test } from "bun:test";
 
-import SASLMechanismRegistry from "../sasl/registry.js";
-import registerPlain from "./index.js";
+import SASLMechanismRegistry from "../sasl/registry.ts";
+import registerPlain from "./index.ts";
 
-test("creates a PLAIN initial response", () => {
+test("RFC 4616 §2: creates a PLAIN initial response", () => {
   const registry = new SASLMechanismRegistry();
   registerPlain(registry);
 

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import SASLMechanismRegistry from "./registry.js";
+import SASLMechanismRegistry from "./registry.ts";
 
 test("preserves mechanism priority", () => {
   const registry = new SASLMechanismRegistry();
@@ -30,4 +30,39 @@ test("rejects duplicate mechanism names", () => {
   expect(() => registry.register("PLAIN", () => ({}))).toThrow(
     "SASL mechanism PLAIN is already registered.",
   );
+});
+
+// Local registry policy: JavaScript callers still receive runtime validation.
+test.each(["", null, undefined, 1])("rejects invalid name %p", (name) => {
+  const registry = new SASLMechanismRegistry();
+
+  expect(() => registry.register(name, () => ({}))).toThrow(
+    "A SASL mechanism must have a name.",
+  );
+  expect(registry.names).toEqual([]);
+});
+
+test.each([null, undefined, {}, 1])("rejects invalid factory %p", (factory) => {
+  const registry = new SASLMechanismRegistry();
+
+  expect(() => registry.register("PLAIN", factory)).toThrow(
+    "A SASL mechanism must have a factory function.",
+  );
+  expect(registry.names).toEqual([]);
+});
+
+test("defers factory calls until creation and preserves factory errors", () => {
+  const registry = new SASLMechanismRegistry();
+  const error = new Error("unavailable credentials");
+  let calls = 0;
+
+  expect(
+    registry.register("PLAIN", () => {
+      calls++;
+      throw error;
+    }),
+  ).toBe(registry);
+  expect(calls).toBe(0);
+  expect(() => registry.create("PLAIN")).toThrow(error);
+  expect(calls).toBe(1);
 });

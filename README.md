@@ -59,6 +59,14 @@ The project uses Bun for development, TypeScript for its public API boundary,
 and Rolldown for ESM and classic browser bundles. The inherited implementation
 is still predominantly JavaScript and is being migrated incrementally.
 
+The SASL registry and PLAIN/ANONYMOUS mechanisms are checked TypeScript.
+Their internal exchange contract covers credentials, synchronous factories,
+asynchronous responses, and text/byte callback inputs. `bun run typecheck`
+also runs the compile-only cases in `src/sasl/registry.types.ts`.
+SCRAM, FAST, and the SASL negotiation drivers remain unchecked JavaScript;
+their interoperability is exercised by the authentication tests. These internal
+types do not change the published API or replace runtime input validation.
+
 ### Native integration environment (Fedora)
 
 No VM or container is required. Use Bun 1.4.2 (also pinned in CI),
@@ -101,7 +109,8 @@ marker. See [the upstream fix](https://github.com/oven-sh/bun/pull/30674).
 The four Prosody module versions are pinned in `server/setup.js`. The native
 Prosody package is supplied by your distribution, not lockfile-pinned; this run
 used 13.0.6. JavaScript implementation-wide type checking and protocol compliance
-remain separate work; `typecheck` currently checks the typed public boundary.
+remain separate work; `typecheck` checks TypeScript sources and the public
+declarations.
 
 [Client profile](docs/profile.md) documents policy and platform limits.
 Project progress, priorities and outstanding findings live in
