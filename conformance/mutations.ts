@@ -15,6 +15,30 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "retain feature deadline during local close",
+    file: "src/stream-features/index.js",
+    before: 'entity.on("closing", clearFeatureTimer);',
+    after: "",
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "clear features deadline / silent stop",
+  },
+  {
+    name: "leave stream features unbounded",
+    file: "src/stream-features/index.js",
+    before: 'entity.on("open", () => {',
+    after: 'entity.on("unused-open", () => {',
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "local features deadline / start / initial",
+  },
+  {
+    name: "retain feature deadline after negotiation",
+    file: "src/stream-features/index.js",
+    before: "    clearFeatureTimer();\n    if (\n      stanza",
+    after: "    if (\n      stanza",
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "clear features deadline / online",
+  },
+  {
     name: "accept multi-payload IQ results",
     file: "src/iq/caller.js",
     before: "children.length > 1 || errors.length !== 0",

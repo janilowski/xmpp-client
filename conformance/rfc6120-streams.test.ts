@@ -12,8 +12,13 @@ const AUTH = `<mechanisms xmlns="${SASL}"><mechanism>PLAIN</mechanism></mechanis
 const BINDING = `<bind xmlns="${BIND}"/>`;
 const OPTIONAL = '<future xmlns="urn:test:optional"/>';
 const WATCHDOG_MS = 500;
+const FEATURE_TIMEOUT_MS = 100;
 
-function negotiationPeer(before: string, after: string) {
+function negotiationPeer(
+  before: string | null,
+  after: string | null,
+  closing: "reply" | "silent" = "reply",
+) {
   let authenticated = false;
   return new ScriptedPeer((frame, peer) => {
     const root = readFrame(frame)[0];
@@ -24,9 +29,10 @@ function negotiationPeer(before: string, after: string) {
       peer.send(
         `<open xmlns="${FRAMING}" from="example.test" version="1.0" id="${authenticated ? "second" : "first"}"/>`,
       );
-      peer.send(
-        `<features xmlns="${STREAM}">${authenticated ? after : before}</features>`,
-      );
+      const offer = authenticated ? after : before;
+      if (offer !== null) {
+        peer.send(`<features xmlns="${STREAM}">${offer}</features>`);
+      }
     } else if (root.open === `{${SASL}}auth`) {
       authenticated = true;
       peer.send(`<success xmlns="${SASL}"/>`);
@@ -35,7 +41,7 @@ function negotiationPeer(before: string, after: string) {
         `<iq xmlns="jabber:client" id="${root.attributes["{}id"]}" type="result"><bind xmlns="${BIND}"><jid>user@example.test/r</jid></bind></iq>`,
       );
       peer.send(`<features xmlns="${STREAM}"/>`);
-    } else if (root.open === `{${FRAMING}}close`) {
+    } else if (root.open === `{${FRAMING}}close` && closing === "reply") {
       peer.send(`<close xmlns="${FRAMING}"/>`);
     }
   });
@@ -104,6 +110,103 @@ test.each(["before", "after"])(
   },
 );
 
+test.each(["online", "stop", "silent stop", "peer close", "stream error"])(
+  "RFC 6120 §§4.3–4.4: clear features deadline / %s",
+  async (outcome) => {
+    const peer = negotiationPeer(
+      outcome === "online" ? AUTH : null,
+      BINDING,
+      outcome === "silent stop" ? "silent" : "reply",
+    );
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+      timeout: FEATURE_TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    const opened = new Promise<void>((resolve) =>
+      xmpp.once("open", () => resolve()),
+    );
+    const started = xmpp.start().catch((error: Error) => error);
+    try {
+      await opened;
+      if (outcome === "stop" || outcome === "silent stop") {
+        await xmpp.stop();
+      } else if (outcome === "peer close") {
+        peer.send(`<close xmlns="${FRAMING}"/>`);
+      } else if (outcome === "stream error") {
+        peer.send(
+          `<error xmlns="${STREAM}"><policy-violation xmlns="${ERRORS}"/></error>`,
+        );
+      }
+      const result = await started;
+      if (outcome === "online") {
+        expect(result.toString()).toBe("user@example.test/r");
+      } else {
+        expect(result).toBeInstanceOf(Error);
+        await peer.waitForClose();
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, FEATURE_TIMEOUT_MS * 2),
+      );
+      expect(errors.map((error) => error.name)).toEqual(
+        outcome === "stream error" ? ["StreamError"] : [],
+      );
+      expect(xmpp.status).toBe(
+        outcome === "online"
+          ? "online"
+          : outcome === "stop" || outcome === "silent stop"
+            ? "offline"
+            : "disconnect",
+      );
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
+test("RFC 6120 §4.4: abandoned features wait cannot close a replacement session", async () => {
+  const abandoned = negotiationPeer(null, BINDING);
+  const replacement = negotiationPeer(AUTH, BINDING);
+  const xmpp = client({
+    service: abandoned.url,
+    domain: "example.test",
+    username: "user",
+    password: "secret",
+    timeout: FEATURE_TIMEOUT_MS,
+  });
+  xmpp.reconnect.stop();
+  const errors: Error[] = [];
+  xmpp.on("error", (error: Error) => errors.push(error));
+  const opened = new Promise<void>((resolve) =>
+    xmpp.once("open", () => resolve()),
+  );
+  const started = xmpp.start().catch((error: Error) => error);
+  try {
+    await opened;
+    await xmpp.stop();
+    expect(await started).toBeInstanceOf(Error);
+    xmpp.options = { ...xmpp.options, service: replacement.url };
+    expect((await xmpp.start()).toString()).toBe("user@example.test/r");
+    await new Promise((resolve) => setTimeout(resolve, FEATURE_TIMEOUT_MS * 2));
+    expect(xmpp.status).toBe("online");
+    expect(errors).toEqual([]);
+    expect(abandoned.errors).toEqual([]);
+    expect(replacement.errors).toEqual([]);
+  } finally {
+    await xmpp.stop();
+    await started;
+    await abandoned.stop();
+    await replacement.stop();
+  }
+});
+
 test.each([
   ["empty before authentication", "", BINDING],
   ["unknown before authentication", OPTIONAL, BINDING],
@@ -158,6 +261,67 @@ test.each([
         false,
       );
       expect(errors).toHaveLength(1);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+      await xmpp.stop();
+      await started;
+      await peer.stop();
+    }
+  },
+);
+
+test.each([
+  ["start", "initial", null, BINDING],
+  ["start", "SASL restart", AUTH, null],
+  ["reconnect", "initial", null, BINDING],
+  ["reconnect", "SASL restart", AUTH, null],
+] as const)(
+  "RFC 6120 §4.3: local features deadline / %s / %s",
+  async (entry, _stage, before, after) => {
+    const peer = negotiationPeer(before, after);
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+      timeout: FEATURE_TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    const failure = Promise.withResolvers<Error>();
+    xmpp.on("error", (error: Error) => {
+      errors.push(error);
+      failure.resolve(error);
+    });
+    let online = 0;
+    xmpp.on("online", () => online++);
+    const started = (
+      entry === "start" ? xmpp.start() : xmpp.reconnect.reconnect()
+    ).catch((error: Error) => error);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const result = await Promise.race([
+        failure.promise,
+        new Promise<Error>((resolve) => {
+          timer = setTimeout(
+            () => resolve(new Error("test watchdog")),
+            WATCHDOG_MS,
+          );
+        }),
+      ]);
+      expect(result.name).toBe("TimeoutError");
+      expect(result.message).toBe("Timed out waiting for stream features");
+      if (entry === "start") {
+        expect(await started).toBe(result);
+      }
+      await peer.waitForClose();
+      expect(online).toBe(0);
+      expect(errors).toEqual([result]);
+      expect(peer.transcript.at(-1)).toBe(`<close xmlns="${FRAMING}"/>`);
+      expect(
+        peer.transcript.filter((frame) => frame.startsWith("<open")),
+      ).toHaveLength(before === null ? 1 : 2);
       expect(peer.errors).toEqual([]);
     } finally {
       clearTimeout(timer);

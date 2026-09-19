@@ -6,6 +6,7 @@
  */
 
 import operation from "../events/lib/operation.js";
+import TimeoutError from "../events/lib/TimeoutError.js";
 
 const NS = "http://etherx.jabber.org/streams";
 
@@ -26,11 +27,31 @@ export default function streamFeatures({ middleware, entity }) {
   entity.on("connect", reset);
   entity.on("disconnect", reset);
 
+  // Each stream opening owes us features, including SASL restarts/reconnects.
+  // The duration is client policy; RFC 6120 §4.3 specifies no fixed deadline.
+  let featureTimer;
+  const clearFeatureTimer = () => clearTimeout(featureTimer);
+  entity.on("open", () => {
+    clearFeatureTimer();
+    featureTimer = setTimeout(() => {
+      entity.disconnect().catch(() => {});
+      entity.emit(
+        "error",
+        new TimeoutError("Timed out waiting for stream features"),
+      );
+    }, entity.timeout);
+  });
+  entity.on("closing", clearFeatureTimer);
+  entity.on("close", clearFeatureTimer);
+  entity.on("disconnect", clearFeatureTimer);
+  entity.on("error", clearFeatureTimer);
+
   middleware.use((ctx, next) => {
     const { stanza } = ctx;
     if (!stanza.is("features", NS)) {
       return next();
     }
+    clearFeatureTimer();
     if (
       stanza
         .getChildElements()
