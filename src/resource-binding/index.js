@@ -1,6 +1,7 @@
 import xml from "../xml/index.js";
 import { prepareResource } from "../jid/lib/precis.js";
 import parseJID from "../jid/index.js";
+import StreamError from "../connection/lib/StreamError.js";
 
 /*
  * References
@@ -13,7 +14,7 @@ function makeBindElement(resource) {
   return xml(
     "bind",
     { xmlns: NS },
-    resource && xml("resource", {}, prepareResource(resource)),
+    resource && xml("resource", {}, resource),
   );
 }
 
@@ -42,16 +43,31 @@ async function bind(entity, iqCaller, resource, signal) {
   return jid;
 }
 
-function route({ iqCaller, streamFeatures }, resource) {
+function route({ iqCaller, streamFeatures, entity }, resource) {
+  let conflictedResource;
+  entity.on("error", (error) => {
+    if (error instanceof StreamError && error.condition === "conflict") {
+      conflictedResource = entity.jid?.resource;
+    }
+  });
   return async ({ entity }, next, _feature, signal) => {
     await streamFeatures.authentication;
     signal.throwIfAborted();
     if (!streamFeatures.authenticated) {
       throw new Error("Resource binding requires authentication");
     }
-    const selected =
+    const requested =
       typeof resource === "function" ? await resource() : resource;
     signal.throwIfAborted();
+    let selected = requested && prepareResource(requested);
+    // RFC 6120 §4.9.3.3: do not reclaim the former resource after conflict.
+    if (conflictedResource && (!selected || selected === conflictedResource)) {
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins
+      selected = globalThis.crypto.randomUUID();
+      if (selected === conflictedResource) {
+        selected += "-retry";
+      }
+    }
     await bind(entity, iqCaller, selected, signal);
     signal.throwIfAborted();
     return next();
@@ -59,8 +75,12 @@ function route({ iqCaller, streamFeatures }, resource) {
 }
 
 export default function resourceBinding(
-  { streamFeatures, iqCaller },
+  { streamFeatures, iqCaller, entity },
   resource,
 ) {
-  streamFeatures.use("bind", NS, route({ iqCaller, streamFeatures }, resource));
+  streamFeatures.use(
+    "bind",
+    NS,
+    route({ iqCaller, streamFeatures, entity }, resource),
+  );
 }

@@ -96,7 +96,7 @@ function client(options = {}) {
     sasl2,
   });
   const resourceBinding = _resourceBinding(
-    { iqCaller, streamFeatures },
+    { iqCaller, streamFeatures, entity },
     resource,
   );
 

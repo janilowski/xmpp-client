@@ -15,6 +15,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "reuse the former resource after stream conflict",
+    file: "src/resource-binding/index.js",
+    before: 'error instanceof StreamError && error.condition === "conflict"',
+    after: "false",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "resource selection on reconnect / fixed",
+  },
+  {
+    name: "compare conflicted resources before Unicode preparation",
+    file: "src/resource-binding/index.js",
+    before: "(!selected || selected === conflictedResource)",
+    after: "(!selected || requested === conflictedResource)",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "resource selection on reconnect / normalized",
+  },
+  {
     name: "retain feature deadline during local close",
     file: "src/stream-features/index.js",
     before: 'entity.on("closing", clearFeatureTimer);',

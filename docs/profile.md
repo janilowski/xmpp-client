@@ -56,6 +56,10 @@ remain executable test markers, not evidence of successful validation.
   An offer with no supported feature cannot complete an unauthenticated or
   unbound client session and fails explicitly. There is no universal `required`
   marker (RFC 6120 §4.3.2); feature-specific requirements remain authoritative.
+- After a `conflict` stream error, classic binding avoids the previously bound
+  resource (RFC 6120 §4.9.3.3). A repeated or absent choice is replaced with a
+  fresh UUID; a different prepared callback/configured choice is preserved.
+  IQ conflicts do not trigger this policy. Bind2 tags are not resourceparts.
 - Malformed correlated IQ responses reject that request locally without replying
   to a result/error stanza. Stanza errors are recoverable; stream errors close
   the transport. Unknown standard error conditions map to `undefined-condition`.

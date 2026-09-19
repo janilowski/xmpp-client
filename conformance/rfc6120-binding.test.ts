@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { client } from "../src/client/index.js";
+import { client, xml } from "../src/client/index.js";
 import parse from "../src/xml/lib/parse.js";
 import type { Element } from "../types/index.js";
 import { ScriptedPeer } from "./peer.ts";
@@ -9,9 +9,121 @@ const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 const STREAM = "http://etherx.jabber.org/streams";
 const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const STANZAS = "urn:ietf:params:xml:ns:xmpp-stanzas";
+const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const TIMEOUT_MS = 300;
 const FULL_JID = "user@example.test/server-resource";
 const VALID_BIND = `<bind xmlns="${BIND}"><jid>${FULL_JID}</jid></bind>`;
+
+test.each([
+  ["fixed", "conflict", "occupied", "occupied", null],
+  ["normalized", "conflict", "Re\u0301s", "Rés", null],
+  ["callback repeats", "conflict", "callback", "occupied", null],
+  ["callback changes", "conflict", "changing", "occupied", "fresh-choice"],
+  ["server selected", "conflict", undefined, "occupied", null],
+  ["server overrode request", "conflict", "preferred", "occupied", "preferred"],
+  [
+    "other stream error",
+    "policy-violation",
+    "occupied",
+    "occupied",
+    "occupied",
+  ],
+  [
+    "IQ conflict is recoverable",
+    "iq-conflict",
+    "occupied",
+    "occupied",
+    "occupied",
+  ],
+] as const)(
+  "RFC 6120 §4.9.3.3: resource selection on reconnect / %s",
+  async (_name, condition, configured, previous, expected) => {
+    let calls = 0;
+    const resource =
+      configured === "callback" || configured === "changing"
+        ? async () =>
+            ++calls > 1 && configured === "changing"
+              ? "fresh-choice"
+              : "occupied"
+        : configured;
+    const first = bindingPeer((iq, peer) => {
+      if (iq.getChild("bind", BIND)) {
+        peer.send(
+          `<iq xmlns="jabber:client" type="result" id="${iq.attrs.id}"><bind xmlns="${BIND}"><jid>user@example.test/${previous}</jid></bind></iq>`,
+        );
+      } else {
+        peer.send(
+          `<iq xmlns="jabber:client" type="error" id="${iq.attrs.id}"><ping xmlns="urn:xmpp:ping"/><error type="cancel"><conflict xmlns="${STANZAS}"/></error></iq>`,
+        );
+      }
+    });
+    let requested: string | null | undefined;
+    const second = bindingPeer((iq, peer) => {
+      requested = iq.getChild("bind", BIND)?.getChildText("resource", BIND);
+      peer.send(
+        `<iq xmlns="jabber:client" type="result" id="${iq.attrs.id}">${VALID_BIND}</iq>`,
+      );
+    });
+    const xmpp = client({
+      service: first.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+      resource,
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      expect((await xmpp.start()).toString()).toBe(
+        `user@example.test/${previous}`,
+      );
+      if (condition === "iq-conflict") {
+        const result = await xmpp.iqCaller
+          .get(xml("ping", { xmlns: "urn:xmpp:ping" }))
+          .catch((error: { condition: string }) => error);
+        expect(result.condition).toBe("conflict");
+        expect(xmpp.status).toBe("online");
+        first.send(`<close xmlns="${FRAMING}"/>`);
+      } else {
+        first.send(
+          `<error xmlns="${STREAM}"><${condition} xmlns="${STREAM_ERRORS}"/></error>`,
+        );
+      }
+      await first.waitForClose();
+      xmpp.options = { ...xmpp.options, service: second.url };
+      const online = new Promise<string>((resolve) => {
+        xmpp.once("online", (jid: { toString(): string }) =>
+          resolve(jid.toString()),
+        );
+        timer = setTimeout(
+          () => resolve("test watchdog: reconnect stalled"),
+          TIMEOUT_MS * 3,
+        );
+      });
+      await xmpp.reconnect.reconnect();
+      expect(await online).toBe(FULL_JID);
+      if (expected === null) {
+        expect(requested).toBeTruthy();
+        expect(requested).not.toBe(previous);
+      } else {
+        expect(requested).toBe(expected);
+      }
+      expect(errors.map((error) => error.name)).toEqual(
+        condition === "iq-conflict" ? [] : ["StreamError"],
+      );
+      expect(first.errors).toEqual([]);
+      expect(second.errors).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+      await xmpp.stop();
+      await first.stop();
+      await second.stop();
+    }
+  },
+);
 
 // RFC 6120 §§7.1–7.7, reviewed with errata on 2026-09-18 (none amend §7).
 // RFC 7622 replaces the address preparation reference. Resource uniqueness,
