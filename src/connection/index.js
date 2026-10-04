@@ -10,6 +10,7 @@ import xml from "../xml/index.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
 
 import StreamError from "./lib/StreamError.js";
+import hasContentPrefix from "./lib/hasContentPrefix.js";
 import { parseHost, parseService } from "./lib/util.js";
 import {
   canSendStanza,
@@ -132,6 +133,11 @@ class Connection extends EventEmitter {
       const error = new xml.XMLError("Unsupported content namespace");
       error.condition = "invalid-namespace";
       this.#onParserError(error);
+      return;
+    }
+
+    // RFC 6120 §4.8.5: ignore the entire invalid frame before dispatch.
+    if (this.NS === NS_JABBER_CLIENT && hasContentPrefix(element, this.NS)) {
       return;
     }
 
@@ -497,7 +503,11 @@ class Connection extends EventEmitter {
     element.parent = this.root;
     const source = element.toString();
     try {
-      validateDocument(source, XML_CONTEXT.XMPP);
+      validateDocument(source, XML_CONTEXT.XMPP, (tag) => {
+        if (this.NS === NS_JABBER_CLIENT && tag.prefix && tag.uri === this.NS) {
+          throw new TypeError("XMPP content elements must not use prefixes");
+        }
+      });
     } catch (error) {
       throw new TypeError("Invalid outgoing XML", { cause: error });
     }

@@ -34,8 +34,16 @@ function createParser(source, context) {
 }
 
 // Validate generated output without building a second tree or imposing receive limits.
-export function validateDocument(source, context = XML_CONTEXT.DOCUMENT) {
-  createParser(source, context).write(source).close();
+export function validateDocument(
+  source,
+  context = XML_CONTEXT.DOCUMENT,
+  onOpenTag,
+) {
+  const parser = createParser(source, context);
+  if (onOpenTag) {
+    parser.on("opentag", onOpenTag);
+  }
+  parser.write(source).close();
 }
 
 /** Validate the complete document before exposing its tree to a consumer. */

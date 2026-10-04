@@ -67,6 +67,10 @@ remain executable test markers, not evidence of successful validation.
   content closes with `invalid-namespace`; outgoing server content is rejected.
   Foreign extension nonzas do not route IQs, parse XMPP addresses or enter SM
   counters/replay queues.
+  Prefixes for elements qualified by the stream's client content namespace
+  reject locally on output; incoming documents containing them are ignored
+  atomically before dispatch. Foreign namespace prefixes remain permitted
+  (RFC 6120 §§4.8.5/8.4).
 - Before negotiation completes, core stanzas can address only the connected
   server or a protocol-confirmed account. Configured usernames and former
   connections do not grant identity authority. Remote stanzas reject locally

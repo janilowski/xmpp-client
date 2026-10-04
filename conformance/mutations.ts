@@ -15,6 +15,38 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "generate prefixes for XMPP content elements",
+    file: "src/connection/index.js",
+    before: "tag.prefix && tag.uri === this.NS",
+    after: "false",
+    suite: "conformance/rfc6120-content-prefixes.test.ts",
+    test: "send rejects a prefixed content element.*custom serializer root$",
+  },
+  {
+    name: "dispatch prefixed XMPP content descendants",
+    file: "src/connection/index.js",
+    before: "hasContentPrefix(element, this.NS)) {\n      return;",
+    after: "false) {\n      return;",
+    suite: "conformance/rfc6120-content-prefixes.test.ts",
+    test: "receiver ignores or closes.*prefixed error child$",
+  },
+  {
+    name: "ignore nested XMPP content prefixes",
+    file: "src/connection/lib/hasContentPrefix.js",
+    before: "  for (const child of element.children) {",
+    after: "  return false;\n  for (const child of element.children) {",
+    suite: "conformance/rfc6120-content-prefixes.test.ts",
+    test: "receiver ignores or closes.*prefixed content inside foreign payload$",
+  },
+  {
+    name: "reject foreign prefixes by spelling instead of namespace",
+    file: "src/connection/index.js",
+    before: "tag.prefix && tag.uri === this.NS",
+    after: "tag.prefix",
+    suite: "conformance/rfc6120-content-prefixes.test.ts",
+    test: "send preserves permitted prefixes.*a foreign prefixed root$",
+  },
+  {
     name: "serialize a different document after XML validation",
     file: "src/connection/index.js",
     before: "    await this.write(source);",
@@ -24,9 +56,9 @@ const mutations = [
   },
   {
     name: "write malformed outgoing XML without validation",
-    file: "src/connection/index.js",
-    before: "      validateDocument(source, XML_CONTEXT.XMPP);",
-    after: "",
+    file: "src/xml/lib/parseDocument.js",
+    before: "  parser.write(source).close();\n}\n\n/** Validate",
+    after: "  /* XML validation bypassed. */\n}\n\n/** Validate",
     suite: "conformance/rfc6120-outgoing-xml.test.ts",
     test: "send rejects malformed XML.*root prefix is unbound$",
   },
@@ -41,9 +73,9 @@ const mutations = [
   {
     name: "restrict valid outgoing XML to the receive byte limit",
     file: "src/connection/index.js",
-    before: "      validateDocument(source, XML_CONTEXT.XMPP);",
+    before: "      validateDocument(source, XML_CONTEXT.XMPP,",
     after:
-      "      if (source.length > 1024 * 1024) throw new Error('size limit');\n      validateDocument(source, XML_CONTEXT.XMPP);",
+      "      if (source.length > 1024 * 1024) throw new Error('size limit');\n      validateDocument(source, XML_CONTEXT.XMPP,",
     suite: "conformance/rfc6120-outgoing-xml.test.ts",
     test: "send preserves well-formed XML.*receive-side byte limit$",
   },
@@ -730,8 +762,8 @@ const mutations = [
   {
     name: "accept an unfinished XML document",
     file: "src/xml/lib/parseDocument.js",
-    before: "parser.write(source).close();",
-    after: "parser.write(source);",
+    before: "parser.write(source).close();\n  return root;",
+    after: "parser.write(source);\n  return root;",
     suite: "src/websocket/test/frames.test.js",
     test: "rejects a whole malformed frame",
   },
@@ -785,6 +817,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-outgoing-xml.test.ts",
+      "conformance/rfc6120-content-prefixes.test.ts",
       "conformance/rfc6120-iq.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
