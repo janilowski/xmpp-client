@@ -17,6 +17,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "send serialized frames with a leading non-XML character",
+    file: "src/websocket/lib/Socket.js",
+    before: "!data.startsWith(XML_START_CHARACTER)",
+    after: "false",
+    suite: "conformance/rfc7395-outgoing-framing.test.ts",
+    test: "send rejects serialized leading",
+  },
+  {
+    name: "allow raw writes to bypass the frame boundary",
+    file: "src/websocket/lib/Socket.js",
+    before: "!data.startsWith(XML_START_CHARACTER)",
+    after: "false",
+    suite: "conformance/rfc7395-outgoing-framing.test.ts",
+    test: "raw write rejects a frame beginning",
+  },
+  {
     name: "send the raw domain after preparing routing authority",
     file: "src/connection/lib/negotiation.js",
     before: "return state.server;",
@@ -988,6 +1004,7 @@ for (const mutation of mutations) {
       "tsconfig.json",
       "bunfig.toml",
       "conformance/rfc7395.test.ts",
+      "conformance/rfc7395-outgoing-framing.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-outgoing-xml.test.ts",

@@ -4,6 +4,8 @@ import { ScriptedPeer } from "./peer.ts";
 import { readFrame } from "./xml.ts";
 import { once } from "node:events";
 
+// Outgoing boundaries, raw writes and SM rejection: rfc7395-outgoing-framing.test.ts.
+
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="peer-1"/>';
 const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';

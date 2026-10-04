@@ -4,6 +4,7 @@ import { parseURI } from "../../connection/lib/util.js";
 const CODE = "ECONNERROR";
 const SUBPROTOCOL = "xmpp";
 const WS_UNSUPPORTED_DATA = 1003;
+const XML_START_CHARACTER = "<";
 
 export function isSecure(url) {
   const uri = parseURI(url);
@@ -92,6 +93,10 @@ export default class Socket extends EventEmitter {
   }
 
   write(data, fn) {
+    // RFC 7395 §3.3.3: this also covers stream headers and raw writes.
+    if (typeof data !== "string" || !data.startsWith(XML_START_CHARACTER)) {
+      throw new TypeError("XMPP WebSocket frames must start with '<'");
+    }
     this.socket.send(data);
     Promise.resolve()
       .then(fn)
