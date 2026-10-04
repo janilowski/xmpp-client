@@ -292,7 +292,17 @@ test.each(["stop", "disconnect"])(
     }));
     xmpp.reconnect.stop();
     const errors: Error[] = [];
-    xmpp.on("error", (error: Error) => errors.push(error));
+    const errorsAfterDisconnect: Error[] = [];
+    let disconnected = false;
+    xmpp.once("disconnect", () => {
+      disconnected = true;
+    });
+    xmpp.on("error", (error: Error) => {
+      errors.push(error);
+      if (disconnected) {
+        errorsAfterDisconnect.push(error);
+      }
+    });
     xmpp.on("nonza", (el: Element) => {
       if (el.is("success", SASL2)) {
         success.resolve();
@@ -311,7 +321,21 @@ test.each(["stop", "disconnect"])(
         first.terminate();
         await disconnected;
       }
-      expect(await started).toBeInstanceOf(Error);
+      const startError = await started;
+      expect(startError).toBeInstanceOf(Error);
+      const cancelledErrors = [...errors];
+      // Native transport loss is asynchronous; the old proof deadline may win.
+      // No error is permitted after disconnect or in the replacement session.
+      expect(errorsAfterDisconnect).toEqual([]);
+      if (action === "stop") {
+        expect(cancelledErrors).toEqual([]);
+      } else {
+        expect(cancelledErrors.length).toBeLessThanOrEqual(1);
+        if (cancelledErrors.length) {
+          expect(cancelledErrors[0]).toBe(startError);
+          expect(startError).toBeInstanceOf(TimeoutError);
+        }
+      }
       expect(xmpp.listenerCount("nonza")).toBe(listeners);
       Object.assign(xmpp.options, { service: second.url });
       if (action === "stop") {
@@ -328,7 +352,8 @@ test.each(["stop", "disconnect"])(
       await Bun.sleep(TIMEOUT_MS * 2);
       expect(xmpp.status).toBe("online");
       expect(verification).toBe(2);
-      expect(errors).toEqual([]);
+      expect(errors).toEqual(cancelledErrors);
+      expect(errorsAfterDisconnect).toEqual([]);
       expect(xmpp.listenerCount("nonza")).toBe(listeners);
       expect(first.transcript.some((frame) => frame.startsWith("<iq"))).toBe(
         false,

@@ -17,6 +17,76 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "detach a replacement parser after an old parser error",
+    file: "src/connection/index.js",
+    before:
+      'this._streamError(error.condition || "bad-format");\n    // A synchronous error write can replace the transport before it returns.\n    if (this.#generation !== generation)',
+    after:
+      'this._streamError(error.condition || "bad-format");\n    if (false)',
+    suite: "src/connection/test/close-race.test.js",
+    test: "synchronous parser-error response cannot detach a replacement parser$",
+  },
+  {
+    name: "write an old close-hook footer into a replacement stream",
+    file: "src/connection/index.js",
+    before:
+      'await this.#runHooks("close");\n    if (this.#generation !== generation)',
+    after: 'await this.#runHooks("close");\n    if (false)',
+    suite: "src/connection/test/close-race.test.js",
+    test: "delayed close hooks cannot write a footer to a replacement stream$",
+  },
+  {
+    name: "detach a replacement parser after a synchronous close reply",
+    file: "src/connection/index.js",
+    before:
+      "if (this.#generation === generation && this.socket === socket) {\n      this._detachParser();",
+    after: "if (true) {\n      this._detachParser();",
+    suite: "src/connection/test/close-race.test.js",
+    test: "synchronous peer-close footer cannot detach a replacement parser$",
+  },
+  {
+    name: "dispatch a queued event from a replaced socket",
+    file: "src/connection/index.js",
+    before: "if (this.socket === socket) {\n          handler(...args);",
+    after: "if (true) {\n          handler(...args);",
+    suite: "src/connection/test/close-race.test.js",
+    test: "a preceding old-socket listener cannot detach a replacement transport$",
+  },
+  {
+    name: "dispatch a queued event from a replaced parser",
+    file: "src/connection/index.js",
+    before: "if (this.parser === parser) {\n          handler(...args);",
+    after: "if (true) {\n          handler(...args);",
+    suite: "src/connection/test/close-race.test.js",
+    test: "a preceding old-parser listener cannot close the replacement stream$",
+  },
+  {
+    name: "mark a later disconnected session offline after an old stop",
+    file: "src/connection/index.js",
+    before:
+      'if (this.#generation === generation) {\n      this._status("offline", el);',
+    after: 'if (true) {\n      this._status("offline", el);',
+    suite: "src/connection/test/close-race.test.js",
+    test: "old stop cannot mark a later already-disconnected session offline$",
+  },
+  {
+    name: "redirect received stream-error shutdown into a replacement session",
+    file: "src/connection/index.js",
+    before: "if (isStreamError && this.#generation === generation)",
+    after: "if (isStreamError)",
+    suite: "src/connection/test/close-race.test.js",
+    test: "a received stream-error observer cannot redirect shutdown into a replacement session$",
+  },
+  {
+    name: "emit an old close-hook error into a replacement session",
+    file: "src/connection/index.js",
+    before:
+      'if (this.#generation === generation) {\n            this.emit("error", error);',
+    after: 'if (true) {\n            this.emit("error", error);',
+    suite: "src/connection/test/close-race.test.js",
+    test: "old close-hook rejection cannot emit an error into the replacement session$",
+  },
+  {
     name: "accept an unregistered generated stanza error type",
     file: "src/iq/callee.js",
     before: "!TYPES.has(element.attrs.type) ||",

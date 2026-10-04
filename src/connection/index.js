@@ -30,6 +30,7 @@ class Connection extends EventEmitter {
   #socketListeners = null;
   #parserListeners = null;
   #closing = false;
+  #generation = 0;
 
   constructor(options = {}) {
     super();
@@ -53,6 +54,8 @@ class Connection extends EventEmitter {
   }
 
   async _streamError(condition, children, application) {
+    const generation = this.#generation;
+    const socket = this.socket;
     try {
       await this.send(
         // prettier-ignore
@@ -65,7 +68,9 @@ class Connection extends EventEmitter {
       // The stream may already be unusable; disconnect regardless.
     }
 
-    return this.disconnect();
+    if (this.#generation === generation && this.socket === socket) {
+      return this.disconnect();
+    }
   }
 
   _onData(data) {
@@ -78,11 +83,16 @@ class Connection extends EventEmitter {
   }
 
   #onParserError(error) {
+    const generation = this.#generation;
     // https://xmpp.org/rfcs/rfc6120.html#streams-error-conditions-bad-format
     // "This error can be used instead of the more specific XML-related errors,
     // such as <bad-namespace-prefix/>, <invalid-xml/>, <not-well-formed/>, <restricted-xml/>,
     // and <unsupported-encoding/>. However, the more specific errors are RECOMMENDED."
     this._streamError(error.condition || "bad-format");
+    // A synchronous error write can replace the transport before it returns.
+    if (this.#generation !== generation) {
+      return;
+    }
     this._detachParser();
     this.emit("error", error);
   }
@@ -95,6 +105,8 @@ class Connection extends EventEmitter {
   }
 
   #onStreamClosed(dirty, reason) {
+    const generation = this.#generation;
+    const socket = this.socket;
     // A peer-initiated close still needs our closing header before the transport closes.
     const reply =
       this.parser &&
@@ -104,23 +116,47 @@ class Connection extends EventEmitter {
       !(dirty instanceof Error)
         ? this.write(this.footer(this.footerElement()))
         : null;
-    this._detachParser();
-    this._status("close", { clean: !dirty, reason });
+    if (this.#generation === generation && this.socket === socket) {
+      this._detachParser();
+      this._status("close", { clean: !dirty, reason });
+    }
     if (reply) {
       reply
-        .then(() => this._closeSocket())
-        .catch((error) => this.emit("error", error));
+        .then(() => {
+          if (this.#generation === generation && this.socket === socket) {
+            return this._closeSocket();
+          }
+          return undefined;
+        })
+        .catch((error) => {
+          if (this.#generation === generation && this.socket === socket) {
+            this.emit("error", error);
+          }
+        });
     }
   }
 
   _attachSocket(socket) {
+    if (this.socket) {
+      this.#socketListeners?.unsubscribe(this.socket);
+    }
+    this.#generation += 1;
     this.socket = socket;
-    this.#socketListeners ??= listeners({
+    const events = {
       data: this._onData.bind(this),
       close: this.#onSocketClosed.bind(this),
       connect: () => this._status("connect"),
       error: (error) => this.emit("error", error),
-    });
+    };
+    // Unsubscription cannot remove callbacks already copied by EventEmitter.emit.
+    for (const [event, handler] of Object.entries(events)) {
+      events[event] = (...args) => {
+        if (this.socket === socket) {
+          handler(...args);
+        }
+      };
+    }
+    this.#socketListeners = listeners(events);
     this.#socketListeners.subscribe(this.socket);
   }
 
@@ -130,6 +166,7 @@ class Connection extends EventEmitter {
   }
 
   _onElement(element) {
+    const generation = this.#generation;
     // RFC 6120 §4.8.3: server content cannot enter a client stream.
     if (this.NS === NS_JABBER_CLIENT && element.getNS() === NS_JABBER_SERVER) {
       const error = new xml.XMLError("Unsupported content namespace");
@@ -152,7 +189,7 @@ class Connection extends EventEmitter {
     this.emit("element", element);
     this.emit(this.isStanza(element) ? "stanza" : "nonza", element);
 
-    if (isStreamError) {
+    if (isStreamError && this.#generation === generation) {
       // "Stream Errors Are Unrecoverable"
       // "The entity that receives the stream error then SHALL close the stream"
       this.disconnect();
@@ -193,13 +230,25 @@ class Connection extends EventEmitter {
   }
 
   _attachParser(parser) {
+    if (this.parser) {
+      this.#parserListeners?.unsubscribe(this.parser);
+    }
+    this.#generation += 1;
     this.parser = parser;
-    this.#parserListeners ??= listeners({
+    const events = {
       element: this._onElement.bind(this),
       error: this.#onParserError.bind(this),
       end: this.#onStreamClosed.bind(this),
       start: (element) => this._status("open", element),
-    });
+    };
+    for (const [event, handler] of Object.entries(events)) {
+      events[event] = (...args) => {
+        if (this.parser === parser) {
+          handler(...args);
+        }
+      };
+    }
+    this.#parserListeners = listeners(events);
     this.#parserListeners.subscribe(this.parser);
   }
 
@@ -249,18 +298,34 @@ class Connection extends EventEmitter {
   }
 
   async disconnect() {
+    const generation = this.#generation;
+    const socket = this.socket;
+    const parser = this.parser;
     let el;
 
     try {
       el = await this._closeStream();
     } catch (error) {
-      this.#onStreamClosed(error);
+      if (
+        this.#generation === generation &&
+        this.socket === socket &&
+        this.parser === parser
+      ) {
+        this.#onStreamClosed(error);
+      }
+    }
+
+    // A previous shutdown must never close a replacement socket or stream.
+    if (this.#generation !== generation || this.socket !== socket) {
+      return el;
     }
 
     try {
       await this._closeSocket();
     } catch (error) {
-      this.#onSocketClosed(true, error);
+      if (this.#generation === generation && this.socket === socket) {
+        this.#onSocketClosed(true, error);
+      }
     }
 
     return el;
@@ -314,8 +379,12 @@ class Connection extends EventEmitter {
    * https://tools.ietf.org/html/rfc7395#section-3.6
    */
   async _closeSocket(timeout = this.timeout) {
-    this._status("disconnecting");
     const socket = this.socket;
+    const generation = this.#generation;
+    this._status("disconnecting");
+    if (this.#generation !== generation) {
+      return;
+    }
     if (!socket) throw new Error("Socket is not connected");
 
     // The 'disconnect' status is set by the socket 'close' listener
@@ -438,8 +507,11 @@ class Connection extends EventEmitter {
    * https://tools.ietf.org/html/rfc7395#section-3.6
    */
   async stop() {
+    const generation = this.#generation;
     const el = await this.disconnect();
-    this._status("offline", el);
+    if (this.#generation === generation) {
+      this._status("offline", el);
+    }
     return el;
   }
 
@@ -453,7 +525,11 @@ class Connection extends EventEmitter {
     if (this.status === "connect" || this.status === "connecting") {
       return;
     }
+    const generation = this.#generation;
     await this.#runHooks("close");
+    if (this.#generation !== generation) {
+      return;
+    }
     if (this.#closing) {
       throw new Error("Connection is closing");
     }
@@ -464,7 +540,11 @@ class Connection extends EventEmitter {
     try {
       // Subscribe and mark the close before a synchronous peer can answer it.
       const written = this.write(fragment);
-      if (this.status !== "close" && this.status !== "disconnect") {
+      if (
+        this.#generation === generation &&
+        this.status !== "close" &&
+        this.status !== "disconnect"
+      ) {
         this._status("closing");
       }
       const [element] = await Promise.all([closed?.result, written]);
@@ -668,6 +748,7 @@ class Connection extends EventEmitter {
     }
   }
   async #runHooks(event, ...args) {
+    const generation = this.#generation;
     this.#assertHookEventName(event);
 
     const hooks = this.#hooks.get(event);
@@ -681,7 +762,9 @@ class Connection extends EventEmitter {
         try {
           await handler(...args);
         } catch (error) {
-          this.emit("error", error);
+          if (this.#generation === generation) {
+            this.emit("error", error);
+          }
         }
       }),
     );

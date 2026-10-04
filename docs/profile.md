@@ -106,6 +106,10 @@ remain executable test markers, not evidence of successful validation.
   ordinary IQ requests default to 30 seconds. These are local deadlines.
   Cancellation prevents further protocol work after callbacks settle, but
   cannot stop arbitrary application callbacks or undo their side effects.
+- Shutdown continuations and queued socket/parser events remain attached to
+  their original session. Replacement streams must not inherit old close writes,
+  errors or status changes. This is a local lifecycle safety policy; it does not
+  cancel arbitrary application code or extend protocol deadlines.
 - IQ correlation checks sender and ID. Full destinations require the same full
   JID; bare destinations permit a resource. No-`to` requests accept no sender,
   the server domain or the client's bare JID. Own-bare/server destinations also
