@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { client, xml } from "../src/client/index.js";
+import type { ClientOptions } from "../types/index.js";
 import { ScriptedPeer } from "./peer.ts";
 import { readFrame } from "./xml.ts";
 
@@ -11,6 +12,18 @@ const CONTENT = "jabber:client";
 const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const TIMEOUT_MS = 500;
 const CLOSE = `<close xmlns="${FRAMING}"/>`;
+
+const DOMAINS = [
+  ["prepared ASCII", "example.test", "example.test"],
+  ["ASCII trailing dot", "example.test.", "example.test"],
+  ["A-label", "xn--bcher-kva.example", "bücher.example"],
+  ["U-label", "bücher.example", "bücher.example"],
+  ["Unicode trailing dot", "bücher.example.", "bücher.example"],
+  ["NFC U-label", "bu\u0308cher.example", "bücher.example"],
+  ["IPv4", "127.0.0.1", "127.0.0.1"],
+  ["IPv6", "[2001:0DB8:0:0:0:0:0:1]", "[2001:db8::1]"],
+  ["local hostname", "localhost", "localhost"],
+] as const;
 
 // RFC 7395 §§3.3.1/3.4/3.7 preserve RFC 6120 §4.7 attribute semantics.
 // Explicit loopback is the profile's test boundary, not evidence of TLS/PKIX.
@@ -80,6 +93,91 @@ test.each([
         false,
       );
       expect(peer.requests).toHaveLength(1);
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
+// RFC 7622 §§3.2/3.2.1–3: client preparation is a SHOULD; this profile implements
+// it consistently. The terminal dot precedes canonicalization, A-labels become
+// U-labels, and prepared Unicode/IP/local names remain valid. This is not a
+// blanket XML casefold rule. RFC 7395 §§3.3.1/3.4 preserve the domainpart slot.
+test.each(
+  DOMAINS.flatMap(([name, domain, expected]) =>
+    ["open", "restart"].map((method) => [method, name, domain, expected]),
+  ),
+)(
+  "RFC 6120 §4.7.2 / RFC 7622 §3.2 profile: header and routing use the same prepared domain / %s / %s",
+  async (method, _name, domain, expected) => {
+    let target = "initial.test";
+    const peer = new ScriptedPeer((frame, remote) => {
+      if (frame.startsWith("<open")) {
+        remote.send(
+          `<open xmlns="${FRAMING}" from="${target}" version="1.0"/>`,
+        );
+      } else if (frame.startsWith("<close")) {
+        remote.send(CLOSE);
+      }
+    });
+    const xmpp = client({
+      service: peer.url,
+      domain: "initial.test",
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    const options = Object.freeze({ domain, lang: "pl-PL" });
+    const configured: ClientOptions = xmpp.options;
+    try {
+      await xmpp.connect(peer.url);
+      if (method === "restart") {
+        await xmpp.open({ domain: "initial.test" });
+        expect(readFrame(await peer.next())).toEqual(
+          readFrame(
+            `<open xmlns="${FRAMING}" to="initial.test" version="1.0"/>`,
+          ),
+        );
+        configured.domain = domain;
+        configured.lang = options.lang;
+      }
+      target = expected;
+      if (method === "restart") {
+        await xmpp.restart();
+      } else {
+        await xmpp.open(options);
+      }
+      expect(readFrame(await peer.next())).toEqual(
+        readFrame(
+          `<open xmlns="${FRAMING}" to="${expected}" version="1.0" xml:lang="pl-PL"/>`,
+        ),
+      );
+      expect(options).toEqual({ domain, lang: "pl-PL" });
+      expect(xmpp.options).toBe(configured);
+      expect(configured.domain).toBe(
+        method === "restart" ? domain : "initial.test",
+      );
+      await xmpp.send(xml("message", { to: expected, id: "server" }));
+      expect(readFrame(await peer.next())).toEqual(
+        readFrame(
+          `<message xmlns="${CONTENT}" to="${expected}" id="server" xml:lang="pl-PL"/>`,
+        ),
+      );
+      const frames = [...peer.transcript];
+      const result = await xmpp
+        .send(xml("message", { to: "remote.invalid", id: "forbidden" }))
+        .then(
+          () => undefined,
+          (error: Error) => error,
+        );
+      expect(result).toBeInstanceOf(Error);
+      expect(result?.message).toBe("Stream negotiation is not complete");
+      expect(peer.transcript).toEqual(frames);
+      expect(xmpp.status).toBe("open");
       expect(errors).toEqual([]);
       expect(peer.errors).toEqual([]);
     } finally {
@@ -227,6 +325,12 @@ test.each([
   ["empty", { domain: "" }],
   ["localpart", { domain: "user@example.test" }],
   ["resourcepart", { domain: "example.test/resource" }],
+  ["zero", { domain: 0 }],
+  ["number", { domain: 123 }],
+  ["false", { domain: false }],
+  ["true", { domain: true }],
+  ["empty label", { domain: "example..test" }],
+  ["invalid A-label", { domain: "xn--invalid-" }],
 ] as const)(
   "RFC 6120 §4.7.2: invalid opening target rejects before any frame and permits recovery / %s",
   async (_name, options) => {

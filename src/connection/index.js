@@ -366,12 +366,12 @@ class Connection extends EventEmitter {
     if (lang != null && lang !== "" && !isLanguageTag(lang)) {
       throw new TypeError("Invalid language tag");
     }
-    resetStream(this, options.domain);
+    const preparedDomain = resetStream(this, domain);
     this._status("opening");
     this.#closing = false;
 
     const headerElement = this.headerElement();
-    headerElement.attrs.to = domain;
+    headerElement.attrs.to = preparedDomain;
     headerElement.attrs["xml:lang"] = lang;
     this.root = headerElement;
 

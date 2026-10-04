@@ -11,6 +11,7 @@ export function resetStream(entity, domain) {
   const state = connections.get(entity);
   state.server = jid("", domain).domain;
   state.complete = false;
+  return state.server;
 }
 
 export function confirmIdentity(entity, address) {

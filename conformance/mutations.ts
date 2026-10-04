@@ -17,6 +17,14 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "send the raw domain after preparing routing authority",
+    file: "src/connection/lib/negotiation.js",
+    before: "return state.server;",
+    after: "return domain;",
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "header and routing use the same prepared domain / open / A-label$",
+  },
+  {
     name: "trust a different serialized root namespace",
     file: "src/connection/index.js",
     before: "tag.uri !== namespace ||",
@@ -100,9 +108,9 @@ const mutations = [
     name: "change stream state before validating the target",
     file: "src/connection/index.js",
     before:
-      'resetStream(this, options.domain);\n    this._status("opening");\n    this.#closing = false;',
+      'const preparedDomain = resetStream(this, domain);\n    this._status("opening");\n    this.#closing = false;',
     after:
-      'this._status("opening");\n    this.#closing = false;\n    resetStream(this, options.domain);',
+      'this._status("opening");\n    this.#closing = false;\n    const preparedDomain = resetStream(this, domain);',
     suite: "conformance/rfc6120-stream-headers.test.ts",
     test: "invalid opening target rejects before any frame and permits recovery / localpart$",
   },
@@ -960,7 +968,7 @@ const mutations = [
   {
     name: "open a stream to the wrong domain",
     file: "src/connection/index.js",
-    before: "headerElement.attrs.to = domain;",
+    before: "headerElement.attrs.to = preparedDomain;",
     after: 'headerElement.attrs.to = "wrong.test";',
     suite: "conformance/rfc7395.test.ts",
     test: "first message is a standalone",
