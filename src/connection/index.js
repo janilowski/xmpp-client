@@ -10,6 +10,13 @@ import xml from "../xml/index.js";
 
 import StreamError from "./lib/StreamError.js";
 import { parseHost, parseService } from "./lib/util.js";
+import {
+  canSendStanza,
+  completeNegotiation,
+  confirmIdentity,
+  resetConnection,
+  resetStream,
+} from "./lib/negotiation.js";
 
 const NS_STREAM = "urn:ietf:params:xml:ns:xmpp-streams";
 const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
@@ -35,6 +42,7 @@ class Connection extends EventEmitter {
     this.socket = null;
     this.parser = null;
     this.root = null;
+    resetConnection(this);
   }
 
   isSecure() {
@@ -194,6 +202,7 @@ class Connection extends EventEmitter {
 
   _jid(id) {
     this.jid = jid(id);
+    confirmIdentity(this, this.jid);
     return this.jid;
   }
 
@@ -221,6 +230,7 @@ class Connection extends EventEmitter {
   }
 
   _ready(resumed = false) {
+    completeNegotiation(this);
     if (resumed) {
       this.status = "online";
       this.emit("status", "online");
@@ -275,6 +285,7 @@ class Connection extends EventEmitter {
    * Connects the socket
    */
   async connect(service) {
+    resetConnection(this);
     this._status("connecting", service);
     const socket = new this.Socket();
     this._attachSocket(socket);
@@ -343,6 +354,7 @@ class Connection extends EventEmitter {
     if (this.parser) {
       throw new Error("A stream is already open; use restart instead");
     }
+    resetStream(this, options.domain);
     this._status("opening");
     this.#closing = false;
 
@@ -467,12 +479,18 @@ class Connection extends EventEmitter {
     }
 
     if (this.isStanza(element)) {
+      let destination;
       for (const attribute of ["to", "from"]) {
         if (element.attrs[attribute] !== undefined) {
-          element.attrs[attribute] = jid(
-            element.attrs[attribute].toString(),
-          ).toString();
+          const address = jid(element.attrs[attribute].toString());
+          element.attrs[attribute] = address.toString();
+          if (attribute === "to") {
+            destination = address;
+          }
         }
+      }
+      if (this.NS === NS_JABBER_CLIENT && !canSendStanza(this, destination)) {
+        throw new Error("Stream negotiation is not complete");
       }
     }
     element.parent = this.root;

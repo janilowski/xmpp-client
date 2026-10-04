@@ -9,6 +9,7 @@ afterEach(disconnectClients);
 
 test("batch sends prepare addresses without bypassing validation", async () => {
   const conn = new ConnectionWebSocket();
+  conn._ready();
   const frames = [];
   conn.write = async (frame) => frames.push(frame);
   await conn.sendMany([
@@ -31,6 +32,7 @@ test("prepares the stream domain without changing SASL credentials", () => {
 
 test("prepares stanza addresses before writing and rejects malformed destinations", async () => {
   const xmpp = mockClient();
+  xmpp._ready();
   const frames = [];
   xmpp.write = async (frame) => frames.push(frame);
   await xmpp.send(
@@ -62,6 +64,7 @@ test("prepares the requested resource before resource binding", async () => {
 
 test("IQ accepts a canonically equivalent Unicode sender", async () => {
   const xmpp = mockClient();
+  xmpp._ready();
   const pending = xmpp.iqCaller
     .request(
       xml("iq", { type: "get", id: "unicode", to: "é@bücher.example/Rés" }),
@@ -79,6 +82,7 @@ test("IQ accepts a canonically equivalent Unicode sender", async () => {
 
 test("malformed incoming address does not abort processing of a valid reply", async () => {
   const xmpp = mockClient();
+  xmpp._ready();
   const pending = xmpp.iqCaller
     .request(xml("iq", { type: "get", id: "invalid", to: "peer@remote" }), 30)
     .catch((error) => error);

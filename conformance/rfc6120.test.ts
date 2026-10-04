@@ -2,6 +2,7 @@ import { expect, test } from "bun:test";
 import { client } from "../src/client/index.js";
 import xml from "../src/xml/index.js";
 import { ScriptedPeer } from "./peer.ts";
+import { readFrame } from "./xml.ts";
 
 // SASL wire encoding and restart cases: rfc6120-sasl.test.ts.
 // SASL identity, ordering, failure and retry: rfc6120-sasl-negotiation.test.ts.
@@ -10,6 +11,7 @@ import { ScriptedPeer } from "./peer.ts";
 // Hostile SASL Base64 input: rfc6120-sasl-base64.test.ts.
 // SCRAM authentication proofs: rfc5802-wire.test.ts.
 // Resource binding and completion: rfc6120-binding.test.ts.
+// Pre-completion stanza routing and resumption: rfc6120-stanza-routing.test.ts.
 // IQ envelopes and stanza errors: rfc6120-iq.test.ts.
 // Content namespace isolation and SM accounting: rfc6120-namespaces.test.ts.
 // Feature negotiation and stream errors: rfc6120-streams.test.ts.
@@ -21,16 +23,44 @@ const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';
 const FEATURES =
   '<features xmlns="http://etherx.jabber.org/streams"><mechanisms xmlns="urn:ietf:params:xml:ns:xmpp-sasl"><mechanism>PLAIN</mechanism></mechanisms></features>';
 const NEGOTIATION_TIMEOUT_MS = 100;
+const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
+const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
+const STREAM = "http://etherx.jabber.org/streams";
+const CONTENT = "jabber:client";
 
 // RFC 6120 §§8.1.2.1, 8.2.3, 8.3.1: sender correlation is our security policy
 // derived from addressing/reply rules, not a verbatim RFC matching algorithm.
 test.each(["result", "error"])(
   "IQ ignores a forged %s before the authentic wire reply",
   async (type) => {
+    let authenticated = false;
     const peer = new ScriptedPeer((frame, remote) => {
       if (frame.startsWith("<open")) {
         remote.send(OPEN);
+        remote.send(
+          authenticated
+            ? `<features xmlns="${STREAM}"><bind xmlns="${BIND}"/></features>`
+            : FEATURES,
+        );
+      } else if (frame.startsWith("<auth ")) {
+        authenticated = true;
+        remote.send(`<success xmlns="${SASL}"/>`);
       } else if (frame.startsWith("<iq")) {
+        const events = readFrame(frame);
+        if (
+          events.some(
+            (event) => "open" in event && event.open === `{${BIND}}bind`,
+          )
+        ) {
+          const iq = events[0];
+          if (!iq || !("open" in iq)) {
+            throw new Error("Expected binding IQ");
+          }
+          remote.send(
+            `<iq xmlns="${CONTENT}" type="result" id="${iq.attributes["{}id"]}"><bind xmlns="${BIND}"><jid>user@example.test/r</jid></bind></iq>`,
+          );
+          return;
+        }
         remote.send(
           `<iq xmlns="jabber:client" id="sender-check" type="${type}" from="attacker.example"><error type="cancel"><service-unavailable xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></error></iq>`,
         );
@@ -41,11 +71,15 @@ test.each(["result", "error"])(
         remote.send(CLOSE);
       }
     });
-    const xmpp = client({ service: peer.url, domain: "example.test" });
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+    });
     xmpp.reconnect.stop();
     try {
-      await xmpp.connect(peer.url);
-      await xmpp.open({ domain: "example.test" });
+      expect((await xmpp.start()).toString()).toBe("user@example.test/r");
       const reply = await xmpp.iqCaller
         .request(
           xml(

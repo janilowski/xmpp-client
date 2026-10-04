@@ -2,6 +2,7 @@ import { EventEmitter } from "../events/index.js";
 import xml from "../xml/index.js";
 import { datetime } from "../util/time.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
+import { completeNegotiation } from "../connection/lib/negotiation.js";
 
 import { setupBind2 } from "./bind2.js";
 import { setupSasl2 } from "./sasl2.js";
@@ -83,6 +84,9 @@ export default function streamManagement({
     }
     sm.enabled = true;
     ackQueue(resumed.attrs.h);
+    signal?.throwIfAborted();
+    // A validated resumed stream can replay before the public ready event.
+    completeNegotiation(entity);
     const q = [...sm.outbound_q];
     // Keep unacknowledged items owned by SM even if replay is cancelled.
     for (const item of q) {

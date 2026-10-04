@@ -42,6 +42,7 @@ for (const type of ["result", "error"]) {
     `${type}: to=%s from=%s accepted=%s`,
     async (to, from, accepted) => {
       const xmpp = mockClient({ domain: "bar" });
+      xmpp._ready();
       let settled = false;
       const pending = xmpp.iqCaller.request(
         <iq type="get" id="identity" to={to} />,
@@ -85,6 +86,7 @@ for (const type of ["result", "error"]) {
 
 test("duplicate active ID is rejected without replacing or sending the request", async () => {
   const xmpp = mockClient();
+  xmpp._ready();
   let sent = 0;
   xmpp.send = async () => {
     sent++;
@@ -106,6 +108,7 @@ test.each(["timeout", "disconnect"])(
   "forged reply preserves %s cleanup",
   async (mode) => {
     const xmpp = mockClient();
+    xmpp._ready();
     const pending = xmpp.iqCaller.request(
       <iq type="get" id="cleanup" to="peer.example" />,
       30,
@@ -124,6 +127,7 @@ test.each(["timeout", "disconnect"])(
 
 test("request identity is stable when the caller mutates its stanza", async () => {
   const xmpp = mockClient();
+  xmpp._ready();
   const stanza = <iq type="get" id="snapshot" to="expected.example" />;
   const pending = xmpp.iqCaller.request(stanza);
   stanza.attrs.to = "attacker.example";
@@ -138,6 +142,7 @@ test("request identity is stable when the caller mutates its stanza", async () =
 
 test("a completed ID can be reused without accepting the previous peer", async () => {
   const xmpp = mockClient();
+  xmpp._ready();
   const first = xmpp.iqCaller.request(
     <iq type="get" id="reuse" to="first.example" />,
   );

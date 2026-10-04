@@ -2,6 +2,7 @@ import { mockClient, promise } from "../../test/support/index.js";
 
 test("answers to ping requests", async () => {
   const { entity } = mockClient();
+  entity._ready();
 
   entity.mockInput(
     <iq to="foo@bar" from="bar@foo" id="foo" type="get">
