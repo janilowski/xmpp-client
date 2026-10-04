@@ -1,5 +1,6 @@
 import IncomingContext from "./lib/IncomingContext.js";
 import OutgoingContext from "./lib/OutgoingContext.js";
+import Context from "./lib/Context.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
 
 export async function runMiddleware(stack, context) {
@@ -30,14 +31,17 @@ export async function runMiddleware(stack, context) {
   return run(0);
 }
 
-function listener(entity, middleware, Context) {
+function listener(entity, middleware, StanzaContext) {
   return (stanza) => {
     let ctx;
     try {
-      ctx = new Context(entity, stanza);
+      // Extension nonzas do not have XMPP stanza addressing semantics.
+      ctx = entity.isStanza(stanza)
+        ? new StanzaContext(entity, stanza)
+        : new Context(entity, stanza);
     } catch (error) {
       // Malformed peer identities must not route replies or escape into the XML parser.
-      if (Context === IncomingContext && error instanceof TypeError) {
+      if (StanzaContext === IncomingContext && error instanceof TypeError) {
         return;
       }
       throw error;

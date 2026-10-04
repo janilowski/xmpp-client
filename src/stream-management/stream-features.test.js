@@ -166,7 +166,7 @@ test("resume - resumed", async () => {
   });
 
   expect(await entity.catchOutgoing()).toEqual(
-    <message id="b">
+    <message id="b" xmlns="jabber:client">
       <delay
         xmlns="urn:xmpp:delay"
         from="foo@bar/test"
@@ -218,7 +218,7 @@ test("resumed event", async () => {
   });
 
   expect(await entity.catchOutgoing()).toEqual(
-    <message id="b">
+    <message id="b" xmlns="jabber:client">
       <delay
         xmlns="urn:xmpp:delay"
         from="foo@bar/test"

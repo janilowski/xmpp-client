@@ -58,7 +58,9 @@ function buildError(type, condition) {
 
 function iqHandler(entity) {
   return async function iqHandler(ctx, next) {
-    if (!isQuery(ctx)) return next();
+    if (!isQuery(ctx) || !entity.isStanza(ctx.stanza)) {
+      return next();
+    }
 
     const { stanza } = ctx;
     const children = stanza.getChildElements();

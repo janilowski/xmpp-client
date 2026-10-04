@@ -40,7 +40,9 @@ class IQCaller {
   }
 
   _route({ type, name, id, stanza }, next) {
-    if (!isReply({ name, type })) return next();
+    if (!isReply({ name, type }) || !this.entity.isStanza(stanza)) {
+      return next();
+    }
 
     const deferred = this.handlers.get(id);
 

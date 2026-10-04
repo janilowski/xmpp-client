@@ -10,6 +10,12 @@ test("answers to ping requests", async () => {
   );
 
   expect(await promise(entity, "send")).toEqual(
-    <iq to="bar@foo" from="foo@bar" id="foo" type="result" />,
+    <iq
+      to="bar@foo"
+      from="foo@bar"
+      id="foo"
+      type="result"
+      xmlns="jabber:client"
+    />,
   );
 });

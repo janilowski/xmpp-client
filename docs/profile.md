@@ -63,6 +63,10 @@ remain executable test markers, not evidence of successful validation.
 - Malformed correlated IQ responses reject that request locally without replying
   to a result/error stanza. Stanza errors are recoverable; stream errors close
   the transport. Unknown standard error conditions map to `undefined-condition`.
+- Core stanzas require the client content namespace. Incoming `jabber:server`
+  content closes with `invalid-namespace`; outgoing server content is rejected.
+  Foreign extension nonzas do not route IQs, parse XMPP addresses or enter SM
+  counters/replay queues.
 - XML limits are 1 MiB UTF-8 and 64 element levels, not RFC-prescribed values.
   Browser messages are buffered before delivery; these checks cannot bound
   native allocation before the library receives them.

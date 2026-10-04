@@ -17,7 +17,10 @@ export async function disconnectClients() {
 export default function mockClient(options) {
   const xmpp = client(options);
   clients.add(xmpp);
-  xmpp.send = Connection.prototype.send;
+  xmpp.send = function (element, ...args) {
+    element.attrs.xmlns ??= this.NS;
+    return Connection.prototype.send.call(this, element, ...args);
+  };
   xmpp.sendMany = async (stanzas) => {
     for (const stanza of stanzas) {
       await xmpp.send(stanza);

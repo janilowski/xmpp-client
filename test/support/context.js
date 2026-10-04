@@ -138,9 +138,11 @@ export default function context(entity = client()) {
       return this.sanitize(el).stanza;
     },
     fakeOutgoing(el) {
+      el.attrs.xmlns ??= entity.NS;
       entity.emit("send", el);
     },
     mockInput(el) {
+      el.attrs.xmlns ??= entity.NS;
       entity.emit("input", el.toString());
       entity._onElement(el);
     },

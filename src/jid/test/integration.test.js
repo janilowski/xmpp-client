@@ -36,7 +36,9 @@ test("prepares stanza addresses before writing and rejects malformed destination
   await xmpp.send(
     xml("message", { to: "E\u0301@xn--bcher-kva.example/R\u00a0X" }),
   );
-  expect(frames).toEqual(['<message to="é@bücher.example/R X"/>']);
+  expect(frames).toEqual([
+    '<message to="é@bücher.example/R X" xmlns="jabber:client"/>',
+  ]);
   await expect(xmpp.send(xml("message", { to: "@remote" }))).rejects.toThrow(
     TypeError,
   );

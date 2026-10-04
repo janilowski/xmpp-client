@@ -13,6 +13,8 @@ import { parseHost, parseService } from "./lib/util.js";
 
 const NS_STREAM = "urn:ietf:params:xml:ns:xmpp-streams";
 const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
+const NS_JABBER_CLIENT = "jabber:client";
+const NS_JABBER_SERVER = "jabber:server";
 
 class Connection extends EventEmitter {
   #socketListeners = null;
@@ -116,6 +118,14 @@ class Connection extends EventEmitter {
   }
 
   _onElement(element) {
+    // RFC 6120 §4.8.3: server content cannot enter a client stream.
+    if (this.NS === NS_JABBER_CLIENT && element.getNS() === NS_JABBER_SERVER) {
+      const error = new xml.XMLError("Unsupported content namespace");
+      error.condition = "invalid-namespace";
+      this.#onParserError(error);
+      return;
+    }
+
     const isStreamError = element.is("error", NS_JABBER_STREAM);
 
     if (isStreamError) {
@@ -452,6 +462,10 @@ class Connection extends EventEmitter {
   }
 
   async send(element) {
+    if (this.NS === NS_JABBER_CLIENT && element.getNS() === NS_JABBER_SERVER) {
+      throw new TypeError("Unsupported content namespace");
+    }
+
     if (this.isStanza(element)) {
       for (const attribute of ["to", "from"]) {
         if (element.attrs[attribute] !== undefined) {
@@ -488,7 +502,10 @@ class Connection extends EventEmitter {
 
   isStanza(element) {
     const { name } = element;
-    return name === "iq" || name === "message" || name === "presence";
+    return (
+      element.getNS() === this.NS &&
+      (name === "iq" || name === "message" || name === "presence")
+    );
   }
 
   isNonza(element) {

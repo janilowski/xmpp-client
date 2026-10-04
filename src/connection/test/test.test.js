@@ -3,6 +3,8 @@ import xml from "../../xml/index.js";
 
 import Connection from "../index.js";
 
+const NS_JABBER_CLIENT = "jabber:client";
+
 test("new Connection()", () => {
   const conn = new Connection();
   expect(conn.jid).toBe(null);
@@ -26,20 +28,28 @@ test("new Connection() with unexpected input", () => {
 
 test("isStanza()", () => {
   const conn = new Connection();
+  conn.NS = NS_JABBER_CLIENT;
 
   expect(conn.isStanza(xml("foo"))).toBe(false);
 
-  expect(conn.isStanza(xml("presence"))).toBe(true);
-  expect(conn.isStanza(xml("iq"))).toBe(true);
-  expect(conn.isStanza(xml("message"))).toBe(true);
+  for (const name of ["presence", "iq", "message"]) {
+    expect(conn.isStanza(xml(name, { xmlns: NS_JABBER_CLIENT }))).toBe(true);
+    expect(conn.isStanza(xml(name))).toBe(false);
+    expect(conn.isStanza(xml(name, { xmlns: "urn:test:extension" }))).toBe(
+      false,
+    );
+  }
 });
 
 test("isNonza()", () => {
   const conn = new Connection();
+  conn.NS = NS_JABBER_CLIENT;
 
   expect(conn.isNonza(xml("foo"))).toBe(true);
 
-  expect(conn.isNonza(xml("presence"))).toBe(false);
-  expect(conn.isNonza(xml("iq"))).toBe(false);
-  expect(conn.isNonza(xml("message"))).toBe(false);
+  for (const name of ["presence", "iq", "message"]) {
+    expect(conn.isNonza(xml(name, { xmlns: NS_JABBER_CLIENT }))).toBe(false);
+    expect(conn.isNonza(xml(name))).toBe(true);
+    expect(conn.isNonza(xml(name, { xmlns: "urn:test:extension" }))).toBe(true);
+  }
 });

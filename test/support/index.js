@@ -25,6 +25,7 @@ export {
 };
 
 export function mockInput(entity, el) {
+  el.attrs.xmlns ??= entity.NS;
   entity.emit("input", el.toString());
   entity._onElement(el);
 }

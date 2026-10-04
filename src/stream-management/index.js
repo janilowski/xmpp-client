@@ -177,7 +177,7 @@ export default function streamManagement({
     const { stanza } = context;
     clearTimeout(timeoutTimeout);
     timeoutTimeout = null;
-    if (["presence", "message", "iq"].includes(stanza.name)) {
+    if (entity.isStanza(stanza)) {
       sm.inbound = (sm.inbound + 1) % COUNTER_MODULUS;
     } else if (stanza.is("r", NS)) {
       // > When an <r/> element ("request") is received, the recipient MUST acknowledge it by sending an <a/> element to the sender containing a value of 'h' that is equal to the number of stanzas handled by the recipient of the <r/> element.
@@ -236,7 +236,9 @@ export default function streamManagement({
       sm.enableSent = true;
     }
     if (!sm.enabled && !sm.enableSent) return next();
-    if (!["presence", "message", "iq"].includes(stanza.name)) return next();
+    if (!entity.isStanza(stanza)) {
+      return next();
+    }
 
     if (!replaying.delete(stanza)) {
       sm.outbound_q.push({ stanza, stamp: datetime() });
