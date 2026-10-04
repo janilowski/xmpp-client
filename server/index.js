@@ -5,7 +5,7 @@ import fs from "node:fs/promises";
 import child_process from "node:child_process";
 import net from "node:net";
 
-import { promise, delay } from "../src/events/index.js";
+import { promise, delay, TimeoutError } from "../src/events/index.js";
 
 import { makeSelfSignedCertificate } from "../test/helpers.js";
 
@@ -18,6 +18,12 @@ const DATA_PATH = path.resolve(
 );
 const PID_PATH = path.join(DATA_PATH, "prosody.pid");
 const PROSODY_PORT = 5347;
+const FIXTURE_ENDPOINTS = [PROSODY_PORT, 5280, 5281].flatMap((port) =>
+  ["127.0.0.1", "::1"].map((host) => ({ host, port })),
+);
+const PROBE_TIMEOUT_MS = 1000;
+const READINESS_TIMEOUT_MS = 10_000;
+const READINESS_POLL_MS = 100;
 const CFG_PATH = path.join(DATA_PATH, "prosody.cfg.lua");
 const environment = {
   ...process.env,
@@ -32,35 +38,84 @@ function clean() {
   ).catch(() => {});
 }
 
-async function isPortOpen(port = PROSODY_PORT) {
+async function isPortOpen(
+  port = PROSODY_PORT,
+  host = "127.0.0.1",
+  timeout = PROBE_TIMEOUT_MS,
+) {
   const sock = new net.Socket();
-  sock.connect({ host: "127.0.0.1", port });
+  sock.connect({ host, port });
 
   try {
-    await promise(sock, "connect", "error", 1000);
+    await promise(sock, "connect", "error", timeout);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (error.code === "ECONNREFUSED") {
+      return false;
+    }
+    if (error instanceof TimeoutError) {
+      error.message = `Timed out probing Prosody listener [${host}]:${port}.`;
+      throw error;
+    }
+    throw new Error(
+      `Cannot probe Prosody listener [${host}]:${port}: ${error.message}`,
+      { cause: error },
+    );
   } finally {
     sock.destroy();
   }
 }
 
-async function waitForPort(open, timeout = 10_000) {
+async function waitForPorts(state, timeout = READINESS_TIMEOUT_MS) {
   const deadline = Date.now() + timeout;
+  let pending = FIXTURE_ENDPOINTS;
 
-  while ((await isPortOpen()) !== open) {
-    if (Date.now() >= deadline) {
-      const state = open ? "open" : "close";
-      throw new Error(`Prosody port ${PROSODY_PORT} did not ${state} in time.`);
+  // Host/module activation order varies; no one listener represents the fixture.
+  while (true) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      const endpoints = pending
+        .map(({ host, port }) => `[${host}]:${port}`)
+        .join(", ");
+      throw new Error(
+        `Prosody listeners did not become ${state} in time: ${endpoints}.`,
+      );
     }
 
-    await delay(100);
+    const statuses = await Promise.all(
+      FIXTURE_ENDPOINTS.map(async ({ host, port }) => {
+        try {
+          return await isPortOpen(
+            port,
+            host,
+            Math.min(PROBE_TIMEOUT_MS, remaining),
+          );
+        } catch (error) {
+          if (
+            !(error instanceof TimeoutError) &&
+            error.cause?.code !== "ECONNRESET"
+          ) {
+            throw error;
+          }
+          // A reset or timeout proves neither an open nor a closed listener.
+          return undefined;
+        }
+      }),
+    );
+    pending = FIXTURE_ENDPOINTS.filter(
+      (_endpoint, index) => statuses[index] !== (state === "open"),
+    );
+    if (!pending.length) {
+      return;
+    }
+    await delay(
+      Math.min(READINESS_POLL_MS, Math.max(0, deadline - Date.now())),
+    );
   }
 }
 
 function waitPortOpen() {
-  return waitForPort(true);
+  return waitForPorts("open");
 }
 
 async function ensureCertificate() {
@@ -107,7 +162,7 @@ async function ensureCertificate() {
 }
 
 function waitPortClose() {
-  return waitForPort(false);
+  return waitForPorts("closed");
 }
 
 async function kill(signal = "SIGTERM") {
@@ -133,11 +188,10 @@ async function getPid() {
 
 async function _start() {
   await prepare();
-  const FIXTURE_PORTS = [PROSODY_PORT, 5280, 5281];
-  for (const port of FIXTURE_PORTS) {
-    if (await isPortOpen(port)) {
+  for (const { host, port } of FIXTURE_ENDPOINTS) {
+    if (await isPortOpen(port, host)) {
       throw new Error(
-        `Port ${port} is occupied by another server; refusing to reuse it.`,
+        `Port [${host}]:${port} is occupied by another server; refusing to reuse it.`,
       );
     }
   }
@@ -151,8 +205,8 @@ async function _start() {
 }
 
 async function start() {
-  if ((await getPid()) && (await isPortOpen())) {
-    return;
+  if (await getPid()) {
+    return waitPortOpen();
   }
   await clean();
   return _start();

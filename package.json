@@ -72,7 +72,7 @@
     "*.{json,md,html,css,yaml,yml}": "prettier --write"
   },
   "scripts": {
-    "test:unit": "bun test src server/fixture.test.js ./src/sasl2/test.js ./src/sasl/test.js ./src/resource-binding/test.js ./src/reconnect/test.js ./src/debug/test.js ./src/error/test.js ./src/client/test.js",
+    "test:unit": "bun test src server/fixture.test.js server/readiness.test.js ./src/sasl2/test.js ./src/sasl/test.js ./src/resource-binding/test.js ./src/reconnect/test.js ./src/debug/test.js ./src/error/test.js ./src/client/test.js",
     "test:conformance": "bun conformance/run.ts",
     "test:mutations": "bun conformance/mutations.ts",
     "test": "bun run test:unit",
