@@ -45,7 +45,9 @@ for (const type of ["result", "error"]) {
       xmpp._ready();
       let settled = false;
       const pending = xmpp.iqCaller.request(
-        <iq type="get" id="identity" to={to} />,
+        <iq type="get" id="identity" to={to}>
+          <query xmlns="urn:test:iq" />
+        </iq>,
       );
       const outcome = pending.then(
         (value) => {
@@ -92,11 +94,18 @@ test("duplicate active ID is rejected without replacing or sending the request",
     sent++;
   };
   const original = xmpp.iqCaller.request(
-    <iq type="get" id="same" to="first.example" />,
+    <iq type="get" id="same" to="first.example">
+      <query xmlns="urn:test:iq" />
+    </iq>,
   );
   const outcome = original.catch((error) => error);
   await expect(
-    xmpp.iqCaller.request(<iq type="get" id="same" to="second.example" />, 10),
+    xmpp.iqCaller.request(
+      <iq type="get" id="same" to="second.example">
+        <query xmlns="urn:test:iq" />
+      </iq>,
+      10,
+    ),
   ).rejects.toThrow("Duplicate IQ id");
   expect(sent).toBe(1);
   const reply = <iq type="result" id="same" from="first.example" />;
@@ -110,7 +119,9 @@ test.each(["timeout", "disconnect"])(
     const xmpp = mockClient();
     xmpp._ready();
     const pending = xmpp.iqCaller.request(
-      <iq type="get" id="cleanup" to="peer.example" />,
+      <iq type="get" id="cleanup" to="peer.example">
+        <query xmlns="urn:test:iq" />
+      </iq>,
       30,
     );
     const outcome = pending.catch((error) => error);
@@ -128,7 +139,11 @@ test.each(["timeout", "disconnect"])(
 test("request identity is stable when the caller mutates its stanza", async () => {
   const xmpp = mockClient();
   xmpp._ready();
-  const stanza = <iq type="get" id="snapshot" to="expected.example" />;
+  const stanza = (
+    <iq type="get" id="snapshot" to="expected.example">
+      <query xmlns="urn:test:iq" />
+    </iq>
+  );
   const pending = xmpp.iqCaller.request(stanza);
   stanza.attrs.to = "attacker.example";
   stanza.attrs.id = "changed";
@@ -144,12 +159,16 @@ test("a completed ID can be reused without accepting the previous peer", async (
   const xmpp = mockClient();
   xmpp._ready();
   const first = xmpp.iqCaller.request(
-    <iq type="get" id="reuse" to="first.example" />,
+    <iq type="get" id="reuse" to="first.example">
+      <query xmlns="urn:test:iq" />
+    </iq>,
   );
   mockInput(xmpp, <iq type="result" id="reuse" from="first.example" />);
   await first;
   const second = xmpp.iqCaller.request(
-    <iq type="get" id="reuse" to="second.example" />,
+    <iq type="get" id="reuse" to="second.example">
+      <query xmlns="urn:test:iq" />
+    </iq>,
   );
   mockInput(xmpp, <iq type="result" id="reuse" from="first.example" />);
   expect(xmpp.iqCaller.handlers.has("reuse")).toBe(true);

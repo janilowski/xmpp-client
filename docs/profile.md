@@ -66,6 +66,11 @@ remain executable test markers, not evidence of successful validation.
   IQ handlers returning malformed core error elements produce a
   `cancel/internal-server-error` reply and one local error. Foreign error-named
   payloads remain ordinary IQ results; scoped namespace bindings are preserved.
+- Outgoing core IQs require an ID, a defined type and the child structure in
+  RFC 6120 §8.2.3. Get/set payloads require an extension namespace (§8.4).
+  Validation checks serialized output before writes or SM admission; it does
+  not infer extension schemas. Empty opaque IDs and namespace aliases remain
+  allowed, and foreign IQ-named nonzas remain outside these rules.
 - Core stanzas require the client content namespace. Incoming `jabber:server`
   content closes with `invalid-namespace`; outgoing server content is rejected.
   Foreign extension nonzas do not route IQs, parse XMPP addresses or enter SM

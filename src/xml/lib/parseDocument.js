@@ -47,10 +47,14 @@ export function validateDocument(
   source,
   context = XML_CONTEXT.DOCUMENT,
   onOpenTag,
+  onCloseTag,
 ) {
   const parser = createParser(source, context, XML_DIRECTION.OUTPUT);
   if (onOpenTag) {
     parser.on("opentag", onOpenTag);
+  }
+  if (onCloseTag) {
+    parser.on("closetag", onCloseTag);
   }
   parser.write(source).close();
 }

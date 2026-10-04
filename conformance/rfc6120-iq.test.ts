@@ -71,6 +71,13 @@ test.each([
       peer.send(
         `<iq xmlns="${CONTENT}" from="example.test" to="user@example.test/r" ${id} ${type ? `type="${type}"` : ""}>${payload}</iq>`,
       );
+      if (!id) {
+        // A valid following reply exposes a missing response as an ID mismatch,
+        // including when local output validation rejects the malformed reply.
+        peer.send(
+          `<iq xmlns="${CONTENT}" type="get" id="barrier">${PING}</iq>`,
+        );
+      }
       const events = readFrame(await peer.next());
       expect(events[0]).toEqual({
         open: `{${CONTENT}}iq`,
@@ -93,6 +100,12 @@ test.each([
         ).toHaveLength(1);
       } else {
         expect(events).toHaveLength(2);
+      }
+      if (!id) {
+        expect(readFrame(await peer.next())[0]).toEqual({
+          open: `{${CONTENT}}iq`,
+          attributes: { "{}type": "result", "{}id": "barrier" },
+        });
       }
     });
   },

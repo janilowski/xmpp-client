@@ -186,11 +186,11 @@ for (const entry of ["start", "reconnect"] as const) {
               const id = `forbidden-${name}-${to}`;
               const result = await xmpp
                 .send(
-                  xml(name, {
-                    id,
-                    to,
-                    ...(name === "iq" ? { type: "get" } : {}),
-                  }),
+                  xml(
+                    name,
+                    { id, to, ...(name === "iq" ? { type: "get" } : {}) },
+                    name === "iq" ? xml("query", EXTENSION) : undefined,
+                  ),
                 )
                 .then(
                   () => undefined,
@@ -222,11 +222,15 @@ for (const entry of ["start", "reconnect"] as const) {
           expect(xmpp.jid?.toString()).toBe(FULL_JID);
           for (const name of ["message", "presence", "iq"]) {
             await xmpp.send(
-              xml(name, {
-                id: `online-${name}`,
-                to: "bob@remote.test/r",
-                ...(name === "iq" ? { type: "get" } : {}),
-              }),
+              xml(
+                name,
+                {
+                  id: `online-${name}`,
+                  to: "bob@remote.test/r",
+                  ...(name === "iq" ? { type: "get" } : {}),
+                },
+                name === "iq" ? xml("query", EXTENSION) : undefined,
+              ),
             );
           }
           await flushWire(xmpp, current.peer);
@@ -270,11 +274,15 @@ test.each(["sasl", "sasl2"] as const)(
       for (const name of ["message", "presence", "iq"]) {
         for (const to of [undefined, "example.test", "EXAMPLE.TEST"]) {
           await xmpp.send(
-            xml(name, {
-              id: `server-${name}-${to}`,
-              to,
-              ...(name === "iq" ? { type: "get" } : {}),
-            }),
+            xml(
+              name,
+              {
+                id: `server-${name}-${to}`,
+                to,
+                ...(name === "iq" ? { type: "get" } : {}),
+              },
+              name === "iq" ? xml("query", EXTENSION) : undefined,
+            ),
           );
         }
         await xmpp.send(
@@ -291,11 +299,15 @@ test.each(["sasl", "sasl2"] as const)(
         ]) {
           const result = await xmpp
             .send(
-              xml(name, {
-                id: `self-${name}-${to}`,
-                to,
-                ...(name === "iq" ? { type: "get" } : {}),
-              }),
+              xml(
+                name,
+                {
+                  id: `self-${name}-${to}`,
+                  to,
+                  ...(name === "iq" ? { type: "get" } : {}),
+                },
+                name === "iq" ? xml("query", EXTENSION) : undefined,
+              ),
             )
             .then(
               () => undefined,
@@ -316,11 +328,15 @@ test.each(["sasl", "sasl2"] as const)(
         ]) {
           const result = await xmpp
             .send(
-              xml(name, {
-                id: `forbidden-${name}-${to}`,
-                to,
-                ...(name === "iq" ? { type: "get" } : {}),
-              }),
+              xml(
+                name,
+                {
+                  id: `forbidden-${name}-${to}`,
+                  to,
+                  ...(name === "iq" ? { type: "get" } : {}),
+                },
+                name === "iq" ? xml("query", EXTENSION) : undefined,
+              ),
             )
             .then(
               () => undefined,
@@ -758,11 +774,15 @@ for (const mode of ["ordinary", "inline"] as const) {
         await flushWire(xmpp, first.peer);
         for (const [index, name] of ["message", "presence", "iq"].entries()) {
           await xmpp.send(
-            xml(name, {
-              id: `pending-${index}`,
-              to: "bob@remote.test/r",
-              ...(name === "iq" ? { type: "get" } : {}),
-            }),
+            xml(
+              name,
+              {
+                id: `pending-${index}`,
+                to: "bob@remote.test/r",
+                ...(name === "iq" ? { type: "get" } : {}),
+              },
+              name === "iq" ? xml("query", EXTENSION) : undefined,
+            ),
           );
         }
         await flushWire(xmpp, first.peer);
@@ -791,11 +811,15 @@ for (const mode of ["ordinary", "inline"] as const) {
         for (const name of ["message", "presence", "iq"]) {
           const result = await xmpp
             .send(
-              xml(name, {
-                id: `forbidden-${name}`,
-                to: "remote.test",
-                ...(name === "iq" ? { type: "get" } : {}),
-              }),
+              xml(
+                name,
+                {
+                  id: `forbidden-${name}`,
+                  to: "remote.test",
+                  ...(name === "iq" ? { type: "get" } : {}),
+                },
+                name === "iq" ? xml("query", EXTENSION) : undefined,
+              ),
             )
             .catch((error: Error) => error);
           expect(result).toBeInstanceOf(Error);

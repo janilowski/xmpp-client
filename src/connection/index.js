@@ -25,6 +25,13 @@ const NS_STREAM = "urn:ietf:params:xml:ns:xmpp-streams";
 const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
 const NS_JABBER_CLIENT = "jabber:client";
 const NS_JABBER_SERVER = "jabber:server";
+const IQ_TYPES = new Set(["get", "set", "result", "error"]);
+const RESERVED_NAMESPACES = new Set([
+  "",
+  NS_JABBER_CLIENT,
+  NS_JABBER_SERVER,
+  NS_JABBER_STREAM,
+]);
 
 class Connection extends EventEmitter {
   #socketListeners = null;
@@ -616,47 +623,98 @@ class Connection extends EventEmitter {
     const source = element.toString();
     try {
       let isRoot = true;
-      validateDocument(source, XML_CONTEXT.XMPP, (tag) => {
-        if (isRoot) {
-          isRoot = false;
-          if (
-            tag.local !== name ||
-            tag.uri !== namespace ||
-            element.getName() !== name ||
-            (element.getNS()?.toString(10) ?? "") !== namespace ||
-            (namespace === NS_JABBER_CLIENT &&
-              (name === "message" || name === "presence" || name === "iq") &&
-              (elementName !== name || element.name !== name))
-          ) {
-            throw new TypeError("Serialized element does not match its root");
-          }
-          for (const [attribute, expected] of attributes) {
-            const value = element.attrs[attribute];
-            const actual =
-              value == null
-                ? undefined
-                : typeof value === "string"
-                  ? value
-                  : value.toString(10);
+      const isIQ =
+        this.NS === NS_JABBER_CLIENT && name === "iq" && namespace === this.NS;
+      let depth = 0;
+      let iqType;
+      let iqChildren = 0;
+      let iqErrors = 0;
+      validateDocument(
+        source,
+        XML_CONTEXT.XMPP,
+        (tag) => {
+          depth += 1;
+          if (isRoot) {
+            isRoot = false;
             if (
-              tag.attributes[attribute]?.value !== expected ||
-              actual !== expected
+              tag.local !== name ||
+              tag.uri !== namespace ||
+              element.getName() !== name ||
+              (element.getNS()?.toString(10) ?? "") !== namespace ||
+              (namespace === NS_JABBER_CLIENT &&
+                (name === "message" || name === "presence" || name === "iq") &&
+                (elementName !== name || element.name !== name))
+            ) {
+              throw new TypeError("Serialized element does not match its root");
+            }
+            for (const [attribute, expected] of attributes) {
+              const value = element.attrs[attribute];
+              const actual =
+                value == null
+                  ? undefined
+                  : typeof value === "string"
+                    ? value
+                    : value.toString(10);
+              if (
+                tag.attributes[attribute]?.value !== expected ||
+                actual !== expected
+              ) {
+                throw new TypeError(
+                  "Serialized stanza does not match its attributes",
+                );
+              }
+            }
+            if (isIQ) {
+              iqType = tag.attributes.type?.value;
+              if (tag.attributes.id === undefined || !IQ_TYPES.has(iqType)) {
+                throw new TypeError("IQ requires an id and a valid type");
+              }
+            }
+          } else if (isIQ && depth === 2) {
+            iqChildren += 1;
+            if (tag.local === "error" && tag.uri === this.NS) {
+              iqErrors += 1;
+              if (iqType !== "error") {
+                throw new TypeError("Only error IQ can contain a core error");
+              }
+            }
+            if (
+              (iqType === "get" || iqType === "set") &&
+              RESERVED_NAMESPACES.has(tag.uri)
             ) {
               throw new TypeError(
-                "Serialized stanza does not match its attributes",
+                "IQ request payload requires an extension namespace",
               );
             }
           }
-        }
-        if (this.NS === NS_JABBER_CLIENT && tag.prefix && tag.uri === this.NS) {
-          throw new TypeError("XMPP content elements must not use prefixes");
-        }
-        // Language applies to serialized descendants, including extensions.
-        const lang = tag.attributes["xml:lang"]?.value;
-        if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {
-          throw new TypeError("Invalid language tag");
-        }
-      });
+          if (
+            this.NS === NS_JABBER_CLIENT &&
+            tag.prefix &&
+            tag.uri === this.NS
+          ) {
+            throw new TypeError("XMPP content elements must not use prefixes");
+          }
+          // Language applies to serialized descendants, including extensions.
+          const lang = tag.attributes["xml:lang"]?.value;
+          if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {
+            throw new TypeError("Invalid language tag");
+          }
+        },
+        () => {
+          depth -= 1;
+          if (!isIQ || depth !== 0) {
+            return;
+          }
+          // RFC 6120 §8.2.3 counts direct children, not extension descendants.
+          if (
+            ((iqType === "get" || iqType === "set") && iqChildren !== 1) ||
+            (iqType === "result" && iqChildren > 1) ||
+            (iqType === "error" && (iqErrors !== 1 || iqChildren > 2))
+          ) {
+            throw new TypeError("Invalid IQ child structure");
+          }
+        },
+      );
     } catch (error) {
       throw new TypeError("Invalid outgoing XML", { cause: error });
     }

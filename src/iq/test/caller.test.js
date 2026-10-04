@@ -122,7 +122,7 @@ test("rejects with a TimeoutError if no answer is received within timeout", asyn
 
   const promise = iqCaller.request(
     <iq type="get">
-      <foo />
+      <foo xmlns="urn:test:iq" />
     </iq>,
     1,
   );

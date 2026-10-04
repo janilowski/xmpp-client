@@ -6,6 +6,7 @@ import { readFrame } from "./xml.ts";
 const STREAM = "http://etherx.jabber.org/streams";
 const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
+const QUERY = "urn:test:iq";
 
 // RFC 7622 §4: preparation in protocol slots, not only standalone JID objects.
 test("RFC 7622 prepares outgoing addresses and correlates Unicode wire identities", async () => {
@@ -59,11 +60,15 @@ test("RFC 7622 prepares outgoing addresses and correlates Unicode wire identitie
     expect(peer.transcript[0]).toContain('to="bücher.example"');
     const result = await xmpp.iqCaller
       .request(
-        xml("iq", {
-          id: "unicode",
-          type: "get",
-          to: "E\u0301@xn--bcher-kva.example/Re\u0301s",
-        }),
+        xml(
+          "iq",
+          {
+            id: "unicode",
+            type: "get",
+            to: "E\u0301@xn--bcher-kva.example/Re\u0301s",
+          },
+          xml("query", QUERY),
+        ),
         500,
       )
       .catch((error: Error) => error);
