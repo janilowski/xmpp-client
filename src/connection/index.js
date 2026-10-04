@@ -484,6 +484,17 @@ class Connection extends EventEmitter {
   }
 
   async send(element) {
+    // Namespace lookup must use the same scalar values as serialization.
+    for (const attribute of Object.keys(element.attrs)) {
+      const value = element.attrs[attribute];
+      if (
+        (attribute === "xmlns" || attribute.startsWith("xmlns:")) &&
+        value != null &&
+        typeof value !== "string"
+      ) {
+        element.attrs[attribute] = value.toString(10);
+      }
+    }
     if (this.NS === NS_JABBER_CLIENT && element.getNS() === NS_JABBER_SERVER) {
       throw new TypeError("Unsupported content namespace");
     }
@@ -491,7 +502,7 @@ class Connection extends EventEmitter {
     if (this.isStanza(element)) {
       let destination;
       for (const attribute of ["to", "from"]) {
-        if (element.attrs[attribute] !== undefined) {
+        if (element.attrs[attribute] != null) {
           const address = jid(element.attrs[attribute].toString());
           element.attrs[attribute] = address.toString();
           if (attribute === "to") {
@@ -504,9 +515,58 @@ class Connection extends EventEmitter {
       }
     }
     element.parent = this.root;
+    // Preserve the preflight envelope across a caller-defined serializer.
+    const name = element.getName();
+    const namespace = element.getNS()?.toString(10) ?? "";
+    const elementName = element.name;
+    const attributes = this.isStanza(element)
+      ? ["id", "type", "to", "from"].map((attribute) => {
+          const value = element.attrs[attribute];
+          return [
+            attribute,
+            value == null
+              ? undefined
+              : typeof value === "string"
+                ? value
+                : value.toString(10),
+          ];
+        })
+      : [];
     const source = element.toString();
     try {
+      let isRoot = true;
       validateDocument(source, XML_CONTEXT.XMPP, (tag) => {
+        if (isRoot) {
+          isRoot = false;
+          if (
+            tag.local !== name ||
+            tag.uri !== namespace ||
+            element.getName() !== name ||
+            (element.getNS()?.toString(10) ?? "") !== namespace ||
+            (namespace === NS_JABBER_CLIENT &&
+              (name === "message" || name === "presence" || name === "iq") &&
+              (elementName !== name || element.name !== name))
+          ) {
+            throw new TypeError("Serialized element does not match its root");
+          }
+          for (const [attribute, expected] of attributes) {
+            const value = element.attrs[attribute];
+            const actual =
+              value == null
+                ? undefined
+                : typeof value === "string"
+                  ? value
+                  : value.toString(10);
+            if (
+              tag.attributes[attribute]?.value !== expected ||
+              actual !== expected
+            ) {
+              throw new TypeError(
+                "Serialized stanza does not match its attributes",
+              );
+            }
+          }
+        }
         if (this.NS === NS_JABBER_CLIENT && tag.prefix && tag.uri === this.NS) {
           throw new TypeError("XMPP content elements must not use prefixes");
         }

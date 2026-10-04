@@ -19,6 +19,7 @@ import { readFrame } from "./xml.ts";
 // Stream-content prefix rules and extension scopes: rfc6120-content-prefixes.test.ts.
 // Outgoing language tag format and inherited XML attributes: rfc6120-language-tags.test.ts.
 // Opening attributes, identity and target validation: rfc6120-stream-headers.test.ts.
+// Serialized envelope and replay metadata: rfc6120-serialized-stanzas.test.ts.
 // Feature negotiation and stream errors: rfc6120-streams.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).
 

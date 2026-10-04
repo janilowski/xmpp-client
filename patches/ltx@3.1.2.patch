@@ -11,6 +11,21 @@ index a45ba26c2320f8caeb1828b8d8df07cdfb5a576d..3f6863dcc953136c445a197c2d1206fd
          return this.attrs.xmlns;
        } else if (this.parent) {
          return this.parent.findNS();
+diff --git a/lib/escape.js b/lib/escape.js
+index 5ace9258d64fc54a0e55bd3c4e88897d41ce7827..4239adb1e43a950f463b6c162cdf0de39882c57b 100644
+--- a/lib/escape.js
++++ b/lib/escape.js
+@@ -8,2 +8,5 @@ const escapeXMLTable = {
+   "'": "&apos;",
++  "\t": "&#x9;",
++  "\n": "&#xA;",
++  "\r": "&#xD;",
+ };
+@@ -49,3 +52,3 @@ function unescapeXMLReplace(match) {
+ function escapeXML(s) {
+-  return s.replace(/["&'<>]/g, escapeXMLReplace);
++  return s.replace(/["&'<>\t\n\r]/g, escapeXMLReplace);
+ }
 diff --git a/src/Element.js b/src/Element.js
 index e31c19e276018e3a46e2ddd8b2f1b1ae9c6da5eb..a95f782bb91b9af7fee34ef4109fb9a04da34ae7 100644
 --- a/src/Element.js
@@ -24,3 +39,18 @@ index e31c19e276018e3a46e2ddd8b2f1b1ae9c6da5eb..a95f782bb91b9af7fee34ef4109fb9a0
          return this.attrs.xmlns;
        } else if (this.parent) {
          return this.parent.findNS();
+diff --git a/src/escape.js b/src/escape.js
+index 7c280a86e507440ccdb3bf8d6e6375f3717a20ab..2fe8b2721b079168c9fd00e01ffd00a46a5223a6 100644
+--- a/src/escape.js
++++ b/src/escape.js
+@@ -6,2 +6,5 @@ const escapeXMLTable = {
+   "'": "&apos;",
++  "\t": "&#x9;",
++  "\n": "&#xA;",
++  "\r": "&#xD;",
+ };
+@@ -47,3 +50,3 @@ function unescapeXMLReplace(match) {
+ export function escapeXML(s) {
+-  return s.replace(/["&'<>]/g, escapeXMLReplace);
++  return s.replace(/["&'<>\t\n\r]/g, escapeXMLReplace);
+ }

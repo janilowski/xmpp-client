@@ -433,7 +433,10 @@ describe("RFC 7395 — client wire behavior", () => {
   test("§3.2/3.3.3 sends UTF-8 text with independent stanza namespaces", async () => {
     await openStream();
     await peer.next();
-    await xmpp.send(xml("message", {}, xml("body", {}, "Zażółć 🐦 & < >")));
+    const result = await xmpp
+      .send(xml("message", {}, xml("body", {}, "Zażółć 🐦 & < >")))
+      .catch((error: Error) => error);
+    expect(result).toBeUndefined();
     expect(readFrame(await peer.next())).toEqual(
       readFrame(
         '<message xmlns="jabber:client" xml:lang="en"><body>Zażółć 🐦 &amp; &lt; &gt;</body></message>',
