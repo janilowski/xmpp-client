@@ -169,3 +169,13 @@ Invalid addresses cannot enter middleware or complete IQs, but raw
 explicitly use JID preparation. Bound standalone untrusted input before
 normalization. Confusable detection and safe display remain application duties;
 never authorize by display text. See [Unicode maintenance](unicode.md).
+
+## XML dependency maintenance
+
+The XML factory retains ltx's Element constructor rather than wrapping it.
+The checked-in Bun patch corrects explicit default-namespace cancellation in
+both CommonJS and ES module exports. Install with `bun install --frozen-lockfile`;
+dependency upgrades must recheck cancellation, scoped dispatch and constructor
+compatibility before removing or regenerating the patch. Distributed bundles
+embed the corrected implementation; consumers' separate raw ltx installations
+are not patched and do not share the bundle's constructor.

@@ -14,6 +14,7 @@ import { readFrame } from "./xml.ts";
 // Pre-completion stanza routing and resumption: rfc6120-stanza-routing.test.ts.
 // IQ envelopes and stanza errors: rfc6120-iq.test.ts.
 // Content namespace isolation and SM accounting: rfc6120-namespaces.test.ts.
+// Default namespace cancellation and consumer dispatch: rfc6120-namespace-scope.test.ts.
 // Outgoing XML well-formedness and Unicode: rfc6120-outgoing-xml.test.ts.
 // Stream-content prefix rules and extension scopes: rfc6120-content-prefixes.test.ts.
 // Feature negotiation and stream errors: rfc6120-streams.test.ts.

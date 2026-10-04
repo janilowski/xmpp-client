@@ -1,6 +1,8 @@
 import {
   cpSync,
+  mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -14,6 +16,22 @@ import process from "node:process";
 const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
+  {
+    name: "inherit through a cancelled default namespace",
+    file: "node_modules/ltx/lib/Element.js",
+    before: 'if (this.attrs.xmlns || this.attrs.xmlns === "") {',
+    after: "if (this.attrs.xmlns) {",
+    suite: "conformance/rfc6120-namespace-scope.test.ts",
+    test: "correlated IQ respects scope / cancelled error$",
+  },
+  {
+    name: "drop namespace cancellation from the ESM constructor",
+    file: "node_modules/ltx/src/Element.js",
+    before: 'if (this.attrs.xmlns || this.attrs.xmlns === "") {',
+    after: "if (this.attrs.xmlns) {",
+    suite: "src/xml/test/namespace-scope.test.js",
+    test: "ltx ES module exports preserve explicit cancellation$",
+  },
   {
     name: "generate prefixes for XMPP content elements",
     file: "src/connection/index.js",
@@ -801,7 +819,7 @@ const mutations = [
   },
 ];
 
-// Mutate disposable copies; never alter the worktree or dependencies.
+// Mutate disposable copies; never alter the worktree or shared dependencies.
 for (const mutation of mutations) {
   const directory = mkdtempSync(join(tmpdir(), "xmpp-mutation-"));
   try {
@@ -818,6 +836,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-outgoing-xml.test.ts",
       "conformance/rfc6120-content-prefixes.test.ts",
+      "conformance/rfc6120-namespace-scope.test.ts",
       "conformance/rfc6120-iq.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
@@ -839,11 +858,25 @@ for (const mutation of mutations) {
     ]) {
       cpSync(file, join(directory, file));
     }
-    symlinkSync(
-      resolve("node_modules"),
-      join(directory, "node_modules"),
-      "dir",
-    );
+    if (mutation.file.startsWith("node_modules/ltx/")) {
+      // Dependency mutations must never follow the shared node_modules symlink.
+      mkdirSync(join(directory, "node_modules"));
+      for (const dependency of readdirSync("node_modules")) {
+        const source = resolve("node_modules", dependency);
+        const target = join(directory, "node_modules", dependency);
+        if (dependency === "ltx") {
+          cpSync(source, target, { recursive: true, dereference: true });
+        } else {
+          symlinkSync(source, target, "dir");
+        }
+      }
+    } else {
+      symlinkSync(
+        resolve("node_modules"),
+        join(directory, "node_modules"),
+        "dir",
+      );
+    }
     const args = ["test", mutation.suite, "--test-name-pattern", mutation.test];
     const options = {
       cwd: directory,

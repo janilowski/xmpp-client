@@ -1,0 +1,26 @@
+diff --git a/lib/Element.js b/lib/Element.js
+index a45ba26c2320f8caeb1828b8d8df07cdfb5a576d..3f6863dcc953136c445a197c2d1206fd330f0e7c 100644
+--- a/lib/Element.js
++++ b/lib/Element.js
+@@ -50,7 +50,7 @@ class Element {
+   findNS(prefix) {
+     if (!prefix) {
+       /* default namespace */
+-      if (this.attrs.xmlns) {
++      if (this.attrs.xmlns || this.attrs.xmlns === "") {
+         return this.attrs.xmlns;
+       } else if (this.parent) {
+         return this.parent.findNS();
+diff --git a/src/Element.js b/src/Element.js
+index e31c19e276018e3a46e2ddd8b2f1b1ae9c6da5eb..a95f782bb91b9af7fee34ef4109fb9a04da34ae7 100644
+--- a/src/Element.js
++++ b/src/Element.js
+@@ -48,7 +48,7 @@ class Element {
+   findNS(prefix) {
+     if (!prefix) {
+       /* default namespace */
+-      if (this.attrs.xmlns) {
++      if (this.attrs.xmlns || this.attrs.xmlns === "") {
+         return this.attrs.xmlns;
+       } else if (this.parent) {
+         return this.parent.findNS();
