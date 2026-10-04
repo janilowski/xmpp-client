@@ -17,6 +17,22 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "allow generated standalone declarations",
+    file: "src/xml/lib/parseDocument.js",
+    before: "standalone !== undefined",
+    after: "false",
+    suite: "conformance/rfc6120-outgoing-xml.test.ts",
+    test: 'send rejects an outgoing standalone="no" declaration$',
+  },
+  {
+    name: "prohibit allowed incoming standalone declarations",
+    file: "src/xml/lib/parseDocument.js",
+    before: "direction === XML_DIRECTION.OUTPUT &&",
+    after: "",
+    suite: "src/xml/test/validateDocument.test.js",
+    test: "document and incoming XMPP grammar preserve standalone=no$",
+  },
+  {
     name: "trust a public identity hint for implicit senders",
     file: "src/connection/lib/negotiation.js",
     before: "return connections.get(entity)?.account ?? undefined;",

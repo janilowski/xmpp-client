@@ -3,12 +3,13 @@ import Element from "ltx/lib/Element.js";
 import XMLError from "./XMLError.js";
 
 export const XML_CONTEXT = { DOCUMENT: "document", XMPP: "xmpp" };
+const XML_DIRECTION = { INPUT: "input", OUTPUT: "output" };
 export const MAX_XML_BYTES = 1024 * 1024;
 const MAX_XML_DEPTH = 64;
 const UNPAIRED_SURROGATE = /[\uD800-\uDFFF]/u;
 const encoder = new TextEncoder();
 
-function createParser(source, context) {
+function createParser(source, context, direction) {
   // XML 1.0 excludes lone surrogates; saxes assumes every high surrogate is paired.
   if (UNPAIRED_SURROGATE.test(source)) {
     throw new XMLError("XML contains an unpaired UTF-16 surrogate");
@@ -25,9 +26,17 @@ function createParser(source, context) {
       throw error;
     });
   }
-  parser.on("xmldecl", ({ version, encoding }) => {
+  parser.on("xmldecl", ({ version, encoding, standalone }) => {
     if (version !== "1.0" || (encoding && encoding.toLowerCase() !== "utf-8")) {
       throw new XMLError("Expected XML 1.0 encoded as UTF-8");
+    }
+    // RFC 6120 §11.5 forbids outbound SDDecl; incoming declarations may be ignored.
+    if (
+      context === XML_CONTEXT.XMPP &&
+      direction === XML_DIRECTION.OUTPUT &&
+      standalone !== undefined
+    ) {
+      throw new XMLError("Prohibited XML declaration: standalone");
     }
   });
   return parser;
@@ -39,7 +48,7 @@ export function validateDocument(
   context = XML_CONTEXT.DOCUMENT,
   onOpenTag,
 ) {
-  const parser = createParser(source, context);
+  const parser = createParser(source, context, XML_DIRECTION.OUTPUT);
   if (onOpenTag) {
     parser.on("opentag", onOpenTag);
   }
@@ -56,7 +65,7 @@ export default function parseDocument(source, context = XML_CONTEXT.DOCUMENT) {
     error.condition = "policy-violation";
     throw error;
   }
-  const parser = createParser(source, context);
+  const parser = createParser(source, context, XML_DIRECTION.INPUT);
   let root;
   let cursor;
   let depth = 0;

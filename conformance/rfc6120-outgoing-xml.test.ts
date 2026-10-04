@@ -77,6 +77,15 @@ async function session() {
   try {
     await xmpp.start();
     await enabled;
+    // The matching reply proves feature middleware finished before queue assertions.
+    await xmpp.iqCaller.request(
+      xml(
+        "iq",
+        { type: "get", id: "barrier" },
+        xml("ping", { xmlns: PING }),
+      ),
+    );
+    expect(xmpp.streamManagement.enabled).toBe(true);
   } catch (error) {
     await xmpp.stop();
     await peer.stop();
@@ -256,7 +265,63 @@ for (const { name, element } of malformed) {
   );
 }
 
+// RFC 6120 §11.5 forbids SDDecl on output, not standalone XML documents.
+for (const standalone of ["yes", "no"]) {
+  test.each(METHODS)(
+    `RFC 6120 §11.5: %s rejects an outgoing standalone="${standalone}" declaration`,
+    async (method) => {
+      const { xmpp, peer, errors } = await session();
+      const stanza = xml("message", { id: "invalid" });
+      stanza.toString = () =>
+        `<?xml version="1.0" standalone="${standalone}"?><message xmlns="${CONTENT}" id="invalid"/>`;
+      const sent: unknown[] = [];
+      xmpp.on("send", (element) => sent.push(element));
+      try {
+        const queue = [...xmpp.streamManagement.outbound_q];
+        const result = await (
+          method === "send" ? xmpp.send(stanza) : xmpp.sendMany([stanza])
+        ).then(
+          () => undefined,
+          (error: Error) => error,
+        );
+        expect(result).toBeInstanceOf(TypeError);
+        expect(xmpp.streamManagement.outbound_q).toEqual(queue);
+        expect(sent).not.toContain(stanza);
+
+        await xmpp.iqCaller.request(
+          xml(
+            "iq",
+            { type: "get", id: "barrier" },
+            xml("ping", { xmlns: PING }),
+          ),
+        );
+        expect(
+          peer.transcript.some((frame) => frame.includes('id="invalid"')),
+        ).toBe(false);
+        expect(xmpp.status).toBe("online");
+        expect(errors).toEqual([]);
+        expect(peer.errors).toEqual([]);
+      } finally {
+        await xmpp.stop();
+        await peer.stop();
+      }
+    },
+  );
+}
+
 const valid = [
+  ...['<?xml version="1.0"?>', '<?xml version="1.0" encoding="UTF-8"?>'].map(
+    (declaration) => ({
+      name: `XML declaration without SDDecl: ${declaration}`,
+      element: () => {
+        const stanza = xml("message", { id: "valid" });
+        stanza.toString = () =>
+          `${declaration}<message xmlns="${CONTENT}" id="valid"/>`;
+        return stanza;
+      },
+      expected: `${declaration}<message xmlns="${CONTENT}" id="valid"/>`,
+    }),
+  ),
   {
     name: "valid output exceeds the receive-side byte limit",
     element: () => xml("message", { id: "valid" }, xml("body", {}, LARGE_TEXT)),

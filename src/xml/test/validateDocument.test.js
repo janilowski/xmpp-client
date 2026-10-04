@@ -56,6 +56,40 @@ test("document-context validation preserves comments and processing instructions
   ).toBeUndefined();
 });
 
+// RFC 6120 §11.5: SDDecl is forbidden on output; incoming "no" may be ignored.
+test.each(["yes", "no"])(
+  "outgoing XMPP rejects standalone=%s",
+  (standalone) => {
+    const source = `<?xml version="1.0" standalone="${standalone}"?><root/>`;
+    expect(() => validateDocument(source, XML_CONTEXT.XMPP)).toThrow(
+      "standalone",
+    );
+  },
+);
+
+test.each(["yes", "no"])(
+  "document and incoming XMPP grammar preserve standalone=%s",
+  (standalone) => {
+    const source = `<?xml version="1.0" standalone="${standalone}"?><root/>`;
+    expect(() => validateDocument(source, XML_CONTEXT.DOCUMENT)).not.toThrow();
+    expect(() => parseDocument(source, XML_CONTEXT.DOCUMENT)).not.toThrow();
+    expect(() => parseDocument(source, XML_CONTEXT.XMPP)).not.toThrow();
+    expect(validateDocument(source, XML_CONTEXT.DOCUMENT)).toBeUndefined();
+    expect(parseDocument(source, XML_CONTEXT.DOCUMENT).name).toBe("root");
+    expect(parseDocument(source, XML_CONTEXT.XMPP).name).toBe("root");
+  },
+);
+
+test.each([
+  '<?xml version="1.0"?><root/>',
+  '<?xml version="1.0" encoding="UTF-8"?><root/>',
+])(
+  "outgoing XMPP preserves an XML declaration without SDDecl: %s",
+  (source) => {
+    expect(validateDocument(source, XML_CONTEXT.XMPP)).toBeUndefined();
+  },
+);
+
 // Size/depth limits protect receive-side parsing; they are not XML grammar rules.
 test("outgoing XML validation does not inherit the receive-side size limit", () => {
   const source = `<root>${"x".repeat(1024 * 1024 + 1)}</root>`;
