@@ -74,6 +74,13 @@ export default function streamManagement({
 
   async function resumed(resumed, signal) {
     signal?.throwIfAborted();
+    // XEP-0198 §5: validate the opaque former ID before acknowledging or replaying.
+    if (!sm.id || resumed.attrs.previd !== sm.id) {
+      sm.enabled = false;
+      sm.enableSent = false;
+      entity._streamError("bad-format").catch(() => {});
+      throw new ConnectionClosedError();
+    }
     sm.enabled = true;
     ackQueue(resumed.attrs.h);
     const q = [...sm.outbound_q];

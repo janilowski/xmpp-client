@@ -157,7 +157,7 @@ test("resume - resumed", async () => {
 
   expect(entity.status).toBe("offline");
 
-  entity.mockInput(<resumed xmlns="urn:xmpp:sm:3" h="46" />);
+  entity.mockInput(<resumed xmlns="urn:xmpp:sm:3" previd="bar" h="46" />);
 
   let acks = 0;
   entity.streamManagement.on("ack", (stanza) => {
@@ -209,7 +209,7 @@ test("resumed event", async () => {
 
   expect(entity.status).toBe("offline");
 
-  entity.mockInput(<resumed xmlns="urn:xmpp:sm:3" h="46" />);
+  entity.mockInput(<resumed xmlns="urn:xmpp:sm:3" previd="bar" h="46" />);
 
   let acks = 0;
   entity.streamManagement.on("ack", (stanza) => {

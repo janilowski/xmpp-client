@@ -15,6 +15,38 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept a different ordinary SM resumption ID",
+    file: "src/stream-management/index.js",
+    before: "if (!sm.id || resumed.attrs.previd !== sm.id) {",
+    after: "if (false) {",
+    suite: "conformance/xep0198-resumption.test.ts",
+    test: "ordinary resumption.*mismatched",
+  },
+  {
+    name: "accept a different inline SM resumption ID",
+    file: "src/stream-management/index.js",
+    before: "if (!sm.id || resumed.attrs.previd !== sm.id) {",
+    after: "if (false) {",
+    suite: "conformance/xep0198-resumption.test.ts",
+    test: "inline resumption.*mismatched",
+  },
+  {
+    name: "trim opaque SM resumption IDs",
+    file: "src/stream-management/index.js",
+    before: "resumed.attrs.previd !== sm.id",
+    after: "resumed.attrs.previd?.trim() !== sm.id.trim()",
+    suite: "conformance/xep0198-resumption.test.ts",
+    test: "ordinary resumption.*trimmed",
+  },
+  {
+    name: "case-fold opaque SM resumption IDs",
+    file: "src/stream-management/index.js",
+    before: "resumed.attrs.previd !== sm.id",
+    after: "resumed.attrs.previd?.toLowerCase() !== sm.id.toLowerCase()",
+    suite: "conformance/xep0198-resumption.test.ts",
+    test: "inline resumption.*case-changed",
+  },
+  {
     name: "leave SASL2 post-success features unbounded",
     file: "src/sasl2/index.js",
     before: "expectFeatures();",
@@ -606,6 +638,7 @@ for (const mutation of mutations) {
       "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",
       "conformance/xep0198.test.ts",
+      "conformance/xep0198-resumption.test.ts",
       "conformance/xep0388-features.test.ts",
       "conformance/xep0156.test.js",
       "conformance/xep0156-https.test.ts",

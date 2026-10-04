@@ -83,7 +83,8 @@ remain executable test markers, not evidence of successful validation.
   allow absent `from`; remote destinations do not. An error's `by` attribute
   cannot override this policy. Reusing caller-supplied IDs for the same peer
   cannot distinguish delayed replies; prefer generated fresh IDs.
-- SM malformed counts close with `bad-format`, a local invalid-schema policy.
+- SM malformed counts or resumption identities close with `bad-format`, a local
+  validation policy. Resumption IDs are opaque and must match exactly.
   `sm.outbound` means last acknowledged sequence, not total sent; retransmission
   does not count twice. SM supplies neither persistence nor exactly-once delivery.
 
