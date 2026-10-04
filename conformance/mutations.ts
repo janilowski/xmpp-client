@@ -15,6 +15,48 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "leave SASL2 post-success features unbounded",
+    file: "src/sasl2/index.js",
+    before: "expectFeatures();",
+    after: "",
+    suite: "conformance/xep0388-features.test.ts",
+    test: "local deadline / start / classic",
+  },
+  {
+    name: "require features after successful inline resumption",
+    file: "src/sasl2/index.js",
+    before: "if (!resumed) {",
+    after: "if (true) {",
+    suite: "conformance/xep0388-features.test.ts",
+    test: "omits features / resume / missing",
+  },
+  {
+    name: "arm the SASL2 features deadline after proof verification",
+    file: "src/sasl2/index.js",
+    before: "expectFeatures();",
+    after:
+      "streamFeatures.authentication.then(() => expectFeatures());",
+    suite: "conformance/xep0388-features.test.ts",
+    test: "cancel the deadline / classic / immediate",
+  },
+  {
+    name: "exempt failed inline resumption from the deadline",
+    file: "src/sasl2/index.js",
+    before: 'element.getChild("resumed", NS_SM);',
+    after:
+      '(element.getChild("resumed", NS_SM) || element.getChild("failed", NS_SM));',
+    suite: "conformance/xep0388-features.test.ts",
+    test: "omits features / failed-resume / missing",
+  },
+  {
+    name: "leak the SASL2 success observer",
+    file: "src/sasl2/index.js",
+    before: '() => entity.removeListener("nonza", onSuccess),',
+    after: "() => {},",
+    suite: "conformance/xep0388-features.test.ts",
+    test: "isolates a replacement / stop",
+  },
+  {
     name: "reuse the former resource after stream conflict",
     file: "src/resource-binding/index.js",
     before: 'error instanceof StreamError && error.condition === "conflict"',
@@ -49,8 +91,8 @@ const mutations = [
   {
     name: "leave stream features unbounded",
     file: "src/stream-features/index.js",
-    before: 'entity.on("open", () => {',
-    after: 'entity.on("unused-open", () => {',
+    before: 'entity.on("open", expectFeatures);',
+    after: 'entity.on("unused-open", expectFeatures);',
     suite: "conformance/rfc6120-streams.test.ts",
     test: "local features deadline / start / initial",
   },
@@ -564,6 +606,7 @@ for (const mutation of mutations) {
       "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",
       "conformance/xep0198.test.ts",
+      "conformance/xep0388-features.test.ts",
       "conformance/xep0156.test.js",
       "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",

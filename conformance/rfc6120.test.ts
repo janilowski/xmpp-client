@@ -5,6 +5,7 @@ import { ScriptedPeer } from "./peer.ts";
 
 // SASL wire encoding and restart cases: rfc6120-sasl.test.ts.
 // SASL identity, ordering, failure and retry: rfc6120-sasl-negotiation.test.ts.
+// SASL2 post-success features and SM resumption: xep0388-features.test.ts.
 // Hostile SASL Base64 input: rfc6120-sasl-base64.test.ts.
 // SCRAM authentication proofs: rfc5802-wire.test.ts.
 // Resource binding and completion: rfc6120-binding.test.ts.

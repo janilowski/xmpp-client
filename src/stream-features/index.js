@@ -31,7 +31,7 @@ export default function streamFeatures({ middleware, entity }) {
   // The duration is client policy; RFC 6120 §4.3 specifies no fixed deadline.
   let featureTimer;
   const clearFeatureTimer = () => clearTimeout(featureTimer);
-  entity.on("open", () => {
+  function expectFeatures() {
     clearFeatureTimer();
     featureTimer = setTimeout(() => {
       entity.disconnect().catch(() => {});
@@ -40,7 +40,8 @@ export default function streamFeatures({ middleware, entity }) {
         new TimeoutError("Timed out waiting for stream features"),
       );
     }, entity.timeout);
-  });
+  }
+  entity.on("open", expectFeatures);
   entity.on("closing", clearFeatureTimer);
   entity.on("close", clearFeatureTimer);
   entity.on("disconnect", clearFeatureTimer);
@@ -101,6 +102,7 @@ export default function streamFeatures({ middleware, entity }) {
           },
           feature,
           signal,
+          expectFeatures,
         ),
       );
     });

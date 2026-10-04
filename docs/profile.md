@@ -71,7 +71,8 @@ remain executable test markers, not evidence of successful validation.
   server `from`/`to` is tolerated; server ID/language is not fabricated.
   Outgoing language is caller-selected; incoming documents inherit no context.
 - Negotiation uses `entity.timeout` (default 2000 ms), including binding and
-  waiting for features after each opening, SASL restart or reconnect. These are
+  waiting for features after each opening, SASL restart or reconnect, and after
+  SASL2 success except successful inline SM resumption. These are
   per-stage deadlines, not one deadline for the entire login;
   ordinary IQ requests default to 30 seconds. These are local deadlines.
   Cancellation prevents further protocol work after callbacks settle, but

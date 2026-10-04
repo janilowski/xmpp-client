@@ -66,7 +66,7 @@ test.each([
   ["inline", MECHANISM],
   ["inline", "invalid-proof"],
 ])(
-  "XEP-0388 §5 / RFC 6120 §7: SASL2 success permits %s binding only after verification / %s",
+  "XEP-0388 §2.6.1 / RFC 6120 §7: SASL2 success permits %s binding only after verification / %s",
   async (binding, mode) => {
     const mechanism = mode === "PLAIN" ? "PLAIN" : MECHANISM;
     const sasl2 = "urn:xmpp:sasl:2";

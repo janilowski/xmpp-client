@@ -8,6 +8,7 @@ import { getAvailableMechanisms } from "../sasl/index.js";
 // https://xmpp.org/extensions/xep-0388.html
 
 const NS = "urn:xmpp:sasl:2";
+const NS_SM = "urn:xmpp:sm:3";
 
 async function authenticate({
   saslMechanisms,
@@ -66,7 +67,7 @@ export default function sasl2(
   streamFeatures.use(
     "authentication",
     NS,
-    async ({ entity }, _next, element, signal) => {
+    async ({ entity }, _next, element, signal, expectFeatures) => {
       if (streamFeatures.authenticating || streamFeatures.authenticated) {
         throw new SASLError("SASL: Unexpected authentication features");
       }
@@ -83,6 +84,24 @@ export default function sasl2(
 
       // SASL2 sends features immediately after success, while proof verification
       // can still be asynchronous. Binding must await the completed exchange.
+      const onSuccess = (element) => {
+        if (!element.is("success", NS)) {
+          return;
+        }
+        // XEP-0198 §9.2 forbids features after successful inline resumption.
+        const resumed =
+          inlineFeatures.some((request) => request?.is("resume", NS_SM)) &&
+          element.getChild("resumed", NS_SM);
+        if (!resumed) {
+          expectFeatures();
+        }
+      };
+      entity.on("nonza", onSuccess);
+      signal.addEventListener(
+        "abort",
+        () => entity.removeListener("nonza", onSuccess),
+        { once: true },
+      );
       streamFeatures.authentication = onAuthenticate(
         done,
         mechanisms,
