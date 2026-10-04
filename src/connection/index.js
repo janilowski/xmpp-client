@@ -90,6 +90,7 @@ class Connection extends EventEmitter {
   #onSocketClosed(dirty, reason) {
     this._detachSocket();
     this._detachParser();
+    resetConnection(this);
     this._status("disconnect", { clean: !dirty, reason });
   }
 

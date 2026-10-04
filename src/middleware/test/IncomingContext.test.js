@@ -2,6 +2,12 @@ import { JID } from "../../../test/support/index.js";
 
 import Context from "../lib/IncomingContext.js";
 import _Context from "../lib/Context.js";
+import Connection from "../../connection/index.js";
+import { EventEmitter } from "../../events/index.js";
+import {
+  confirmIdentity,
+  resetConnection,
+} from "../../connection/lib/negotiation.js";
 
 test("is instance of Context", () => {
   const entity = { jid: new JID("foo@bar"), options: { domain: "bar" } };
@@ -21,10 +27,64 @@ test("from property defaults to incoming stanza from attribute", () => {
   expect(ctx.from).toEqual(new JID("foo"));
 });
 
-test("from property falls back to entity jid domain", () => {
+test("absent from does not trust a configured identity or server domain", () => {
   const entity = { jid: new JID("foo@bar"), options: { domain: "bar" } };
   const ctx = new Context(entity, { attrs: {} });
-  expect(ctx.from).toEqual(new JID("bar"));
+  expect(ctx.from).toBe(null);
+});
+
+test("absent from uses the protocol-confirmed bare account", () => {
+  const entity = { jid: new JID("hint@bar"), options: { domain: "bar" } };
+  resetConnection(entity);
+  confirmIdentity(entity, new JID("confirmed@bar/resource"));
+
+  const ctx = new Context(entity, { attrs: {} });
+  expect(ctx.from).toEqual(new JID("confirmed@bar"));
+  expect(ctx.local).toBe("confirmed");
+});
+
+test("a replacement connection cannot reuse the former account", () => {
+  const entity = {
+    jid: new JID("former@bar/resource"),
+    options: { domain: "bar" },
+  };
+  resetConnection(entity);
+  confirmIdentity(entity, entity.jid);
+  resetConnection(entity);
+
+  const ctx = new Context(entity, { attrs: {} });
+  expect(ctx.from).toBe(null);
+});
+
+test("socket closure invalidates the confirmed sender before disconnect", () => {
+  const entity = new Connection({ domain: "bar" });
+  const socket = new EventEmitter();
+  entity._attachSocket(socket);
+  entity._jid("confirmed@bar/resource");
+  let from;
+  entity.on("disconnect", () => {
+    from = new Context(entity, { attrs: {} }).from;
+  });
+
+  socket.emit("close", false);
+
+  expect(entity.status).toBe("disconnect");
+  expect(from).toBe(null);
+  expect(entity.jid.toString()).toBe("confirmed@bar/resource");
+});
+
+test("confirmed sender remains independent of mutable identity hints", () => {
+  const entity = {
+    jid: new JID("confirmed@bar/resource"),
+    options: { domain: "bar" },
+  };
+  resetConnection(entity);
+  confirmIdentity(entity, entity.jid);
+  entity.jid = new JID("changed@other/resource");
+  entity.options.domain = "other";
+
+  const ctx = new Context(entity, { attrs: {} });
+  expect(ctx.from).toEqual(new JID("confirmed@bar"));
 });
 
 test("sets the to property", () => {

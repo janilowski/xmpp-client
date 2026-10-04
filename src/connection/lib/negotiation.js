@@ -18,6 +18,10 @@ export function confirmIdentity(entity, address) {
   connections.get(entity).account = address.bare().toString();
 }
 
+export function getAccount(entity) {
+  return connections.get(entity)?.account ?? undefined;
+}
+
 export function completeNegotiation(entity) {
   connections.get(entity).complete = true;
 }

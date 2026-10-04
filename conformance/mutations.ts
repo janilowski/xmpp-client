@@ -17,6 +17,39 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "trust a public identity hint for implicit senders",
+    file: "src/connection/lib/negotiation.js",
+    before: "return connections.get(entity)?.account ?? undefined;",
+    after: "return entity.jid?.bare().toString();",
+    suite: "conformance/rfc6120-stanza-addressing.test.ts",
+    test: "confirmed sender and explicit addresses / sasl / message$",
+  },
+  {
+    name: "retain account authority after socket closure",
+    file: "src/connection/index.js",
+    before:
+      'this._detachParser();\n    resetConnection(this);\n    this._status("disconnect",',
+    after: 'this._detachParser();\n    this._status("disconnect",',
+    suite: "src/middleware/test/IncomingContext.test.js",
+    test: "socket closure invalidates the confirmed sender before disconnect$",
+  },
+  {
+    name: "snapshot a public identity hint for resumption",
+    file: "src/stream-management/index.js",
+    before: "session = { id, account: getAccount(entity) };",
+    after: "session = { id, account: entity.jid?.bare().toString() };",
+    suite: "conformance/rfc6120-stanza-addressing.test.ts",
+    test: "verified resumption preserves the implicit account / mutated-hints$",
+  },
+  {
+    name: "lose confirmed account on ordinary resumption",
+    file: "src/stream-management/index.js",
+    before: "confirmIdentity(entity, jid(session.account));",
+    after: "// Do not restore the retained account.",
+    suite: "conformance/rfc6120-stanza-addressing.test.ts",
+    test: "verified resumption preserves the implicit account / ordinary$",
+  },
+  {
     name: "send serialized frames with a leading non-XML character",
     file: "src/websocket/lib/Socket.js",
     before: "!data.startsWith(XML_START_CHARACTER)",
@@ -281,7 +314,8 @@ const mutations = [
     name: "restore stale routing authority before stream opening",
     file: "src/connection/index.js",
     before: "async connect(service) {\n    resetConnection(this);",
-    after: "async connect(service) {",
+    after:
+      "async connect(service) {\n    resetConnection(this);\n    if (this.jid) { confirmIdentity(this, this.jid); completeNegotiation(this); }",
     suite: "conformance/rfc6120-stanza-routing.test.ts",
     test: "ordinary remote replay.* / valid$",
   },
@@ -1007,6 +1041,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395-outgoing-framing.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
+      "conformance/rfc6120-stanza-addressing.test.ts",
       "conformance/rfc6120-outgoing-xml.test.ts",
       "conformance/rfc6120-content-prefixes.test.ts",
       "conformance/rfc6120-namespace-scope.test.ts",

@@ -12,6 +12,7 @@ import { readFrame } from "./xml.ts";
 // SCRAM authentication proofs: rfc5802-wire.test.ts.
 // Resource binding and completion: rfc6120-binding.test.ts.
 // Pre-completion stanza routing and resumption: rfc6120-stanza-routing.test.ts.
+// Confirmed implicit sender and explicit addresses: rfc6120-stanza-addressing.test.ts.
 // IQ envelopes and stanza errors: rfc6120-iq.test.ts.
 // Content namespace isolation and SM accounting: rfc6120-namespaces.test.ts.
 // Default namespace cancellation and consumer dispatch: rfc6120-namespace-scope.test.ts.

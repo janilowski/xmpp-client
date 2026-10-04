@@ -1,8 +1,13 @@
 import { EventEmitter } from "../events/index.js";
 import xml from "../xml/index.js";
+import jid from "../jid/index.js";
 import { datetime } from "../util/time.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
-import { completeNegotiation } from "../connection/lib/negotiation.js";
+import {
+  completeNegotiation,
+  confirmIdentity,
+  getAccount,
+} from "../connection/lib/negotiation.js";
 
 import { setupBind2 } from "./bind2.js";
 import { setupSasl2 } from "./sasl2.js";
@@ -35,6 +40,7 @@ export default function streamManagement({
   let timeoutTimeout = null;
   let requestAckTimeout = null;
   let requestAckDebounce = null;
+  let session = null;
   const replaying = new Set();
 
   const sm = Object.assign(new EventEmitter(), {
@@ -85,6 +91,10 @@ export default function streamManagement({
     sm.enabled = true;
     ackQueue(resumed.attrs.h);
     signal?.throwIfAborted();
+    // Restore only a confirmed account retained by this exact SM session.
+    if (!getAccount(entity) && session?.id === sm.id && session.account) {
+      confirmIdentity(entity, jid(session.account));
+    }
     // A validated resumed stream can replay before the public ready event.
     completeNegotiation(entity);
     const q = [...sm.outbound_q];
@@ -111,6 +121,7 @@ export default function streamManagement({
     sm.enabled = false;
     sm.enableSent = false;
     sm.id = "";
+    session = null;
     failQueue();
   }
 
@@ -162,6 +173,7 @@ export default function streamManagement({
   function enabled({ id, max }) {
     sm.enabled = true;
     sm.id = id;
+    session = { id, account: getAccount(entity) };
     sm.max = max;
     // > The counter for the received stanzas ('h') is set to zero and started after receiving either <enable/> or <enabled/>.
     // https://xmpp.org/extensions/xep-0198.html#example-7
@@ -175,6 +187,7 @@ export default function streamManagement({
     sm.enabled = false;
     sm.enableSent = false;
     sm.id = "";
+    session = null;
   });
 
   middleware.use(async (context, next) => {

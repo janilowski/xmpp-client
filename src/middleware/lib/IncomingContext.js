@@ -1,4 +1,5 @@
 import JID from "../../jid/index.js";
+import { getAccount } from "../../connection/lib/negotiation.js";
 
 import Context from "./Context.js";
 
@@ -7,10 +8,9 @@ export default class IncomingContext extends Context {
     super(entity, stanza);
 
     const { jid } = entity;
-    const { domain } = entity.options ?? {};
 
     const to = stanza.attrs.to ?? jid?.toString();
-    const from = stanza.attrs.from ?? domain;
+    const from = stanza.attrs.from ?? getAccount(entity);
 
     if (to !== undefined) {
       this.to = new JID(to);
