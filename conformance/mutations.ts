@@ -17,6 +17,24 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "open without an explicit server target",
+    file: "src/connection/lib/negotiation.js",
+    before: 'state.server = jid("", domain).domain;',
+    after: 'state.server = domain ? jid("", domain).domain : null;',
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "invalid opening target rejects before any frame and permits recovery / empty$",
+  },
+  {
+    name: "change stream state before validating the target",
+    file: "src/connection/index.js",
+    before:
+      'resetStream(this, options.domain);\n    this._status("opening");\n    this.#closing = false;',
+    after:
+      'this._status("opening");\n    this.#closing = false;\n    resetStream(this, options.domain);',
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "invalid opening target rejects before any frame and permits recovery / localpart$",
+  },
+  {
     name: "send malformed configured stream language",
     file: "src/connection/index.js",
     before: 'if (lang != null && lang !== "" && !isLanguageTag(lang)) {',
@@ -896,6 +914,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-content-prefixes.test.ts",
       "conformance/rfc6120-namespace-scope.test.ts",
       "conformance/rfc6120-language-tags.test.ts",
+      "conformance/rfc6120-stream-headers.test.ts",
       "conformance/rfc6120-iq.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",

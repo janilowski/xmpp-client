@@ -9,7 +9,7 @@ export function resetConnection(entity) {
 
 export function resetStream(entity, domain) {
   const state = connections.get(entity);
-  state.server = domain ? jid("", domain).domain : null;
+  state.server = jid("", domain).domain;
   state.complete = false;
 }
 
