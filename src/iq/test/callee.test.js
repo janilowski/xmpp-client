@@ -166,8 +166,8 @@ test("stanza error reply when handler returns an error element", async () => {
   const outputPromise = promiseSend(xmpp);
 
   const errorElement = (
-    <error type="foo">
-      <bar xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
+    <error type="auth">
+      <forbidden xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
     </error>
   );
 

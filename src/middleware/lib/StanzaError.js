@@ -3,8 +3,8 @@ import XMPPError from "../../error/index.js";
 /* https://xmpp.org/rfcs/rfc6120.html#stanzas-error */
 
 const NS = "urn:ietf:params:xml:ns:xmpp-stanzas";
-const TYPES = new Set(["auth", "cancel", "continue", "modify", "wait"]);
-const CONDITIONS = new Set([
+export const TYPES = new Set(["auth", "cancel", "continue", "modify", "wait"]);
+export const CONDITIONS = new Set([
   "bad-request",
   "conflict",
   "feature-not-implemented",

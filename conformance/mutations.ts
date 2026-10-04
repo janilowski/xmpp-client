@@ -17,6 +17,38 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept an unregistered generated stanza error type",
+    file: "src/iq/callee.js",
+    before: "!TYPES.has(element.attrs.type) ||",
+    after: "false ||",
+    suite: "conformance/rfc6120-generated-errors.test.ts",
+    test: "generated get error falls back / unregistered error type$",
+  },
+  {
+    name: "ignore an ESM standard condition in a generated error",
+    file: "src/iq/callee.js",
+    before: "const children = element.children.filter(\n    (child) => typeof child?.getNS === \"function\",\n  );",
+    after: "const children = element.getChildElements();",
+    suite: "conformance/rfc6120-generated-errors.test.ts",
+    test: "generated get error falls back / ESM child adds a second standard condition$",
+  },
+  {
+    name: "lose inherited namespace bindings while constructing replies",
+    file: "src/iq/callee.js",
+    before: "Object.assign(element.attrs, namespaces);",
+    after: "// Do not materialize inherited namespace bindings.",
+    suite: "conformance/rfc6120-generated-errors.test.ts",
+    test: "generated get preserves an ordinary result payload's inherited namespace bindings$",
+  },
+  {
+    name: "reject a legal qualified foreign error payload",
+    file: "src/iq/callee.js",
+    before: "(!reply.getNS() || reply.getNS() === stanza.getNS())",
+    after: "true",
+    suite: "conformance/rfc6120-generated-errors.test.ts",
+    test: "generated get preserves qualified foreign unprefixed error as a result$",
+  },
+  {
     name: "allow generated standalone declarations",
     file: "src/xml/lib/parseDocument.js",
     before: "standalone !== undefined",
@@ -1065,6 +1097,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-stream-headers.test.ts",
       "conformance/rfc6120-serialized-stanzas.test.ts",
       "conformance/rfc6120-iq.test.ts",
+      "conformance/rfc6120-generated-errors.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
       "conformance/rfc6120-binding.test.ts",

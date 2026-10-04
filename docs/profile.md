@@ -63,6 +63,9 @@ remain executable test markers, not evidence of successful validation.
 - Malformed correlated IQ responses reject that request locally without replying
   to a result/error stanza. Stanza errors are recoverable; stream errors close
   the transport. Unknown standard error conditions map to `undefined-condition`.
+  IQ handlers returning malformed core error elements produce a
+  `cancel/internal-server-error` reply and one local error. Foreign error-named
+  payloads remain ordinary IQ results; scoped namespace bindings are preserved.
 - Core stanzas require the client content namespace. Incoming `jabber:server`
   content closes with `invalid-namespace`; outgoing server content is rejected.
   Foreign extension nonzas do not route IQs, parse XMPP addresses or enter SM
