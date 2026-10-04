@@ -73,6 +73,9 @@ remain executable test markers, not evidence of successful validation.
   before writing or queue admission; validated SM resumption permits replay
   before the public online event (RFC 6120 §4.3.5; XEP-0198 §5).
 - XML limits are 1 MiB UTF-8 and 64 element levels, not RFC-prescribed values.
+  These are receive limits, not outgoing XML grammar restrictions. Generated
+  documents are validated before writes and SM queue admission; invalid local
+  XML rejects with a TypeError (RFC 6120 §11.3).
   Browser messages are buffered before delivery; these checks cannot bound
   native allocation before the library receives them.
 - Stream version 1.x is supported, including numeric leading zeros and higher

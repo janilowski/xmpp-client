@@ -7,6 +7,7 @@ import {
 } from "../events/index.js";
 import jid from "../jid/index.js";
 import xml from "../xml/index.js";
+import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
 
 import StreamError from "./lib/StreamError.js";
 import { parseHost, parseService } from "./lib/util.js";
@@ -494,7 +495,13 @@ class Connection extends EventEmitter {
       }
     }
     element.parent = this.root;
-    await this.write(element.toString());
+    const source = element.toString();
+    try {
+      validateDocument(source, XML_CONTEXT.XMPP);
+    } catch (error) {
+      throw new TypeError("Invalid outgoing XML", { cause: error });
+    }
+    await this.write(source);
     this.emit("send", element);
   }
 

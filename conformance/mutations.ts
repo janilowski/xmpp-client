@@ -15,6 +15,39 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "serialize a different document after XML validation",
+    file: "src/connection/index.js",
+    before: "    await this.write(source);",
+    after: "    await this.write(element.toString());",
+    suite: "conformance/rfc6120-outgoing-xml.test.ts",
+    test: "send writes the exact document validated once$",
+  },
+  {
+    name: "write malformed outgoing XML without validation",
+    file: "src/connection/index.js",
+    before: "      validateDocument(source, XML_CONTEXT.XMPP);",
+    after: "",
+    suite: "conformance/rfc6120-outgoing-xml.test.ts",
+    test: "send rejects malformed XML.*root prefix is unbound$",
+  },
+  {
+    name: "accept unpaired UTF-16 before a forbidden XML character",
+    file: "src/xml/lib/parseDocument.js",
+    before: "UNPAIRED_SURROGATE.test(source)",
+    after: "false",
+    suite: "conformance/rfc6120-outgoing-xml.test.ts",
+    test: "send rejects malformed XML.*high surrogate before NUL in descendant text$",
+  },
+  {
+    name: "restrict valid outgoing XML to the receive byte limit",
+    file: "src/connection/index.js",
+    before: "      validateDocument(source, XML_CONTEXT.XMPP);",
+    after:
+      "      if (source.length > 1024 * 1024) throw new Error('size limit');\n      validateDocument(source, XML_CONTEXT.XMPP);",
+    suite: "conformance/rfc6120-outgoing-xml.test.ts",
+    test: "send preserves well-formed XML.*receive-side byte limit$",
+  },
+  {
     name: "send remote stanzas before negotiation completes",
     file: "src/connection/index.js",
     before: "!canSendStanza(this, destination)",
@@ -751,6 +784,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
+      "conformance/rfc6120-outgoing-xml.test.ts",
       "conformance/rfc6120-iq.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
