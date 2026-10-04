@@ -8,6 +8,7 @@ import {
 import jid from "../jid/index.js";
 import xml from "../xml/index.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
+import isLanguageTag from "../xml/lib/language.js";
 
 import StreamError from "./lib/StreamError.js";
 import hasContentPrefix from "./lib/hasContentPrefix.js";
@@ -361,11 +362,13 @@ class Connection extends EventEmitter {
     if (this.parser) {
       throw new Error("A stream is already open; use restart instead");
     }
+    const { domain, lang } = options;
+    if (lang != null && lang !== "" && !isLanguageTag(lang)) {
+      throw new TypeError("Invalid language tag");
+    }
     resetStream(this, options.domain);
     this._status("opening");
     this.#closing = false;
-
-    const { domain, lang } = options;
 
     const headerElement = this.headerElement();
     headerElement.attrs.to = domain;
@@ -506,6 +509,11 @@ class Connection extends EventEmitter {
       validateDocument(source, XML_CONTEXT.XMPP, (tag) => {
         if (this.NS === NS_JABBER_CLIENT && tag.prefix && tag.uri === this.NS) {
           throw new TypeError("XMPP content elements must not use prefixes");
+        }
+        // Language applies to serialized descendants, including extensions.
+        const lang = tag.attributes["xml:lang"]?.value;
+        if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {
+          throw new TypeError("Invalid language tag");
         }
       });
     } catch (error) {

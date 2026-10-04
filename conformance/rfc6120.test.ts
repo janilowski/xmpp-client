@@ -17,6 +17,7 @@ import { readFrame } from "./xml.ts";
 // Default namespace cancellation and consumer dispatch: rfc6120-namespace-scope.test.ts.
 // Outgoing XML well-formedness and Unicode: rfc6120-outgoing-xml.test.ts.
 // Stream-content prefix rules and extension scopes: rfc6120-content-prefixes.test.ts.
+// Outgoing language tag format and inherited XML attributes: rfc6120-language-tags.test.ts.
 // Feature negotiation and stream errors: rfc6120-streams.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).
 

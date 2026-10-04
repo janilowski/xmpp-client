@@ -85,7 +85,14 @@ remain executable test markers, not evidence of successful validation.
 - Stream version 1.x is supported, including numeric leading zeros and higher
   minor versions. Missing version is unsupported pre-1.0 behavior. Legacy missing
   server `from`/`to` is tolerated; server ID/language is not fabricated.
-  Outgoing language is caller-selected; incoming documents inherit no context.
+  Outgoing language is caller-selected. Malformed nonempty values reject before
+  opening or stanza writes, including serialized extension descendants. Format
+  checks preserve grandfathered/private-use alternatives and do not claim IANA
+  registration or extension-specific validity (RFC 5646 §§2.1–2.2).
+  Empty XML inheritance resets remain supported. Empty stream/stanza-root tags
+  conflict with RFC 6120's NMTOKEN requirement; profile alignment is pending in
+  [#39](https://github.com/janilowski/xmpp-client/issues/39). Incoming documents
+  inherit no context; receiving-language policy remains a separate audit boundary.
 - Negotiation uses `entity.timeout` (default 2000 ms), including binding and
   waiting for features after each opening, SASL restart or reconnect, and after
   SASL2 success except successful inline SM resumption. These are

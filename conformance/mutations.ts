@@ -17,6 +17,64 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "send malformed configured stream language",
+    file: "src/connection/index.js",
+    before: 'if (lang != null && lang !== "" && !isLanguageTag(lang)) {',
+    after: "if (false) {",
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: "reject malformed configured stream language.*not a tag.*before wire emission$",
+  },
+  {
+    name: "trust tree language instead of serialized output",
+    file: "src/connection/index.js",
+    before: 'const lang = tag.attributes["xml:lang"]?.value;',
+    after: "const lang = undefined;",
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: "send validates actual serialized language / serialized document$",
+  },
+  {
+    name: "allow non-ASCII private-use and extension subtags",
+    file: "src/xml/lib/language.js",
+    before: " || /[^A-Za-z0-9-]/.test(value)",
+    after: "",
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: "reject malformed configured stream language.*en-u-ÄA.*before wire emission$",
+  },
+  {
+    name: "allow repeated language variants",
+    file: "src/xml/lib/language.js",
+    before: "variants.has(variant)",
+    after: "false",
+    suite: "src/xml/test/language.test.js",
+    test: "reject repeated variant or singleton in sl-rozaj-ROZAJ$",
+  },
+  {
+    name: "allow repeated language extension singletons",
+    file: "src/xml/lib/language.js",
+    before: "extensions.has(singleton)",
+    after: "false",
+    suite: "src/xml/test/language.test.js",
+    test: "reject repeated variant or singleton in en-u-ca-gregory-U-nu-latn$",
+  },
+  {
+    name: "allow reserved language extlang positions",
+    file: "src/xml/lib/language.js",
+    before:
+      'if (subtags[0].length <= 3 && /^[a-z]{3}$/.test(subtags[index] ?? "")) {',
+    after:
+      'while (subtags[0].length <= 3 && /^[a-z]{3}$/.test(subtags[index] ?? "")) {',
+    suite: "src/xml/test/language.test.js",
+    test: "reject permanently reserved extlang positions in zh-cmn-yue$",
+  },
+  {
+    name: "reject grandfathered language alternatives",
+    file: "src/xml/lib/language.js",
+    before: "GRANDFATHERED.has(tag)",
+    after: "false",
+    suite: "src/xml/test/language.test.js",
+    test: "accept grandfathered i-ami case-insensitively$",
+  },
+  {
     name: "inherit through a cancelled default namespace",
     file: "node_modules/ltx/lib/Element.js",
     before: 'if (this.attrs.xmlns || this.attrs.xmlns === "") {',
@@ -837,6 +895,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-outgoing-xml.test.ts",
       "conformance/rfc6120-content-prefixes.test.ts",
       "conformance/rfc6120-namespace-scope.test.ts",
+      "conformance/rfc6120-language-tags.test.ts",
       "conformance/rfc6120-iq.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
