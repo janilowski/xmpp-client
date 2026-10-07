@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import isIRI from "./isIRI.js";
+import isIRI from "../lib/isIRI.js";
 
 // RFC3986 §3 / RFC3987 §2.2 generic syntax, not scheme-specific resolution.
 const valid = [

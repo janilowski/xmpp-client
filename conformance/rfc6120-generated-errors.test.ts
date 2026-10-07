@@ -288,7 +288,12 @@ for (const condition of ["gone", "redirect"]) {
             return error;
           },
         );
-        expect(await exchange(peer, type)).toEqual(
+        // The public send guard can reject a corrupted replay; that is an exact failure too.
+        const unexpected = Promise.withResolvers<Error>();
+        xmpp.once("error", unexpected.resolve);
+        expect(
+          await Promise.race([exchange(peer, type), unexpected.promise]),
+        ).toEqual(
           expectedReply(
             "error",
             `${PAYLOAD}<error type="modify"><${condition} xmlns="${STANZAS}">xmpp:new@example.test</${condition}></error>`,

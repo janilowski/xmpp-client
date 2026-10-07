@@ -1,4 +1,4 @@
-// RFC3987 §§2.2/4.1: URI/IRI syntax, without resolution or scheme-specific rules.
+// RFC 3987 §§2.2/4.1: URI/IRI syntax, without resolution or scheme-specific rules.
 const UCSCHAR =
   "\\u00A0-\\uD7FF\\uF900-\\uFDCF\\uFDF0-\\uFFEF" +
   "\\u{10000}-\\u{1FFFD}\\u{20000}-\\u{2FFFD}\\u{30000}-\\u{3FFFD}" +

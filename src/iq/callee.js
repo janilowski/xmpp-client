@@ -1,6 +1,10 @@
 import xml from "../xml/index.js";
-import { TYPES, CONDITIONS } from "../middleware/lib/StanzaError.js";
-import isIRI from "./lib/isIRI.js";
+import createStanzaErrorValidator, {
+  TYPES,
+  CONDITIONS,
+  NS_STANZA,
+} from "../xml/lib/stanzaError.js";
+import isIRI from "../xml/lib/isIRI.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
 
 /**
@@ -9,7 +13,6 @@ import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
  * https://xmpp.org/rfcs/rfc6120.html#stanzas-error
  */
 
-const NS_STANZA = "urn:ietf:params:xml:ns:xmpp-stanzas";
 const RESERVED_NAMESPACES = new Set([
   "jabber:client",
   "jabber:server",
@@ -155,9 +158,7 @@ function captureError(element, namespace) {
   let snapshot;
   let cursor;
   let depth = 0;
-  let child;
-  let address = "";
-  let conditions = 0;
+  const validator = createStanzaErrorValidator(namespace);
   validateDocument(
     `<iq xmlns="${namespace}">${source}</iq>`,
     XML_CONTEXT.XMPP,
@@ -167,34 +168,11 @@ function captureError(element, namespace) {
         return;
       }
       if (depth === 2) {
-        if (
-          snapshot ||
-          tag.name !== "error" ||
-          tag.uri !== namespace ||
-          !TYPES.has(tag.attributes.type?.value)
-        ) {
+        if (snapshot || tag.name !== "error" || tag.uri !== namespace) {
           throw new Error("Invalid generated stanza error");
         }
-      } else if (depth === 3) {
-        child = tag;
-        address = "";
-        if (tag.uri === NS_STANZA) {
-          if (tag.local !== "text") {
-            conditions += 1;
-            if (!CONDITIONS.has(tag.local)) {
-              throw new Error("Invalid generated stanza error");
-            }
-          }
-        } else if (!tag.uri || RESERVED_NAMESPACES.has(tag.uri)) {
-          throw new Error("Invalid generated stanza error");
-        }
-      } else if (
-        depth > 3 &&
-        child.uri === NS_STANZA &&
-        ["text", "gone", "redirect"].includes(child.local)
-      ) {
-        throw new Error("Invalid generated stanza error character data");
       }
+      validator.open(tag);
       const parsed = xml(
         tag.name,
         Object.fromEntries(
@@ -209,33 +187,23 @@ function captureError(element, namespace) {
       cursor = parsed;
     },
     () => {
-      if (
-        depth === 3 &&
-        child.uri === NS_STANZA &&
-        (child.local === "gone" || child.local === "redirect") &&
-        address &&
-        !isIRI(address)
-      ) {
-        throw new Error("Invalid generated stanza error address");
-      }
       if (depth >= 2) {
+        validator.close();
         cursor = cursor.parent;
       }
       depth -= 1;
     },
     (text) => {
-      if (depth <= 2 && text.trim()) {
+      if (depth === 1 && text.trim()) {
         throw new Error("Invalid generated stanza error character data");
       }
-      if (depth === 3 && child.uri === NS_STANZA) {
-        if (child.local === "gone" || child.local === "redirect") {
-          address += text;
-        }
+      if (depth >= 2) {
+        validator.text(text);
       }
       cursor?.t(text);
     },
   );
-  if (!snapshot || conditions !== 1) {
+  if (!snapshot) {
     throw new Error("Invalid generated stanza error");
   }
   Object.defineProperty(snapshot, "write", {

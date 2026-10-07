@@ -9,6 +9,7 @@ import jid from "../jid/index.js";
 import xml from "../xml/index.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
 import isLanguageTag from "../xml/lib/language.js";
+import createStanzaErrorValidator from "../xml/lib/stanzaError.js";
 
 import StreamError from "./lib/StreamError.js";
 import hasContentPrefix from "./lib/hasContentPrefix.js";
@@ -625,10 +626,16 @@ class Connection extends EventEmitter {
       let isRoot = true;
       const isIQ =
         this.NS === NS_JABBER_CLIENT && name === "iq" && namespace === this.NS;
+      const isCore =
+        this.NS === NS_JABBER_CLIENT &&
+        namespace === this.NS &&
+        (name === "message" || name === "presence" || name === "iq");
       let depth = 0;
       let iqType;
       let iqChildren = 0;
-      let iqErrors = 0;
+      let stanzaType;
+      let stanzaErrors = 0;
+      let errorValidator;
       validateDocument(
         source,
         XML_CONTEXT.XMPP,
@@ -670,14 +677,9 @@ class Connection extends EventEmitter {
                 throw new TypeError("IQ requires an id and a valid type");
               }
             }
+            stanzaType = tag.attributes.type?.value;
           } else if (isIQ && depth === 2) {
             iqChildren += 1;
-            if (tag.local === "error" && tag.uri === this.NS) {
-              iqErrors += 1;
-              if (iqType !== "error") {
-                throw new TypeError("Only error IQ can contain a core error");
-              }
-            }
             if (
               (iqType === "get" || iqType === "set") &&
               RESERVED_NAMESPACES.has(tag.uri)
@@ -687,6 +689,21 @@ class Connection extends EventEmitter {
               );
             }
           }
+          if (
+            isCore &&
+            depth === 2 &&
+            tag.local === "error" &&
+            tag.uri === this.NS
+          ) {
+            if (stanzaType !== "error") {
+              throw new TypeError(
+                "Only error stanzas can contain a core error",
+              );
+            }
+            stanzaErrors += 1;
+            errorValidator = createStanzaErrorValidator(this.NS);
+          }
+          errorValidator?.open(tag);
           if (
             this.NS === NS_JABBER_CLIENT &&
             tag.prefix &&
@@ -701,7 +718,19 @@ class Connection extends EventEmitter {
           }
         },
         () => {
+          errorValidator?.close();
+          if (depth === 2) {
+            errorValidator = undefined;
+          }
           depth -= 1;
+          if (
+            depth === 0 &&
+            isCore &&
+            stanzaType === "error" &&
+            stanzaErrors !== 1
+          ) {
+            throw new TypeError("Error stanza requires one core error");
+          }
           if (!isIQ || depth !== 0) {
             return;
           }
@@ -709,11 +738,12 @@ class Connection extends EventEmitter {
           if (
             ((iqType === "get" || iqType === "set") && iqChildren !== 1) ||
             (iqType === "result" && iqChildren > 1) ||
-            (iqType === "error" && (iqErrors !== 1 || iqChildren > 2))
+            (iqType === "error" && iqChildren > 2)
           ) {
             throw new TypeError("Invalid IQ child structure");
           }
         },
+        (text) => errorValidator?.text(text),
       );
     } catch (error) {
       throw new TypeError("Invalid outgoing XML", { cause: error });

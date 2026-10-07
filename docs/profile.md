@@ -71,6 +71,15 @@ remain executable test markers, not evidence of successful validation.
   Validation checks serialized output before writes or SM admission; it does
   not infer extension schemas. Empty opaque IDs and namespace aliases remain
   allowed, and foreign IQ-named nonzas remain outside these rules.
+- Outgoing message, presence and IQ errors share RFC 6120 §8.3 validation.
+  Only error stanzas may contain a direct core error, with one defined condition
+  and a defined error type. Optional diagnostic text is character data;
+  application conditions require their own namespace. Nonempty `gone`/`redirect`
+  addresses use generic absolute URI/IRI syntax, not URL resolution or
+  scheme-specific validation. Ordinary conditions and foreign extensions do
+  not require schema validation. Checks inspect the actual serialized snapshot
+  before writes, send events or SM admission; generated IQ errors retain that
+  snapshot even if application objects change during reply serialization.
 - Core stanzas require the client content namespace. Incoming `jabber:server`
   content closes with `invalid-namespace`; outgoing server content is rejected.
   Foreign extension nonzas do not route IQs, parse XMPP addresses or enter SM

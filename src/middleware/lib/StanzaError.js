@@ -1,33 +1,13 @@
 import XMPPError from "../../error/index.js";
+import {
+  TYPES,
+  CONDITIONS,
+  NS_STANZA as NS,
+} from "../../xml/lib/stanzaError.js";
+
+export { TYPES, CONDITIONS } from "../../xml/lib/stanzaError.js";
 
 /* https://xmpp.org/rfcs/rfc6120.html#stanzas-error */
-
-const NS = "urn:ietf:params:xml:ns:xmpp-stanzas";
-export const TYPES = new Set(["auth", "cancel", "continue", "modify", "wait"]);
-export const CONDITIONS = new Set([
-  "bad-request",
-  "conflict",
-  "feature-not-implemented",
-  "forbidden",
-  "gone",
-  "internal-server-error",
-  "item-not-found",
-  "jid-malformed",
-  "not-acceptable",
-  "not-allowed",
-  "not-authorized",
-  "policy-violation",
-  "recipient-unavailable",
-  "redirect",
-  "registration-required",
-  "remote-server-not-found",
-  "remote-server-timeout",
-  "resource-constraint",
-  "service-unavailable",
-  "subscription-required",
-  "undefined-condition",
-  "unexpected-request",
-]);
 
 class StanzaError extends XMPPError {
   constructor(condition, text, application, type) {
