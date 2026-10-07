@@ -1,5 +1,7 @@
 import xml from "../xml/index.js";
 import { TYPES, CONDITIONS } from "../middleware/lib/StanzaError.js";
+import isIRI from "./lib/isIRI.js";
+import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
 
 /**
  * References
@@ -59,21 +61,71 @@ function preserveNamespaces(element) {
   }
 }
 
-function validateError(element) {
+function validateError(element, namespace) {
+  // Convert addresses before checking structure: scalar conversion can change the tree.
+  for (const child of element.children) {
+    if (
+      typeof child?.getNS !== "function" ||
+      (!child.is("gone", NS_STANZA) && !child.is("redirect", NS_STANZA))
+    ) {
+      continue;
+    }
+    if (
+      child.children.some(
+        (node) =>
+          typeof node?.getNS === "function" ||
+          typeof node?.write === "function",
+      )
+    ) {
+      throw new Error("Invalid generated stanza error address");
+    }
+    // Validate the same character data the writer emits, converting scalars once.
+    child.children = child.children
+      .filter((node) => node != null)
+      .map((node) => {
+        const text = typeof node === "string" ? node : node.toString(10);
+        if (typeof text !== "string") {
+          throw new Error("Invalid generated stanza error address");
+        }
+        return text;
+      });
+  }
+
   const children = element.children.filter(
     (child) => typeof child?.getNS === "function",
   );
   const conditions = children.filter(
     (child) => child.getNS() === NS_STANZA && !child.is("text", NS_STANZA),
   );
+  const rootNamespace = element.getNS();
   if (
     element.name !== "error" ||
-    element.getNS() === "" ||
+    (rootNamespace !== undefined && rootNamespace !== namespace) ||
     !TYPES.has(element.attrs.type) ||
     conditions.length !== 1 ||
     !CONDITIONS.has(conditions[0].getName())
   ) {
     throw new Error("Invalid generated stanza error");
+  }
+
+  const condition = conditions[0];
+  if (condition.is("gone", NS_STANZA) || condition.is("redirect", NS_STANZA)) {
+    // A conversion may replace/rename the condition; validate only its final text.
+    const text = condition.children.filter((node) => node != null);
+    if (
+      text.some(
+        (node) => typeof node === "object" || typeof node === "function",
+      )
+    ) {
+      throw new Error("Invalid generated stanza error address");
+    }
+    condition.children = text.map((node) =>
+      typeof node === "string" ? node : node.toString(10),
+    );
+    const address = condition.children.join("");
+    if (address && !isIRI(address)) {
+      throw new Error("Invalid generated stanza error address");
+    }
   }
 
   for (const child of children) {
@@ -91,6 +143,107 @@ function validateError(element) {
       throw new Error("Invalid generated stanza error");
     }
   }
+}
+
+function captureError(element, namespace) {
+  // Call the real writer once; later query/scalar callbacks cannot change these bytes.
+  let source = "";
+  element.write((chunk) => {
+    source += chunk;
+  });
+
+  let snapshot;
+  let cursor;
+  let depth = 0;
+  let child;
+  let address = "";
+  let conditions = 0;
+  validateDocument(
+    `<iq xmlns="${namespace}">${source}</iq>`,
+    XML_CONTEXT.XMPP,
+    (tag) => {
+      depth += 1;
+      if (depth === 1) {
+        return;
+      }
+      if (depth === 2) {
+        if (
+          snapshot ||
+          tag.name !== "error" ||
+          tag.uri !== namespace ||
+          !TYPES.has(tag.attributes.type?.value)
+        ) {
+          throw new Error("Invalid generated stanza error");
+        }
+      } else if (depth === 3) {
+        child = tag;
+        address = "";
+        if (tag.uri === NS_STANZA) {
+          if (tag.local !== "text") {
+            conditions += 1;
+            if (!CONDITIONS.has(tag.local)) {
+              throw new Error("Invalid generated stanza error");
+            }
+          }
+        } else if (!tag.uri || RESERVED_NAMESPACES.has(tag.uri)) {
+          throw new Error("Invalid generated stanza error");
+        }
+      } else if (
+        depth > 3 &&
+        child.uri === NS_STANZA &&
+        ["text", "gone", "redirect"].includes(child.local)
+      ) {
+        throw new Error("Invalid generated stanza error character data");
+      }
+      const parsed = xml(
+        tag.name,
+        Object.fromEntries(
+          Object.values(tag.attributes).map(({ name, value }) => [name, value]),
+        ),
+      );
+      if (cursor) {
+        cursor.append(parsed);
+      } else {
+        snapshot = parsed;
+      }
+      cursor = parsed;
+    },
+    () => {
+      if (
+        depth === 3 &&
+        child.uri === NS_STANZA &&
+        (child.local === "gone" || child.local === "redirect") &&
+        address &&
+        !isIRI(address)
+      ) {
+        throw new Error("Invalid generated stanza error address");
+      }
+      if (depth >= 2) {
+        cursor = cursor.parent;
+      }
+      depth -= 1;
+    },
+    (text) => {
+      if (depth <= 2 && text.trim()) {
+        throw new Error("Invalid generated stanza error character data");
+      }
+      if (depth === 3 && child.uri === NS_STANZA) {
+        if (child.local === "gone" || child.local === "redirect") {
+          address += text;
+        }
+      }
+      cursor?.t(text);
+    },
+  );
+  if (!snapshot || conditions !== 1) {
+    throw new Error("Invalid generated stanza error");
+  }
+  Object.defineProperty(snapshot, "write", {
+    value: (writer) => writer(source),
+    writable: true,
+    configurable: true,
+  });
+  return snapshot;
 }
 
 function isQuery({ name, type }) {
@@ -174,8 +327,12 @@ function iqHandler(entity) {
           reply.is("error") &&
           (!reply.getNS() || reply.getNS() === stanza.getNS())
         ) {
-          validateError(reply);
-          return buildReplyError(ctx, reply, child);
+          validateError(reply, stanza.getNS());
+          return buildReplyError(
+            ctx,
+            captureError(reply, stanza.getNS()),
+            child,
+          );
         }
       }
 

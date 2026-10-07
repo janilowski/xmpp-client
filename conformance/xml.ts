@@ -26,7 +26,19 @@ export function readFrame(source: string) {
       ),
     }),
   );
-  parser.on("text", (text) => events.push({ text }));
+  const appendText = (text: string) => {
+    if (!text) {
+      return;
+    }
+    const previous = events.at(-1);
+    if (previous && "text" in previous) {
+      previous.text += text;
+    } else {
+      events.push({ text });
+    }
+  };
+  parser.on("text", appendText);
+  parser.on("cdata", appendText);
   parser.on("closetag", (tag) =>
     events.push({ close: `{${tag.uri}}${tag.local}` }),
   );
