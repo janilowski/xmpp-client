@@ -46,6 +46,10 @@ Chromium tests separately reject an untrusted certificate, but positive fixtures
 using an SPKI exception do not prove hostname/expiry validation. No complete
 cipher, revocation or all-browser matrix is claimed. Expected runtime failures
 remain executable test markers, not evidence of successful validation.
+Bun 1.4.2 accepts CN-only certificates without SAN for both WSS and HTTPS
+discovery (#50); version-bounded expected failures retain strict rejection
+assertions. Restricted trust-anchor provisioning (RFC 6120 §13.6) and long-lived
+certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
 
 ## Library policies
 
