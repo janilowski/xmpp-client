@@ -20,10 +20,12 @@ const FORMER_ACCOUNT = "former@example.test";
 const RESOURCE = "server-resource";
 const TIMEOUT_MS = 500;
 const KINDS = ["iq", "message", "presence"] as const;
+const SEND_METHODS = ["send", "sendMany"] as const;
 const PROTOCOLS = ["sasl", "sasl2", "anonymous"] as const;
 type Protocol = (typeof PROTOCOLS)[number];
 type Phase = "authentication" | "binding" | "ready" | "resumption";
 type Kind = (typeof KINDS)[number];
+type SendMethod = (typeof SEND_METHODS)[number];
 type XMPPClient = ReturnType<typeof client>;
 type Context = {
   name: string;
@@ -228,6 +230,92 @@ async function probe(
     }
   }
 }
+
+// RFC 6120 §§8.1.1.1/8.1.3: the application owns recipient intent and
+// message/presence ID policy; the client preserves its explicit wire choices.
+test.each([...SEND_METHODS])(
+  "RFC 6120 §§8.1.1.1/8.1.3: %s preserves caller addressing and IDs",
+  async (method: SendMethod) => {
+    const remote = addressingPeer("sasl", "ready", ACCOUNT);
+    const xmpp = client({
+      service: remote.peer.url,
+      domain: DOMAIN,
+      username: "configured",
+      password: "secret",
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    try {
+      expect((await xmpp.start()).toString()).toBe(`${ACCOUNT}/${RESOURCE}`);
+      const stanzas = [
+        xml("message", {
+          id: "message-recipient",
+          to: "BOB@REMOTE.TEST/Other",
+        }),
+        xml("message", { to: "EXAMPLE.TEST" }),
+        xml("presence", { id: "presence-broadcast" }),
+        xml("presence", { to: "E\u0301LISE@EXAMPLE.TEST/Other" }),
+      ];
+
+      if (method === "send") {
+        for (const stanza of stanzas) {
+          await xmpp.send(stanza);
+        }
+      } else {
+        await xmpp.sendMany(stanzas);
+      }
+
+      await xmpp.send(xml("barrier", { xmlns: EXTENSION }));
+      let barrierSeen = false;
+      const framesToRead = remote.peer.transcript.length + stanzas.length + 1;
+      for (let index = 0; index < framesToRead; index += 1) {
+        const root = readFrame(await remote.peer.next())[0];
+        if ("open" in root && root.open === `{${EXTENSION}}barrier`) {
+          barrierSeen = true;
+          break;
+        }
+      }
+      expect(barrierSeen).toBe(true);
+
+      const frames = remote.peer.transcript
+        .map((frame) => readFrame(frame)[0])
+        .filter(
+          (root) =>
+            "open" in root &&
+            (root.open === `{${CLIENT}}message` ||
+              root.open === `{${CLIENT}}presence`),
+        );
+      expect(frames).toEqual([
+        {
+          open: `{${CLIENT}}message`,
+          attributes: {
+            "{}id": "message-recipient",
+            "{}to": "bob@remote.test/Other",
+          },
+        },
+        {
+          open: `{${CLIENT}}message`,
+          attributes: { "{}to": DOMAIN },
+        },
+        {
+          open: `{${CLIENT}}presence`,
+          attributes: { "{}id": "presence-broadcast" },
+        },
+        {
+          open: `{${CLIENT}}presence`,
+          attributes: { "{}to": `${ACCOUNT}/Other` },
+        },
+      ]);
+      expect(errors).toEqual([]);
+      expect(remote.peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await remote.peer.stop();
+    }
+  },
+);
 
 // RFC 6120 §§8.1.1.1/8.1.2.1: logical defaults do not rewrite raw wire attrs.
 for (const protocol of PROTOCOLS) {

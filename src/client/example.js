@@ -28,7 +28,13 @@ xmpp.on("stanza", onStanza);
 async function onStanza(stanza) {
   if (stanza.is("message")) {
     xmpp.removeListener("stanza", onStanza);
-    await xmpp.send(xml("presence", { type: "unavailable" }));
+    await xmpp.send(
+      xml("presence", {
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Browser Web Crypto is part of this client profile.
+        id: globalThis.crypto.randomUUID(),
+        type: "unavailable",
+      }),
+    );
     await xmpp.stop();
   }
 }
@@ -37,12 +43,18 @@ xmpp.on("online", async (address) => {
   console.log("online as", address.toString());
 
   // Makes itself available
-  await xmpp.send(xml("presence"));
+  // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Browser Web Crypto is part of this client profile.
+  await xmpp.send(xml("presence", { id: globalThis.crypto.randomUUID() }));
 
   // Sends a chat message to itself
   const message = xml(
     "message",
-    { type: "chat", to: address },
+    {
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Browser Web Crypto is part of this client profile.
+      id: globalThis.crypto.randomUUID(),
+      type: "chat",
+      to: address,
+    },
     xml("body", {}, "hello world"),
   );
   await xmpp.send(message);

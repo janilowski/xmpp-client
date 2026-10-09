@@ -26,8 +26,10 @@ Sends an iq and returns a promise.
 - Rejects with `TimeoutError` if a reply wasn't received within the specified or default timeout
 - Rejects with `Error` for anything else
 
-* The request `id` attribute is optional and will be added if omitted.
-* The request `to` attribute is optional and will default to the server.
+- The request `id` attribute is optional and will be added if omitted.
+- Omitting `to` keeps it absent for direct processing by the connected server.
+  Supply `to` for a specific recipient, including a service hosted by the
+  server.
 
 ```js
 const response = await iqCaller.request(
@@ -45,7 +47,7 @@ A convenient method to send a `get` request. Behaves like [request](#request) bu
 ```js
 const foo = await iqCaller.get(
   xml("foo", "foo:bar"),
-  to, // "to" attribute, optional
+  to, // Specific recipient; omit only for direct server processing
   timeout, // 30 seconds timeout - default
 );
 console.log(foo);
@@ -58,7 +60,7 @@ A convenient method to send a `set` request. Behaves like [request](#request) bu
 ```js
 const foo = await iqCaller.set(
   xml("foo", "foo:bar"),
-  to, // "to" attribute, optional
+  to, // Specific recipient; omit only for direct server processing
   timeout, // 30 seconds timeout - default
 );
 console.log(foo);

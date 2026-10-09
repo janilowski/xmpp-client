@@ -39,7 +39,7 @@ const xmpp = client({
 xmpp.on("error", console.error);
 xmpp.on("online", async (address) => {
   console.log(`online as ${address}`);
-  await xmpp.send(xml("presence"));
+  await xmpp.send(xml("presence", { id: globalThis.crypto.randomUUID() }));
 });
 
 await xmpp.start();

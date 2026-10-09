@@ -43,7 +43,12 @@ xmpp.on("stanza", onStanza);
 async function onStanza(stanza) {
   if (stanza.is("message")) {
     xmpp.removeListener("stanza", onStanza);
-    await xmpp.send(xml("presence", { type: "unavailable" }));
+    await xmpp.send(
+      xml("presence", {
+        id: globalThis.crypto.randomUUID(),
+        type: "unavailable",
+      }),
+    );
     await xmpp.stop();
   }
 }
@@ -52,12 +57,12 @@ xmpp.on("online", async (address) => {
   console.log("online as", address.toString());
 
   // Makes itself available
-  await xmpp.send(xml("presence"));
+  await xmpp.send(xml("presence", { id: globalThis.crypto.randomUUID() }));
 
   // Sends a chat message to itself
   const message = xml(
     "message",
-    { type: "chat", to: address },
+    { id: globalThis.crypto.randomUUID(), type: "chat", to: address },
     xml("body", {}, "hello world"),
   );
   await xmpp.send(message);
@@ -226,7 +231,7 @@ await xmpp.disconnect();
 Sends a stanza.
 
 ```js
-await xmpp.send(xml("presence"));
+await xmpp.send(xml("presence", { id: globalThis.crypto.randomUUID() }));
 ```
 
 Returns a promise that resolves once the stanza is serialized and written to the socket or rejects if any of those fails.
@@ -241,7 +246,11 @@ Here is an example sending the same text message to multiple recipients.
 const message = "Hello";
 const recipients = ["romeo@example.com", "juliet@example.com"];
 const stanzas = recipients.map((address) =>
-  xml("message", { to: address, type: "chat" }, xml("body", null, message)),
+  xml(
+    "message",
+    { id: globalThis.crypto.randomUUID(), to: address, type: "chat" },
+    xml("body", null, message),
+  ),
 );
 await xmpp.sendMany(stanzas);
 ```

@@ -75,6 +75,13 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   Validation checks serialized output before writes or SM admission; it does
   not infer extension schemas. Empty opaque IDs and namespace aliases remain
   allowed, and foreign IQ-named nonzas remain outside these rules.
+- `send` and `sendMany` accept application-built stanzas, so the caller owns
+  recipient intent under RFC 6120 §8.1.1.1: a specific recipient requires a
+  `to` address, while direct server processing requires its omission. Explicit
+  addresses are prepared; omission remains omission on the wire. Callers SHOULD
+  assign message and presence IDs and choose their uniqueness scope (§8.1.3);
+  absence remains legal, while `iqCaller` generates required IQ IDs. Outgoing
+  middleware runs after a successful write and cannot repair this metadata.
 - Outgoing message, presence and IQ errors share RFC 6120 §8.3 validation.
   Only error stanzas may contain a direct core error, with one defined condition
   and a defined error type. Optional diagnostic text is character data;
