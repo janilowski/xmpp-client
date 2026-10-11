@@ -1236,6 +1236,31 @@ const mutations = [
     test: "normalizes equivalent identities",
   },
   {
+    name: "ignore explicit strict JID localpart parsing",
+    file: "src/jid/lib/JID.js",
+    before: "escape ??= escaping.detect(local);",
+    after: "escape = escape || escaping.detect(local);",
+    suite: "conformance/rfc7622.test.js",
+    test: "preserves reverse solidus identities",
+  },
+  {
+    name: "auto-escape a parsed JID localpart",
+    file: "src/jid/lib/parse.js",
+    before: "address.setLocal(local, false);",
+    after: "address.setLocal(local);",
+    suite: "conformance/rfc7622.test.js",
+    test: "preserves reverse solidus identities",
+  },
+  {
+    name: "re-escape a prepared bare JID localpart",
+    file: "src/jid/lib/JID.js",
+    before:
+      "const address = new JID(null, this._domain, null);\n      address.setLocal(this._local, false);\n      return address;",
+    after: "return new JID(this._local, this._domain, null);",
+    suite: "conformance/rfc7622.test.js",
+    test: "preserves reverse solidus identities",
+  },
+  {
     name: "omit JID byte limits",
     file: "src/jid/lib/precis.js",
     before: "export function checkLength(value) {",

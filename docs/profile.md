@@ -215,11 +215,12 @@ No transitional UTS #46 mapping. Unicode 16 is the selected repertoire;
 unassigned input is rejected before mapping. Older normalization engines reject
 non-ASCII preparation rather than silently returning partially prepared names.
 
-Malformed JIDs throw `TypeError`. Complete-address parsing does not automatically
-escape invalid localparts; the explicit parts constructor retains XEP-0106
-escaping. Equivalent Unicode/IDNA addresses compare equal, domains serialize as
-U-labels and resource case remains significant. Migrate stored keys with
-collision checks. This is not SASLprep, account provisioning or authorization.
+Malformed JIDs throw `TypeError`. Complete-address parsing does not apply
+XEP-0106 or collapse reverse-solidus identities; the explicit parts constructor
+retains XEP-0106 escaping. Equivalent Unicode/IDNA addresses compare equal,
+domains serialize as U-labels and resource case remains significant. Migrate
+stored keys with collision checks. This is not SASLprep, account provisioning
+or authorization.
 
 Invalid addresses cannot enter middleware or complete IQs, but raw
 `element`/`stanza` events are untrusted wire observations. Extension fields must

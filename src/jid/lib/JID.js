@@ -47,7 +47,9 @@ class JID {
    * */
   bare() {
     if (this._resource) {
-      return new JID(this._local, this._domain, null);
+      const address = new JID(null, this._domain, null);
+      address.setLocal(this._local, false);
+      return address;
     }
 
     return this;
@@ -68,7 +70,7 @@ class JID {
    * http://xmpp.org/rfcs/rfc6122.html#addressing-localpart
    * */
   setLocal(local, escape) {
-    escape = escape || escaping.detect(local);
+    escape ??= escaping.detect(local);
 
     if (escape) {
       local = escaping.escape(local);

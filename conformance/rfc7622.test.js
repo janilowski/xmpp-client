@@ -57,6 +57,20 @@ describe("RFC 7622 §§3.1, 3.5, 4 — address structure and comparison", () => 
     expect(jid("a@example.com/R").equals(jid("a@example.com/r"))).toBe(false);
   });
 
+  test("RFC 7622 §3.3.1 / XEP-0106 §4.1 preserves reverse solidus identities", () => {
+    const raw = jid(String.raw`foo\bar@example.com/resource`);
+    const escaped = jid(String.raw`foo\5cbar@example.com/resource`);
+
+    expect(raw.toString()).toBe(String.raw`foo\bar@example.com/resource`);
+    expect(raw.bare().toString()).toBe(String.raw`foo\bar@example.com`);
+    expect(raw.equals(escaped)).toBe(false);
+
+    // The parts constructor remains an explicit XEP-0106 convenience API.
+    expect(new JID(String.raw`foo\bar`, "example.com").toString()).toBe(
+      String.raw`foo\5cbar@example.com`,
+    );
+  });
+
   test("keeps explicit escaping separate from parsing", () => {
     expect(jid(`${escapeLocal("a b")}@example.com`).local).toBe(
       String.raw`a\20b`,

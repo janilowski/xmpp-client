@@ -22,5 +22,10 @@ export default function parse(s) {
     s = s.slice(atStart + 1);
   }
 
-  return new JID(local, s, resource);
+  const address = new JID(null, s, resource);
+  if (local !== undefined) {
+    address.setLocal(local, false);
+  }
+
+  return address;
 }
