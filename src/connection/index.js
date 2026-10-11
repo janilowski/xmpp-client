@@ -13,7 +13,11 @@ import createStanzaErrorValidator from "../xml/lib/stanzaError.js";
 
 import StreamError from "./lib/StreamError.js";
 import hasContentPrefix from "./lib/hasContentPrefix.js";
-import { parseHost, parseService } from "./lib/util.js";
+import {
+  INVALID_REDIRECT_TARGET,
+  parseRedirectTarget,
+  parseService,
+} from "./lib/util.js";
 import {
   canSendStanza,
   completeNegotiation,
@@ -26,6 +30,7 @@ const NS_STREAM = "urn:ietf:params:xml:ns:xmpp-streams";
 const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
 const NS_JABBER_CLIENT = "jabber:client";
 const NS_JABBER_SERVER = "jabber:server";
+const MAX_REDIRECTS = 5;
 const IQ_TYPES = new Set(["get", "set", "result", "error"]);
 const RESERVED_NAMESPACES = new Set([
   "",
@@ -39,6 +44,8 @@ class Connection extends EventEmitter {
   #parserListeners = null;
   #closing = false;
   #generation = 0;
+  #redirectCount = 0;
+  #redirecting = false;
 
   constructor(options = {}) {
     super();
@@ -217,23 +224,58 @@ class Connection extends EventEmitter {
 
   // https://xmpp.org/rfcs/rfc6120.html#streams-error-conditions-see-other-host
   async _onSeeOtherHost(error) {
-    const { protocol } = parseService(this.options.service);
+    if (this.#redirecting) {
+      return;
+    }
 
     const host = error.element.getChildText("see-other-host");
-    const { port } = parseHost(host);
-
     let service;
-    service = port
-      ? `${protocol || "xmpp:"}//${host}`
-      : (protocol ? `${protocol}//` : "") + host;
+    let redirectCount;
+
+    try {
+      redirectCount = this.#redirectCount + 1;
+      if (redirectCount > MAX_REDIRECTS) {
+        throw new Error("Too many successive stream redirects");
+      }
+
+      const target = parseRedirectTarget(host);
+      // RFC 6120 delegates the host grammar to the prepared XMPP domainpart.
+      try {
+        jid(target.domain);
+      } catch {
+        throw new TypeError(INVALID_REDIRECT_TARGET);
+      }
+      const currentService = this.socket?.url || this.options.service;
+      const current = parseService(currentService);
+      if (
+        current.protocol &&
+        current.hostname.toLowerCase() === target.hostname.toLowerCase()
+      ) {
+        const redirected = new URL(currentService);
+        redirected.hostname = target.hostname;
+        redirected.port = target.port;
+        service = redirected.toString();
+      } else {
+        service = target.port
+          ? `${current.protocol || "xmpp:"}//${host}`
+          : (current.protocol ? `${current.protocol}//` : "") + host;
+      }
+      this.#redirecting = true;
+    } catch (error_) {
+      this.emit("error", error_);
+      return;
+    }
 
     try {
       await promise(this, "disconnect");
       const { domain, lang } = this.options;
       await this.connect(service);
+      this.#redirectCount = redirectCount;
       await this.open({ domain, lang });
     } catch (error_) {
       this.emit("error", error_);
+    } finally {
+      this.#redirecting = false;
     }
   }
 
@@ -296,6 +338,7 @@ class Connection extends EventEmitter {
   }
 
   _ready(resumed = false) {
+    this.#redirectCount = 0;
     completeNegotiation(this);
     if (resumed) {
       this.status = "online";
@@ -367,6 +410,7 @@ class Connection extends EventEmitter {
    * Connects the socket
    */
   async connect(service) {
+    this.#redirectCount = 0;
     resetConnection(this);
     this._status("connecting", service);
     const socket = new this.Socket();

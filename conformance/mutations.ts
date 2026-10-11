@@ -17,6 +17,90 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "accept userinfo in a see-other-host target",
+    file: "src/connection/lib/util.js",
+    before: "/[/?#@]/u.test(value)",
+    after: "/[/?#]/u.test(value)",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "invalid userinfo causes no network contact$",
+  },
+  {
+    name: "discard an explicit see-other-host port 80",
+    file: "src/connection/lib/util.js",
+    before: "port = value.slice(separator + 1);",
+    after: 'port = "";',
+    suite: "src/connection/test/util.test.js",
+    test: "parses see-other-host target example.test:80$",
+  },
+  {
+    name: "skip see-other-host port range validation",
+    file: "src/connection/lib/util.js",
+    before: "const { hostname } = parseHost(value);",
+    after: "const { hostname } = parseHost(domain);",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "invalid out-of-range port causes no network contact$",
+  },
+  {
+    name: "skip see-other-host domainpart preparation",
+    file: "src/connection/index.js",
+    before: "        jid(target.domain);",
+    after: '        jid("example.test");',
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "invalid domainpart causes no network contact$",
+  },
+  {
+    name: "start parallel stream redirects",
+    file: "src/connection/index.js",
+    before: "if (this.#redirecting) {",
+    after: "if (false) {",
+    suite: "src/connection/test/seeOtherHost.test.js",
+    test: "parallel stream errors start only one redirect$",
+  },
+  {
+    name: "allow an unbounded stream redirect sequence",
+    file: "src/connection/index.js",
+    before: "if (redirectCount > MAX_REDIRECTS) {",
+    after: "if (false) {",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "aborts after five successive redirects$",
+  },
+  {
+    name: "discard the WebSocket path on same-host redirect",
+    file: "src/connection/index.js",
+    before: "const redirected = new URL(currentService);",
+    after: "const redirected = new URL(`${current.protocol}//${host}`);",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "same-host redirect preserves WebSocket policy and stream identity$",
+  },
+  {
+    name: "retain redirect count after successful negotiation",
+    file: "src/connection/index.js",
+    before: "_ready(resumed = false) {\n    this.#redirectCount = 0;",
+    after: "_ready(resumed = false) {",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "successful negotiation ends a redirect sequence$",
+  },
+  {
+    name: "replace stream identity after see-other-host",
+    file: "src/connection/index.js",
+    before:
+      'await promise(this, "disconnect");\n      const { domain, lang } = this.options;',
+    after:
+      'await promise(this, "disconnect");\n      const domain = new URL(service).hostname;\n      const { lang } = this.options;',
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "same-host redirect preserves WebSocket policy and stream identity$",
+  },
+  {
+    name: "drop stream language after see-other-host",
+    file: "src/connection/index.js",
+    before:
+      'await promise(this, "disconnect");\n      const { domain, lang } = this.options;',
+    after:
+      'await promise(this, "disconnect");\n      const { domain } = this.options;\n      const lang = undefined;',
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "same-host redirect preserves WebSocket policy and stream identity$",
+  },
+  {
     name: "detach a replacement parser after an old parser error",
     file: "src/connection/index.js",
     before:
@@ -584,9 +668,10 @@ const mutations = [
   {
     name: "restore stale routing authority before stream opening",
     file: "src/connection/index.js",
-    before: "async connect(service) {\n    resetConnection(this);",
+    before:
+      "async connect(service) {\n    this.#redirectCount = 0;\n    resetConnection(this);",
     after:
-      "async connect(service) {\n    resetConnection(this);\n    if (this.jid) { confirmIdentity(this, this.jid); completeNegotiation(this); }",
+      "async connect(service) {\n    this.#redirectCount = 0;\n    resetConnection(this);\n    if (this.jid) { confirmIdentity(this, this.jid); completeNegotiation(this); }",
     suite: "conformance/rfc6120-stanza-routing.test.ts",
     test: "ordinary remote replay.* / valid$",
   },
@@ -1434,6 +1519,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-stanza-addressing.test.ts",
       "conformance/rfc6120-stanza-errors.test.ts",
+      "conformance/rfc6120-see-other-host.test.ts",
       "conformance/rfc6120-outgoing-xml.test.ts",
       "conformance/rfc6120-xml.test.ts",
       "conformance/rfc6120-content-prefixes.test.ts",

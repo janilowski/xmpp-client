@@ -7,6 +7,7 @@ const PEER_TIMEOUT = 2000;
 export class ScriptedPeer {
   readonly transcript: string[] = [];
   readonly requests: Headers[] = [];
+  readonly requestUrls: string[] = [];
   readonly errors: Error[] = [];
   private readonly server;
   private socket?: ServerWebSocket<undefined>;
@@ -24,6 +25,7 @@ export class ScriptedPeer {
       port: 0,
       fetch: (request, server) => {
         this.requests.push(request.headers);
+        this.requestUrls.push(request.url);
         if (
           server.upgrade(request, {
             headers: { "Sec-WebSocket-Protocol": "xmpp" },

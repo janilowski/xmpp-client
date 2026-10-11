@@ -66,6 +66,13 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   resource (RFC 6120 §4.9.3.3). A repeated or absent choice is replaced with a
   fresh UUID; a different prepared callback/configured choice is preserved.
   IQ conflicts do not trigger this policy. Bind2 tags are not resourceparts.
+- Stream `see-other-host` targets require a complete prepared
+  `domainpart[:port]`. Same-host port redirects preserve the WebSocket scheme,
+  path, query, stream `to` and language. A connection attempt stops after five
+  successive redirects; completed negotiation starts a new sequence
+  (RFC 6120 §4.9.3.19). Cross-host browser TLS cannot currently verify the
+  original XMPP service reference identity as required; that unsafe automatic
+  path remains an explicit defect in #58, not a conformance claim.
 - Malformed correlated IQ responses reject that request locally without replying
   to a result/error stanza. Stanza errors are recoverable; stream errors close
   the transport. Unknown standard error conditions map to `undefined-condition`.
