@@ -174,6 +174,27 @@ describe("RFC 6120 §§4.7.4/8.1.5 — outgoing language tag format", () => {
     },
   );
 
+  // Preserve the option preflight contract independently of valid serialized bytes.
+  test("§4.7.4 profile: reject invalid configuration before a serializer can conceal it", async () => {
+    await connectStream("en_US");
+    const source = `<open xmlns="${FRAMING}" to="example.test" version="1.0" xml:lang="en"/>`;
+    let calls = 0;
+    xmpp.header = () => {
+      calls += 1;
+      return source;
+    };
+
+    await expect(xmpp.open(xmpp.options)).rejects.toBeInstanceOf(TypeError);
+    expect(calls).toBe(0);
+    expect(peer.transcript).toEqual([]);
+    expect(xmpp.status).toBe("connect");
+
+    await xmpp.open({ domain: "example.test", lang: "en" });
+    expect(await peer.next()).toBe(source);
+    expect(calls).toBe(1);
+    expect(peer.transcript).toEqual([source]);
+  });
+
   for (const location of ["stanza", "child", "descendant"] as const) {
     test.each(MALFORMED)(
       `§8.1.5 / RFC 5646 §§2.1–2.2: reject malformed ${location} language %j without leaking its frame`,

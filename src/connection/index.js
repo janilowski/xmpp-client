@@ -490,22 +490,22 @@ class Connection extends EventEmitter {
       throw new TypeError("Invalid language tag");
     }
     const preparedDomain = resetStream(this, domain);
-    this._status("opening");
-    this.#closing = false;
-
     const headerElement = this.headerElement();
     headerElement.attrs.to = preparedDomain;
     headerElement.attrs["xml:lang"] = lang;
+    // Validate the captured transport header before taking ownership of a stream.
+    const source = this.header(headerElement);
+    this._validateHeader(source);
+
+    this._status("opening");
+    this.#closing = false;
     this.root = headerElement;
 
     this._attachParser(new this.Parser());
 
     const opened = this.#waitForStream("open", this.timeout);
     try {
-      const [element] = await Promise.all([
-        opened.result,
-        this.write(this.header(headerElement)),
-      ]);
+      const [element] = await Promise.all([opened.result, this.write(source)]);
       return element;
     } finally {
       opened.cancel();
@@ -828,6 +828,9 @@ class Connection extends EventEmitter {
   isNonza(element) {
     return !this.isStanza(element);
   }
+
+  // Override
+  _validateHeader() {}
 
   // Override
   header(el) {

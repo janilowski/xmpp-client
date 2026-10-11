@@ -17,6 +17,49 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "defer invalid opening framing until socket write",
+    file: "src/websocket/lib/Connection.js",
+    before:
+      'typeof source !== "string" || !source.startsWith(XML_START_CHARACTER)',
+    after: "false",
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "serialized opening rejects before writing and recovers / leading whitespace$",
+  },
+  {
+    name: "skip generated opening validation",
+    file: "src/connection/index.js",
+    before: "    this._validateHeader(source);",
+    after: "    /* opening validation omitted */",
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "serialized opening rejects before writing and recovers / duplicate attribute$",
+  },
+  {
+    name: "accept malformed serialized opening language",
+    file: "src/websocket/lib/Connection.js",
+    before: 'lang !== undefined && lang !== "" && !isLanguageTag(lang)',
+    after: "false",
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "serialized opening rejects before writing and recovers / malformed language$",
+  },
+  {
+    name: "permit SDDecl on a generated opening",
+    file: "src/websocket/lib/Connection.js",
+    before: "validateDocument(source, XML_CONTEXT.XMPP, (tag) => {",
+    after: "validateDocument(source, XML_CONTEXT.DOCUMENT, (tag) => {",
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "serialized opening rejects before writing and recovers / standalone yes$",
+  },
+  {
+    name: "serialize the opening again after validation",
+    file: "src/connection/index.js",
+    before:
+      "const [element] = await Promise.all([opened.result, this.write(source)]);",
+    after:
+      "const [element] = await Promise.all([opened.result, this.write(this.header(headerElement))]);",
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "opening preserves its validated snapshot / ordinary$",
+  },
+  {
     name: "allow an empty PLAIN authentication identity",
     file: "src/sasl-plain/index.js",
     before: 'username === "" ||',
@@ -551,8 +594,7 @@ const mutations = [
   {
     name: "change stream state before validating the target",
     file: "src/connection/index.js",
-    before:
-      'const preparedDomain = resetStream(this, domain);\n    this._status("opening");\n    this.#closing = false;',
+    before: "const preparedDomain = resetStream(this, domain);",
     after:
       'this._status("opening");\n    this.#closing = false;\n    const preparedDomain = resetStream(this, domain);',
     suite: "conformance/rfc6120-stream-headers.test.ts",
@@ -564,7 +606,7 @@ const mutations = [
     before: 'if (lang != null && lang !== "" && !isLanguageTag(lang)) {',
     after: "if (false) {",
     suite: "conformance/rfc6120-language-tags.test.ts",
-    test: "reject malformed configured stream language.*not a tag.*before wire emission$",
+    test: "reject invalid configuration before a serializer can conceal it$",
   },
   {
     name: "trust tree language instead of serialized output",

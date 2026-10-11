@@ -133,6 +133,8 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   Generated XML declarations must omit `standalone` (RFC 6120 §11.5).
   Incoming standalone declarations are ignored; generic XML documents retain
   their normal grammar. WebSocket standalone documents do not waive SDDecl rules.
+  Generated WebSocket openings use the same XML/language checks before parser
+  attachment; serialization runs once and the validated snapshot is written.
   Browser messages are buffered before delivery; these checks cannot bound
   native allocation before the library receives them.
 - Stream version 1.x is supported, including numeric leading zeros and higher

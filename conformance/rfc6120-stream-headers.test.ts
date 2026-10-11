@@ -12,6 +12,7 @@ const CONTENT = "jabber:client";
 const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const TIMEOUT_MS = 500;
 const CLOSE = `<close xmlns="${FRAMING}"/>`;
+const OPEN = `<open xmlns="${FRAMING}" to="example.test" version="1.0" xml:lang="en"/>`;
 
 const DOMAINS = [
   ["prepared ASCII", "example.test", "example.test"],
@@ -24,6 +25,111 @@ const DOMAINS = [
   ["IPv6", "[2001:0DB8:0:0:0:0:0:1]", "[2001:db8::1]"],
   ["local hostname", "localhost", "localhost"],
 ] as const;
+
+// RFC 6120 §§4.7.4/11.3/11.5 and RFC 7395 §3.3.3 apply to actual header bytes.
+// Reply even to malformed output so absent validation fails an assertion, not a timeout.
+test.each([
+  ["leading whitespace", ` ${OPEN}`],
+  ["malformed language", OPEN.replace('xml:lang="en"', 'xml:lang="en_US"')],
+  [
+    "duplicate attribute",
+    OPEN.replace('version="1.0"', 'version="1.0" version="1.0"'),
+  ],
+  ["unbound prefix", OPEN.replace("<open ", "<missing:open ")],
+  ["comment", `${OPEN}<!-- forbidden -->`],
+  ["processing instruction", `${OPEN}<?forbidden value?>`],
+  ["standalone yes", `<?xml version="1.0" standalone="yes"?>${OPEN}`],
+  ["standalone no", `<?xml version="1.0" standalone="no"?>${OPEN}`],
+] as const)(
+  "RFC 6120 §§4.7.4/11: serialized opening rejects before writing and recovers / %s",
+  async (_name, source) => {
+    const peer = new ScriptedPeer((frame, remote) => {
+      remote.send(
+        frame.startsWith("<close")
+          ? CLOSE
+          : `<open xmlns="${FRAMING}" from="example.test" id="peer" version="1.0"/>`,
+      );
+    });
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      lang: "en",
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    const header = xmpp.header;
+    xmpp.header = () => source;
+    try {
+      await xmpp.connect(peer.url);
+      const result = await xmpp
+        .open(xmpp.options)
+        .catch((error: Error) => error);
+      expect(result).toBeInstanceOf(TypeError);
+      expect(peer.transcript).toEqual([]);
+      expect(xmpp.status).toBe("connect");
+      xmpp.header = header;
+      await xmpp.open(xmpp.options);
+      // The valid opening response is an ordered barrier and proves no stale parser remained.
+      expect(peer.transcript.map(readFrame)).toEqual([readFrame(OPEN)]);
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
+test.each([
+  ["ordinary", OPEN],
+  ["declaration", `<?xml version="1.0" encoding="UTF-8"?>${OPEN}`],
+  ["namespace prefix", OPEN.replace("<open ", `<f:open xmlns:f="${FRAMING}" `)],
+  ["omitted language", OPEN.replace(' xml:lang="en"', "")],
+  // #39 is a pending profile decision, not a claim that empty XMPP roots conform.
+  [
+    "existing empty-language policy",
+    OPEN.replace('xml:lang="en"', 'xml:lang=""'),
+  ],
+] as const)(
+  "RFC 6120 §11 / RFC 7395 §3.3.3: opening preserves its validated snapshot / %s",
+  async (_name, source) => {
+    const peer = new ScriptedPeer((frame, remote) => {
+      remote.send(
+        frame.startsWith("<close")
+          ? CLOSE
+          : `<open xmlns="${FRAMING}" from="example.test" id="peer" version="1.0"/>`,
+      );
+    });
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      lang: "en",
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    let calls = 0;
+    xmpp.header = () => {
+      calls += 1;
+      return calls === 1 ? source : `${OPEN}<!-- changed after validation -->`;
+    };
+    try {
+      await xmpp.connect(peer.url);
+      await xmpp.open(xmpp.options);
+      expect(calls).toBe(1);
+      expect(peer.transcript).toEqual([source]);
+      expect(readFrame(source)[0]).toMatchObject({ open: `{${FRAMING}}open` });
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
 
 // RFC 7395 §§3.3.1/3.4/3.7 preserve RFC 6120 §4.7 attribute semantics.
 // Explicit loopback is the profile's test boundary, not evidence of TLS/PKIX.
