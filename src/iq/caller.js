@@ -3,6 +3,7 @@ import StanzaError from "../middleware/lib/StanzaError.js";
 import operation from "../events/lib/operation.js";
 import xml from "../xml/index.js";
 import jid from "../jid/index.js";
+import { getAccount, getServer } from "../connection/lib/negotiation.js";
 
 // Match prepared wire identities; do not repair malformed sender addresses.
 function replyMatches(from, { to, server, account }) {
@@ -84,10 +85,8 @@ class IQCaller {
     // Snapshot the request identity before send or application callbacks run.
     const deferred = Object.assign(Promise.withResolvers(), {
       to: to === undefined ? undefined : jid(to.toString()).toString(),
-      server:
-        this.entity.jid?.domain ||
-        (this.entity.options.domain && jid(this.entity.options.domain).domain),
-      account: this.entity.jid?.bare().toString(),
+      server: getServer(this.entity),
+      account: getAccount(this.entity),
     });
     this.handlers.set(id, deferred);
 

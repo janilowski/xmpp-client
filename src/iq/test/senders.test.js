@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { mockClient, mockInput } from "../../../test/support/index.js";
 import { disconnectClients } from "../../../test/support/mockClient.js";
+import { resetStream } from "../../connection/lib/negotiation.js";
 
 afterEach(disconnectClients);
 
@@ -42,6 +43,9 @@ for (const type of ["result", "error"]) {
     `${type}: to=%s from=%s accepted=%s`,
     async (to, from, accepted) => {
       const xmpp = mockClient({ domain: "bar" });
+      // This matrix owns a confirmed stream and bound account, not public hints.
+      resetStream(xmpp, "bar");
+      xmpp._jid("foo@bar/test");
       xmpp._ready();
       let settled = false;
       const pending = xmpp.iqCaller.request(

@@ -29,6 +29,10 @@ export function getAccount(entity) {
   return connections.get(entity)?.account ?? undefined;
 }
 
+export function getServer(entity) {
+  return connections.get(entity)?.server ?? undefined;
+}
+
 export function getIdentity(entity) {
   return connections.get(entity)?.identity ?? undefined;
 }

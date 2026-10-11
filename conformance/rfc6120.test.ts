@@ -15,6 +15,7 @@ import { readFrame } from "./xml.ts";
 // Confirmed implicit sender and explicit addresses: rfc6120-stanza-addressing.test.ts.
 // Unknown message/presence extensions and legal outcomes (§8.4): rfc6120-extended-content.test.ts.
 // IQ envelopes and stanza errors: rfc6120-iq.test.ts.
+// IQ reply authority and request snapshots: rfc6120-iq-senders.test.ts.
 // Library-generated error structure and namespace scope: rfc6120-generated-errors.test.ts.
 // Outgoing error syntax and serialized URI/IRI content: rfc6120-outgoing-errors.test.ts.
 // Content namespace isolation and SM accounting: rfc6120-namespaces.test.ts.

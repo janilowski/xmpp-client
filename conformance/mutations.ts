@@ -38,6 +38,38 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "grant IQ reply authority to a mutable public account",
+    file: "src/iq/caller.js",
+    before: "account: getAccount(this.entity),",
+    after: "account: this.entity.jid?.bare().toString(),",
+    suite: "conformance/rfc6120-iq-senders.test.ts",
+    test: "ignore forged result from forged@attacker.test after public JID mutation before request; accept account$",
+  },
+  {
+    name: "grant IQ reply authority to a mutable public domain",
+    file: "src/iq/caller.js",
+    before: "server: getServer(this.entity),",
+    after: "server: this.entity.jid?.domain,",
+    suite: "conformance/rfc6120-iq-senders.test.ts",
+    test: "ignore forged error from attacker.test after public JID mutation before request; accept server$",
+  },
+  {
+    name: "grant IQ reply authority to mutable domain options",
+    file: "src/iq/caller.js",
+    before: "server: getServer(this.entity),",
+    after: "server: this.entity.options.domain,",
+    suite: "conformance/rfc6120-iq-senders.test.ts",
+    test: "pre-auth no-to result uses the opened server after options mutation before request$",
+  },
+  {
+    name: "derive the connected IQ server from the assigned account",
+    file: "src/iq/caller.js",
+    before: "server: getServer(this.entity),",
+    after: 'server: getAccount(this.entity)?.split("@")[1],',
+    suite: "conformance/rfc6120-iq-senders.test.ts",
+    test: "assigned account domain does not replace the connected IQ server / result from example.test$",
+  },
+  {
     name: "resume without a retained bound session",
     file: "src/stream-management/index.js",
     before: "      !retained?.jid ||\n      !sm.id ||",
@@ -1871,6 +1903,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-stream-headers.test.ts",
       "conformance/rfc6120-serialized-stanzas.test.ts",
       "conformance/rfc6120-iq.test.ts",
+      "conformance/rfc6120-iq-senders.test.ts",
       "conformance/rfc6120-generated-errors.test.ts",
       "conformance/rfc6120-outgoing-iq.test.ts",
       "conformance/rfc6120-outgoing-errors.test.ts",

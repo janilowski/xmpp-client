@@ -166,8 +166,10 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   JID; bare destinations permit a resource. No-`to` requests accept no sender,
   the server domain or the client's bare JID. Own-bare/server destinations also
   allow absent `from`; remote destinations do not. An error's `by` attribute
-  cannot override this policy. Reusing caller-supplied IDs for the same peer
-  cannot distinguish delayed replies; prefer generated fresh IDs.
+  cannot override this policy. Server/account authorities are private
+  protocol-confirmed snapshots, not mutable public JIDs or options.
+  Reusing caller-supplied IDs for the same peer cannot distinguish delayed
+  replies; prefer generated fresh IDs.
 - SM malformed counts or resumption identities close with `bad-format`, a local
   validation policy. Resumption IDs are opaque and must match exactly.
   Both resumption paths require the private bound identity retained from that
