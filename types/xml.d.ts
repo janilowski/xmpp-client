@@ -1,7 +1,6 @@
 import type { ElementConstructor, XMLFactory } from "./index.js";
 
 export type {
-  Element,
   ElementConstructor,
   XMLAttributes,
   XMLAttributeValue,
@@ -9,6 +8,7 @@ export type {
   XMLFactory,
 } from "./index.js";
 
+export type Element = import("./index.js").Element;
 export declare const Element: ElementConstructor;
 export declare const createElement: XMLFactory;
 export declare const xml: XMLFactory;
