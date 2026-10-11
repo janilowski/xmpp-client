@@ -41,7 +41,9 @@ Web APIs expose neither certificate chains nor channel-binding key material.
 `Socket.secure` also permits explicit loopback credentials: it is not proof
 of encryption. TLS is hop-by-hop, not end-to-end protection.
 
-The Bun disposable-CA tests exercise trust, hostname and expiry rejection.
+The Bun disposable-CA tests exercise root trust, hostname and expiry rejection
+for direct WSS and HTTPS discovery. Intermediate-chain scenarios accept a valid
+chain and reject an untrusted, expired, non-CA or missing intermediate.
 Chromium tests separately reject an untrusted certificate, but positive fixtures
 using an SPKI exception do not prove hostname/expiry validation. No complete
 cipher, revocation or all-browser matrix is claimed. Expected runtime failures

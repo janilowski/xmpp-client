@@ -5,14 +5,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generate } from "selfsigned";
 
-// RFC 7395 §§3.9, 6; RFC 7590 §3.4; XEP-0156 1.4.0 §2.2:
-// authenticate HTTPS discovery and WSS endpoint identities independently of the
-// XMPP domain. PKIX belongs to the runtime; these are integration scenarios.
+// RFC 7395 §§3.9, 6; RFC 7590 §3.4; RFC 6120 §13.7.2;
+// RFC 5280 §§6.1.3(a), 6.1.4(k); RFC 9525 §1.2;
+// XEP-0156 1.4.0 §2.2: authenticate the complete HTTPS discovery and WSS
+// certificate paths and endpoint identities independently of the XMPP domain.
+// PKIX belongs to the runtime; these are integration scenarios.
 const HTTP_BAD_REQUEST = 400;
 const DAY_MS = 86_400_000;
 const KNOWN_CN_ONLY_BUN_VERSIONS = new Set(["1.4.2", "1.4.3"]);
 let directory: string;
 let authority: Awaited<ReturnType<typeof generate>>;
+let untrustedAuthority: Awaited<ReturnType<typeof generate>>;
+const intermediates = new Map<string, Awaited<ReturnType<typeof generate>>>();
 
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "xmpp-tls-"));
@@ -26,6 +30,67 @@ beforeAll(async () => {
       ],
     },
   );
+  untrustedAuthority = await generate(
+    [{ name: "commonName", value: "Untrusted XMPP test CA" }],
+    {
+      algorithm: "sha256",
+      extensions: [
+        { name: "basicConstraints", cA: true, critical: true },
+        { name: "keyUsage", keyCertSign: true, cRLSign: true, critical: true },
+      ],
+    },
+  );
+  const now = Date.now();
+  for (const root of [authority, untrustedAuthority]) {
+    const parsed = new X509Certificate(root.cert);
+    expect(parsed.ca).toBe(true);
+    expect(parsed.issuer).toBe(parsed.subject);
+    expect(parsed.verify(parsed.publicKey)).toBe(true);
+    expect(Date.parse(parsed.validFrom)).toBeLessThanOrEqual(now);
+    expect(Date.parse(parsed.validTo)).toBeGreaterThan(now);
+  }
+
+  for (const scenario of [
+    "chain-valid",
+    "chain-untrusted-intermediate",
+    "chain-expired-intermediate",
+    "chain-non-ca-intermediate",
+  ]) {
+    const issuer =
+      scenario === "chain-untrusted-intermediate"
+        ? untrustedAuthority
+        : authority;
+    const intermediate = await generate(
+      [{ name: "commonName", value: `XMPP ${scenario}` }],
+      {
+        algorithm: "sha256",
+        ca: { key: issuer.private, cert: issuer.cert },
+        notBeforeDate: new Date(now - 2 * DAY_MS),
+        notAfterDate: new Date(
+          now + (scenario === "chain-expired-intermediate" ? -1 : 1) * DAY_MS,
+        ),
+        extensions: [
+          {
+            name: "basicConstraints",
+            cA: scenario !== "chain-non-ca-intermediate",
+            critical: true,
+          },
+          // Isolate a non-CA issuer without an inconsistent keyCertSign bit.
+          ...(scenario === "chain-non-ca-intermediate"
+            ? []
+            : [
+                {
+                  name: "keyUsage" as const,
+                  keyCertSign: true,
+                  cRLSign: true,
+                  critical: true,
+                },
+              ]),
+        ],
+      },
+    );
+    intermediates.set(scenario, intermediate);
+  }
   await writeFile(join(directory, "ca.pem"), authority.cert);
 });
 
@@ -41,11 +106,21 @@ describe.each([
   ["direct", "expired"],
   ["direct", "untrusted"],
   ["direct", "cn-only"],
+  ["direct", "chain-valid"],
+  ["direct", "chain-untrusted-intermediate"],
+  ["direct", "chain-expired-intermediate"],
+  ["direct", "chain-non-ca-intermediate"],
+  ["direct", "chain-missing-intermediate"],
   ["discovery", "valid"],
   ["discovery", "wrong-name"],
   ["discovery", "expired"],
   ["discovery", "untrusted"],
   ["discovery", "cn-only"],
+  ["discovery", "chain-valid"],
+  ["discovery", "chain-untrusted-intermediate"],
+  ["discovery", "chain-expired-intermediate"],
+  ["discovery", "chain-non-ca-intermediate"],
+  ["discovery", "chain-missing-intermediate"],
 ] as const)("§3.9/6 PKIX: %s / %s", (mode, scenario) => {
   const knownFailure =
     KNOWN_CN_ONLY_BUN_VERSIONS.has(Bun.version) && scenario === "cn-only";
@@ -55,11 +130,19 @@ describe.each([
   // Hook failures are never expected conformance failures, including for #50.
   beforeAll(async () => {
     const now = Date.now();
+    const intermediate = intermediates.get(
+      scenario === "chain-missing-intermediate" ? "chain-valid" : scenario,
+    );
+    if (scenario.startsWith("chain-")) {
+      expect(intermediate).toBeDefined();
+    }
+    const issuer = intermediate ?? authority;
+
     const certificate = await generate(
       [{ name: "commonName", value: "localhost" }],
       {
         algorithm: "sha256",
-        ca: { key: authority.private, cert: authority.cert },
+        ca: { key: issuer.private, cert: issuer.cert },
         notBeforeDate: new Date(now - 2 * DAY_MS),
         notAfterDate: new Date(
           now + (scenario === "expired" ? -1 : 1) * DAY_MS,
@@ -88,21 +171,59 @@ describe.each([
       },
     );
     const parsed = new X509Certificate(certificate.cert);
+    expect(parsed.ca).toBe(false);
     expect(parsed.subject).toBe("CN=localhost");
-    expect(parsed.verify(new X509Certificate(authority.cert).publicKey)).toBe(
+    expect(parsed.issuer).toBe(new X509Certificate(issuer.cert).subject);
+    expect(parsed.verify(new X509Certificate(issuer.cert).publicKey)).toBe(
       true,
     );
+    expect(Date.parse(parsed.validFrom)).toBeLessThan(now);
+    expect(Date.parse(parsed.validTo) > now).toBe(scenario !== "expired");
     expect(parsed.subjectAltName).toBe(
       scenario === "cn-only"
         ? undefined
         : `DNS:${scenario === "wrong-name" ? "wrong.invalid" : "localhost"}`,
     );
+    if (scenario === "chain-missing-intermediate") {
+      // A fresh child has no cached issuer or AIA URL to retrieve one.
+      expect(parsed.infoAccess).toBeUndefined();
+    }
+
+    if (intermediate) {
+      const parsedAuthority = new X509Certificate(authority.cert);
+      const parsedIntermediate = new X509Certificate(intermediate.cert);
+      const parsedIssuer = new X509Certificate(
+        scenario === "chain-untrusted-intermediate"
+          ? untrustedAuthority.cert
+          : authority.cert,
+      );
+
+      expect(parsedIntermediate.ca).toBe(
+        scenario !== "chain-non-ca-intermediate",
+      );
+      expect(parsedIntermediate.issuer).toBe(parsedIssuer.subject);
+      expect(parsedIntermediate.verify(parsedIssuer.publicKey)).toBe(true);
+      expect(parsedIntermediate.verify(parsedAuthority.publicKey)).toBe(
+        scenario !== "chain-untrusted-intermediate",
+      );
+      expect(Date.parse(parsedIntermediate.validFrom)).toBeLessThan(now);
+      expect(Date.parse(parsedIntermediate.validTo) > now).toBe(
+        scenario !== "chain-expired-intermediate",
+      );
+    }
+
     let upgrades = 0;
     let discoveries = 0;
     server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
-      tls: { cert: certificate.cert, key: certificate.private },
+      tls: {
+        cert:
+          intermediate && scenario !== "chain-missing-intermediate"
+            ? `${certificate.cert}\n${intermediate.cert}`
+            : certificate.cert,
+        key: certificate.private,
+      },
       fetch(request, server) {
         if (new URL(request.url).pathname === "/.well-known/host-meta") {
           discoveries += 1;
@@ -168,9 +289,9 @@ describe.each([
   // RFC 9525 §2: CN is not a service identity. #50 remains nonconforming on
   // this exact runtime; a fixed or different version must reject it normally.
   test.failingIf(knownFailure)(
-    `validates endpoint identity before HTTP discovery or WS upgrade${knownFailure ? ` [expected Bun ${Bun.version} violation #50]` : ""}`,
+    `validates the certificate path and endpoint identity before HTTP discovery or WS upgrade${knownFailure ? ` [expected Bun ${Bun.version} violation #50]` : ""}`,
     () => {
-      const accepted = scenario === "valid";
+      const accepted = scenario === "valid" || scenario === "chain-valid";
       expect(observed).toEqual({
         outcome: accepted ? "accepted" : "rejected",
         upgrades: accepted ? 1 : 0,
