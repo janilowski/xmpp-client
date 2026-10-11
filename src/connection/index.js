@@ -30,6 +30,7 @@ const NS_STREAM = "urn:ietf:params:xml:ns:xmpp-streams";
 const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
 const NS_JABBER_CLIENT = "jabber:client";
 const NS_JABBER_SERVER = "jabber:server";
+const CONNECTION_CLOSING_MESSAGE = "Connection is closing";
 const MAX_REDIRECTS = 5;
 const IQ_TYPES = new Set(["get", "set", "result", "error"]);
 const RESERVED_NAMESPACES = new Set([
@@ -122,11 +123,13 @@ class Connection extends EventEmitter {
   #onStreamClosed(dirty, reason) {
     const generation = this.#generation;
     const socket = this.socket;
+    const closing = this.#closing;
+    this.#closing = true;
     // A peer-initiated close still needs our closing header before the transport closes.
     const reply =
       this.parser &&
       this.socket &&
-      !this.#closing &&
+      !closing &&
       this.status !== "closing" &&
       !(dirty instanceof Error)
         ? this.write(this.footer(this.footerElement()))
@@ -157,6 +160,8 @@ class Connection extends EventEmitter {
     }
     this.#generation += 1;
     this.socket = socket;
+    // Only a new transport permits initiation after stream closure.
+    this.#closing = false;
     const events = {
       data: this._onData.bind(this),
       close: this.#onSocketClosed.bind(this),
@@ -434,6 +439,7 @@ class Connection extends EventEmitter {
   async _closeSocket(timeout = this.timeout) {
     const socket = this.socket;
     const generation = this.#generation;
+    this.#closing = true;
     this._status("disconnecting");
     if (this.#generation !== generation) {
       return;
@@ -482,6 +488,9 @@ class Connection extends EventEmitter {
    * Opens the stream
    */
   async open(options) {
+    if (this.#closing) {
+      throw new Error(CONNECTION_CLOSING_MESSAGE);
+    }
     if (this.parser) {
       throw new Error("A stream is already open; use restart instead");
     }
@@ -498,7 +507,6 @@ class Connection extends EventEmitter {
     this._validateHeader(source);
 
     this._status("opening");
-    this.#closing = false;
     this.root = headerElement;
 
     this._attachParser(new this.Parser());
@@ -584,7 +592,7 @@ class Connection extends EventEmitter {
       return;
     }
     if (this.#closing) {
-      throw new Error("Connection is closing");
+      throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
     this.#closing = true;
     const fragment = this.footer(this.footerElement());
@@ -612,6 +620,9 @@ class Connection extends EventEmitter {
    * https://xmpp.org/rfcs/rfc6120.html#streams-negotiation-restart
    */
   async restart() {
+    if (this.#closing) {
+      throw new Error(CONNECTION_CLOSING_MESSAGE);
+    }
     this._detachParser();
     const { domain, lang } = this.options;
     return this.open({ domain, lang });
@@ -809,7 +820,7 @@ class Connection extends EventEmitter {
     // https://xmpp.org/rfcs/rfc6120.html#streams-close
     // "Refrain from sending any further data over its outbound stream to the other entity"
     if (this.status === "closing" || this.status === "close") {
-      throw new Error("Connection is closing");
+      throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
 
     return new Promise((resolve) => {

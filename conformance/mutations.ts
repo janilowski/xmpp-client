@@ -17,6 +17,50 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "reopen a closed stream from its close callback",
+    file: "src/connection/index.js",
+    before:
+      'async open(options) {\n    if (this.#closing) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }',
+    after: "async open(options) {",
+    suite: "conformance/rfc7395.test.ts",
+    test: "open cannot reopen from the close callback / peer$",
+  },
+  {
+    name: "detach the closing parser before rejecting restart",
+    file: "src/connection/index.js",
+    before:
+      'async restart() {\n    if (this.#closing) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }\n    this._detachParser();',
+    after:
+      'async restart() {\n    this._detachParser();\n    if (this.#closing) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }',
+    suite: "conformance/rfc7395.test.ts",
+    test: "restart cannot reopen while awaiting reciprocal close$",
+  },
+  {
+    name: "leave peer-initiated closure reopenable",
+    file: "src/connection/index.js",
+    before: "const closing = this.#closing;\n    this.#closing = true;",
+    after: "const closing = this.#closing;",
+    suite: "conformance/rfc7395.test.ts",
+    test: "open cannot reopen from the close callback / peer$",
+  },
+  {
+    name: "open during uninitiated transport shutdown",
+    file: "src/connection/index.js",
+    before:
+      'this.#closing = true;\n    this._status("disconnecting");',
+    after: 'this._status("disconnecting");',
+    suite: "conformance/rfc7395.test.ts",
+    test: "open cannot initiate a stream while its transport is shutting down$",
+  },
+  {
+    name: "carry stream closure into a fresh transport",
+    file: "src/connection/index.js",
+    before: "this.#closing = false;\n    const events = {",
+    after: "const events = {",
+    suite: "conformance/rfc7395.test.ts",
+    test: "completed shutdown permits initiation on a fresh transport$",
+  },
+  {
     name: "reinterpret an empty JID domain as a complete address",
     file: "src/jid/index.js",
     before: "if (args.length === 1) {",

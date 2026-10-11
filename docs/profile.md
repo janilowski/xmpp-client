@@ -159,6 +159,9 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   their original session. Replacement streams must not inherit old close writes,
   errors or status changes. This is a local lifecycle safety policy; it does not
   cancel arbitrary application code or extend protocol deadlines.
+  Closing transports reject stream initiation/restart while continuing incoming
+  processing until reciprocal closure; a fresh transport permits initiation
+  again (RFC 6120 §4.4; RFC 7395 §3.6).
 - IQ correlation checks sender and ID. Full destinations require the same full
   JID; bare destinations permit a resource. No-`to` requests accept no sender,
   the server domain or the client's bare JID. Own-bare/server destinations also

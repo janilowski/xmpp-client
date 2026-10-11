@@ -387,6 +387,122 @@ describe("RFC 7395 — client wire behavior", () => {
     expect(peer.transcript).toHaveLength(2);
   });
 
+  // RFC 6120 §4.4: stop sending, but keep processing the peer's remaining input.
+  test.each(["open", "restart"] as const)(
+    "§3.6: %s cannot reopen while awaiting reciprocal close",
+    async (method) => {
+      await openStream({ closeReply: "omit" });
+      await peer.next();
+      const stopped = xmpp.stop();
+      try {
+        expect(readFrame(await peer.next())).toEqual(readFrame(CLOSE));
+        const result = await (
+          method === "open" ? xmpp.open(CLIENT_OPTIONS) : xmpp.restart()
+        ).catch((error: Error) => error);
+        expect(result).toBeInstanceOf(Error);
+        expect(xmpp.status).toBe("closing");
+
+        const received: string[] = [];
+        xmpp.on("stanza", (element) => received.push(element.attrs.id));
+        peer.send('<message xmlns="jabber:client" id="remaining"/>');
+        peer.send(CLOSE);
+        expect((await stopped)?.toString()).toBe(CLOSE);
+        await peer.waitForClose();
+        expect(received).toEqual(["remaining"]);
+        expect(peer.transcript.map(readFrame)).toEqual([
+          readFrame(CLIENT_OPEN),
+          readFrame(CLOSE),
+        ]);
+        expect(xmpp.status).toBe("offline");
+      } finally {
+        await stopped;
+      }
+    },
+  );
+
+  for (const initiator of ["client", "peer"] as const) {
+    test.each(["open", "restart"] as const)(
+      `§3.6: %s cannot reopen from the close callback / ${initiator}`,
+      async (method) => {
+        await openStream({ closeReply: "omit" });
+        await peer.next();
+        const reopened = Promise.withResolvers<unknown>();
+        xmpp.once("close", () => {
+          const result =
+            method === "open" ? xmpp.open(CLIENT_OPTIONS) : xmpp.restart();
+          return result.then(reopened.resolve, reopened.resolve);
+        });
+        const stopped = initiator === "client" ? xmpp.stop() : undefined;
+        try {
+          if (initiator === "client") {
+            expect(readFrame(await peer.next())).toEqual(readFrame(CLOSE));
+          }
+          peer.send(CLOSE);
+          expect(await reopened.promise).toBeInstanceOf(Error);
+          const closed = await stopped;
+          if (initiator === "client") {
+            expect(closed?.toString()).toBe(CLOSE);
+          }
+          await peer.waitForClose();
+          expect(peer.transcript.map(readFrame)).toEqual([
+            readFrame(CLIENT_OPEN),
+            readFrame(CLOSE),
+          ]);
+        } finally {
+          await stopped;
+        }
+      },
+    );
+  }
+
+  test.each(["open", "restart"] as const)(
+    "§3.6: %s cannot initiate a stream while its transport is shutting down",
+    async (method) => {
+      await openStream({ establishment: "connect" });
+      const reopened = Promise.withResolvers<unknown>();
+      xmpp.once("disconnecting", () => {
+        const result =
+          method === "open" ? xmpp.open(CLIENT_OPTIONS) : xmpp.restart();
+        return result.then(reopened.resolve, reopened.resolve);
+      });
+      const stopped = xmpp.stop();
+      try {
+        expect(await reopened.promise).toBeInstanceOf(Error);
+        await stopped;
+        await peer.waitForClose();
+        expect(peer.transcript).toEqual([]);
+        expect(xmpp.status).toBe("offline");
+      } finally {
+        await stopped;
+      }
+    },
+  );
+
+  test("§3.6/3.7: completed shutdown permits initiation on a fresh transport", async () => {
+    await openStream();
+    await xmpp.stop();
+    await peer.waitForClose();
+    await peer.stop();
+    peer = new ScriptedPeer((frame, remote) => {
+      remote.send(frame.startsWith("<close") ? CLOSE : OPEN);
+    });
+
+    await xmpp.connect(peer.url);
+    const result = await xmpp
+      .open(CLIENT_OPTIONS)
+      .catch((error: Error) => error);
+    expect(result).not.toBeInstanceOf(Error);
+    expect(peer.transcript.map(readFrame)).toEqual([readFrame(CLIENT_OPEN)]);
+    expect(xmpp.status).toBe("open");
+    await xmpp.stop();
+    await peer.waitForClose();
+    expect(peer.transcript.map(readFrame)).toEqual([
+      readFrame(CLIENT_OPEN),
+      readFrame(CLOSE),
+    ]);
+    expect(xmpp.status).toBe("offline");
+  });
+
   test("§3.4 a second open cannot multiplex an existing stream", async () => {
     await openStream();
     const result = await xmpp
