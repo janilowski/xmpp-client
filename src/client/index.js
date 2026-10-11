@@ -50,8 +50,6 @@ function client(options = {}) {
 
   const middleware = _middleware({ entity });
   const streamFeatures = _streamFeatures({ middleware, entity });
-  const iqCaller = _iqCaller({ middleware, entity });
-  const iqCallee = _iqCallee({ middleware, entity });
   const resolve = _resolve({ entity });
 
   // SASL mechanisms - order matters and define priority
@@ -95,6 +93,10 @@ function client(options = {}) {
     bind2,
     sasl2,
   });
+
+  // Count handled stanzas before IQ routes consume replies or reject requests.
+  const iqCaller = _iqCaller({ middleware, entity });
+  const iqCallee = _iqCallee({ middleware, entity });
   const resourceBinding = _resourceBinding(
     { iqCaller, streamFeatures, entity },
     resource,

@@ -6,6 +6,8 @@ const OBSERVATION_TIMEOUT_MS = 1000;
 const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 
+// Handled counts across consuming IQ routes: xep0198-acknowledgements.test.ts.
+
 // XEP-0198 §§4–6: real enable/ack exchange, including the stream error wire shape.
 test.each([
   ['h="2"', "undefined-condition"],

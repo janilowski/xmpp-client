@@ -658,6 +658,32 @@ const mutations = [
     test: "cannot invoke IQ handlers",
   },
   {
+    name: "consume IQ replies before SM handled-stanza accounting",
+    file: "src/client/index.js",
+    before: `  const streamManagement = _streamManagement({
+    streamFeatures,
+    entity,
+    middleware,
+    bind2,
+    sasl2,
+  });
+
+  // Count handled stanzas before IQ routes consume replies or reject requests.
+  const iqCaller = _iqCaller({ middleware, entity });
+  const iqCallee = _iqCallee({ middleware, entity });`,
+    after: `  const iqCaller = _iqCaller({ middleware, entity });
+  const iqCallee = _iqCallee({ middleware, entity });
+  const streamManagement = _streamManagement({
+    streamFeatures,
+    entity,
+    middleware,
+    bind2,
+    sasl2,
+  });`,
+    suite: "conformance/xep0198-acknowledgements.test.ts",
+    test: "accounts for correlated IQ result$",
+  },
+  {
     name: "count incoming foreign nonzas as handled stanzas",
     file: "src/stream-management/index.js",
     before: "if (entity.isStanza(stanza)) {",
@@ -1359,6 +1385,7 @@ for (const mutation of mutations) {
       "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",
       "conformance/xep0198.test.ts",
+      "conformance/xep0198-acknowledgements.test.ts",
       "conformance/xep0198-resumption.test.ts",
       "conformance/xep0388-features.test.ts",
       "conformance/xep0156.test.js",
