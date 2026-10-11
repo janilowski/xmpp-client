@@ -869,6 +869,50 @@ const mutations = [
     test: "request get $",
   },
   {
+    name: "interpret stanza diagnostics as an error condition",
+    file: "src/error/index.js",
+    before:
+      'condition && (!known || known.has(condition))\n        ? condition\n        : "undefined-condition",',
+    after:
+      'element.getChildText("text", namespace)?.includes("conflict")\n        ? "conflict"\n        : condition,',
+    suite: "conformance/rfc6120-stanza-errors.test.ts",
+    test: "get preserves caller control / misleading conflict diagnostic$",
+  },
+  {
+    name: "replace a received stanza error type",
+    file: "src/middleware/lib/StanzaError.js",
+    before: "error.type = element.attrs.type;",
+    after: 'error.type = "wait";',
+    suite: "conformance/rfc6120-stanza-errors.test.ts",
+    test: "get preserves caller control / redirect XMPP IRI$",
+  },
+  {
+    name: "discard the received stanza error element",
+    file: "src/error/index.js",
+    before: "error.element = element;",
+    after: "/* error element discarded */",
+    suite: "conformance/rfc6120-stanza-errors.test.ts",
+    test: "get preserves caller control / redirect XMPP IRI$",
+  },
+  {
+    name: "retry an IQ error without caller approval",
+    file: "src/iq/caller.js",
+    before: "deferred.reject(StanzaError.fromElement(errors[0]));",
+    after:
+      'void this.entity.send(xml("iq", { type: "get", id: "unapproved", to: stanza.attrs.from }, xml("query", "urn:test:caller-errors")));\n        deferred.reject(StanzaError.fromElement(errors[0]));',
+    suite: "conformance/rfc6120-stanza-errors.test.ts",
+    test: "get preserves caller control / redirect XMPP IRI$",
+  },
+  {
+    name: "contact a stanza redirect target without caller approval",
+    file: "src/iq/caller.js",
+    before: "deferred.reject(StanzaError.fromElement(errors[0]));",
+    after:
+      'const error = StanzaError.fromElement(errors[0]);\n        void fetch(error.element.getChildText("redirect", "urn:ietf:params:xml:ns:xmpp-stanzas")).catch(() => {});\n        deferred.reject(error);',
+    suite: "conformance/rfc6120-stanza-errors.test.ts",
+    test: "get preserves caller control / redirect HTTP URI$",
+  },
+  {
     name: "accept unknown stanza error conditions as understood",
     file: "src/error/index.js",
     before: "(!known || known.has(condition))",
@@ -1364,6 +1408,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-stanza-addressing.test.ts",
+      "conformance/rfc6120-stanza-errors.test.ts",
       "conformance/rfc6120-outgoing-xml.test.ts",
       "conformance/rfc6120-xml.test.ts",
       "conformance/rfc6120-content-prefixes.test.ts",

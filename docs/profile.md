@@ -72,6 +72,19 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   IQ handlers returning malformed core error elements produce a
   `cancel/internal-server-error` reply and one local error. Foreign error-named
   payloads remain ordinary IQ results; scoped namespace bindings are preserved.
+- IQ `gone`/`redirect` errors retain the target in the error's XML element and
+  reject the request without automatically contacting that target or resending.
+  Applications choosing to follow stanza redirects own user approval, peer
+  authentication and successive-redirect limits (RFC 6120 §8.3.3.14).
+- Error conditions and types drive protocol behavior; diagnostic `text` does not.
+  Applications MUST NOT interpret that text programmatically and SHOULD NOT use
+  it as the primary user-facing error message (RFC 6120 §8.3.2).
+- Applications generating stanza errors own authorization-sensitive selection.
+  Use `service-unavailable` rather than `item-not-found` or
+  `recipient-unavailable` if those conditions would disclose availability to
+  an unauthorized peer (RFC 6120 §§8.3.3.7/.13/.19). The library has no
+  presence-authorization context and does not rewrite these otherwise valid
+  conditions.
 - Outgoing core IQs require an ID, a defined type and the child structure in
   RFC 6120 §8.2.3. Get/set payloads require an extension namespace (§8.4).
   Validation checks serialized output before writes or SM admission; it does
