@@ -8,6 +8,7 @@ afterEach(disconnectClients);
 // Malformed counts use bad-format by local policy; over-ack uses §6's error.
 const NS = "urn:xmpp:sm:3";
 const MAX_H = 4_294_967_295;
+const CREDENTIALS = { username: "user", password: "secret" };
 
 test("an acknowledgement cannot consume a disconnected session's queue", async () => {
   const xmpp = mockClient();
@@ -23,7 +24,7 @@ for (const mode of ["features", "sasl2"]) {
   test.each(["resumed", "failed", "invalid"])(
     `${mode}: %s accounts for the old queue before replay or failure`,
     async (result) => {
-      const xmpp = mockClient();
+      const xmpp = mockClient({ credentials: CREDENTIALS });
       const sm = xmpp.streamManagement;
       sm.id = "old-session";
       sm.outbound = MAX_H;

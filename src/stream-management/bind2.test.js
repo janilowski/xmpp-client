@@ -5,8 +5,12 @@ afterEach(disconnectClients);
 
 import { mockClient } from "../../test/support/index.js";
 
+const CREDENTIALS = { username: "user", password: "secret" };
+
 test("enable", async () => {
-  const { entity, streamManagement: sm } = mockClient();
+  const { entity, streamManagement: sm } = mockClient({
+    credentials: CREDENTIALS,
+  });
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -50,7 +54,9 @@ test("enable", async () => {
 
 // https://xmpp.org/extensions/xep-0198.html#example-29
 test("Client failed to enable stream management", async () => {
-  const { entity, streamManagement: sm } = mockClient();
+  const { entity, streamManagement: sm } = mockClient({
+    credentials: CREDENTIALS,
+  });
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">

@@ -17,6 +17,38 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "allow an empty PLAIN authentication identity",
+    file: "src/sasl-plain/index.js",
+    before: 'username === "" ||',
+    after: "false ||",
+    suite: "conformance/rfc4616.test.ts",
+    test: "rejects malformed PLAIN credentials before sending$",
+  },
+  {
+    name: "allow an empty PLAIN password",
+    file: "src/sasl-plain/index.js",
+    before: 'password === "" ||',
+    after: "false ||",
+    suite: "conformance/rfc4616.test.ts",
+    test: "rejects malformed PLAIN credentials before sending$",
+  },
+  {
+    name: "allow NUL inside a PLAIN credential",
+    file: "src/sasl-plain/index.js",
+    before: "/[\\0\\uD800-\\uDFFF]/u",
+    after: "/[\\uD800-\\uDFFF]/u",
+    suite: "src/sasl-plain/index.test.js",
+    test: "rejects NUL",
+  },
+  {
+    name: "allow invalid Unicode inside a PLAIN credential",
+    file: "src/sasl-plain/index.js",
+    before: "/[\\0\\uD800-\\uDFFF]/u",
+    after: "/\\0/u",
+    suite: "src/sasl-plain/index.test.js",
+    test: "rejects invalid",
+  },
+  {
     name: "accept userinfo in a see-other-host target",
     file: "src/connection/lib/util.js",
     before: "/[/?#@]/u.test(value)",
@@ -1545,6 +1577,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-sasl.test.ts",
       "conformance/rfc6120-sasl-negotiation.test.ts",
       "conformance/rfc6120-sasl-base64.test.ts",
+      "conformance/rfc4616.test.ts",
       "conformance/rfc5802.test.js",
       "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",

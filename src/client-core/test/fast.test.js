@@ -9,9 +9,10 @@ import { datetime } from "../../util/time.js";
 import { Element } from "../../xml/index.js";
 import { test, expect, spyOn } from "bun:test";
 const mechanism = "HT-SHA-256-NONE";
+const credentials = { username: "user", password: "secret" };
 
 test("requests and saves token if server advertises fast", async () => {
-  const { entity, fast } = mockClient();
+  const { entity, fast } = mockClient({ credentials });
 
   const spy_saveToken = spyOn(fast, "saveToken");
 

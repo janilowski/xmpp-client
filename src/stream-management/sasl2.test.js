@@ -5,8 +5,12 @@ afterEach(disconnectClients);
 
 import { mockClient } from "../../test/support/index.js";
 
+const CREDENTIALS = { username: "user", password: "secret" };
+
 test("resume", async () => {
-  const { entity, streamManagement: sm } = mockClient();
+  const { entity, streamManagement: sm } = mockClient({
+    credentials: CREDENTIALS,
+  });
 
   sm.id = Math.random().toString().slice(2);
 
@@ -44,7 +48,9 @@ test("resume", async () => {
 
 // https://xmpp.org/extensions/xep-0198.html#example-30
 test("Client failed to resume stream", async () => {
-  const { entity, streamManagement: sm } = mockClient();
+  const { entity, streamManagement: sm } = mockClient({
+    credentials: CREDENTIALS,
+  });
 
   sm.id = Math.random().toString().slice(2);
 

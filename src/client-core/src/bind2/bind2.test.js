@@ -5,6 +5,8 @@ afterEach(disconnectClients);
 
 import { mockClient, id, promiseError } from "../../../../test/support/index.js";
 
+const CREDENTIALS = { username: "user", password: "secret" };
+
 function mockFeatures(entity) {
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -25,7 +27,7 @@ function catchAuthenticate(entity) {
 }
 
 test("without tag", async () => {
-  const { entity } = mockClient();
+  const { entity } = mockClient({ credentials: CREDENTIALS });
   mockFeatures(entity);
   const stanza = await catchAuthenticate(entity);
 
@@ -36,7 +38,7 @@ test("without tag", async () => {
 
 test("with string tag", async () => {
   const resource = id();
-  const { entity } = mockClient({ resource });
+  const { entity } = mockClient({ credentials: CREDENTIALS, resource });
   mockFeatures(entity);
   const stanza = await catchAuthenticate(entity);
 
@@ -55,7 +57,7 @@ test("with function resource returning string", async () => {
     return "1k2k3";
   }
 
-  const { entity } = mockClient({ resource });
+  const { entity } = mockClient({ credentials: CREDENTIALS, resource });
   mockFeatures(entity);
   const stanza = await catchAuthenticate(entity);
 
@@ -75,7 +77,7 @@ test("with function resource throwing", async () => {
     throw error;
   }
 
-  const { entity } = mockClient({ resource });
+  const { entity } = mockClient({ credentials: CREDENTIALS, resource });
 
   const willError = promiseError(entity);
 
@@ -90,7 +92,7 @@ test("with function resource returning resolved promise", async () => {
     return "1k2k3";
   }
 
-  const { entity } = mockClient({ resource });
+  const { entity } = mockClient({ credentials: CREDENTIALS, resource });
   mockFeatures(entity);
   const stanza = await catchAuthenticate(entity);
 
@@ -110,7 +112,7 @@ test("with function resource returning rejected promise", async () => {
     throw error;
   }
 
-  const { entity } = mockClient({ resource });
+  const { entity } = mockClient({ credentials: CREDENTIALS, resource });
 
   const willError = promiseError(entity);
 
