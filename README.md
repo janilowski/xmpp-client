@@ -55,14 +55,16 @@ bun install --frozen-lockfile
 bun run test:static
 ```
 
-The project uses Bun for development, TypeScript for its public API boundary,
-and Rolldown for ESM and classic browser bundles. The inherited implementation
-is still predominantly JavaScript and is being migrated incrementally.
+The project uses Bun for development, TypeScript 7 for typechecking, and Rolldown
+for ESM and classic browser bundles. ESLint uses Microsoft's TS6 compatibility
+package for the compiler API; `tsc` runs TS7. The inherited implementation is still
+predominantly JavaScript and is being migrated incrementally.
 
 ### Native integration environment (Fedora)
 
-No VM or container is required. Use Bun 1.4.2 (also pinned in CI),
-Prosody 13 with Lua 5.4, and Playwright's Chromium:
+No VM or container is required. Use Bun 1.4.3 (also pinned in CI),
+Prosody 13 with Lua 5.4, and Playwright's Chromium. Development tools additionally
+require Node 22.22.1+ and Git 2.32+; the library's runtime floor is unchanged.
 
 ```sh
 sudo dnf install prosody lua lua-devel luarocks
@@ -94,9 +96,10 @@ them. CI uploads only the server logs on failure.
 TLS verification remains enabled in Bun using the fixture CA. Chromium trusts
 only the fixture's public-key fingerprint for positive tests; a separate browser
 without that exception must reject it. That fingerprint exception is not a test
-of hostname validation. Bun 1.4.2's IPv6 WSS identity failure remains an executable
-expected-failure test, not a skip; an unexpected success requires removing the
-marker. See [the upstream fix](https://github.com/oven-sh/bun/pull/30674).
+of hostname validation. IPv6 WSS is tested without an expected-failure marker:
+Bun 1.4.3 fixes the earlier identity-verification defect. The separate CN-only
+identity defect remains an executable expected failure; see the
+[TLS boundary](docs/profile.md#transport-and-discovery).
 
 The four Prosody module versions are pinned in `server/setup.js`. The native
 Prosody package is supplied by your distribution, not lockfile-pinned; this run

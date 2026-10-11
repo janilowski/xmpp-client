@@ -10,7 +10,7 @@ import { generate } from "selfsigned";
 // XMPP domain. PKIX belongs to the runtime; these are integration scenarios.
 const HTTP_BAD_REQUEST = 400;
 const DAY_MS = 86_400_000;
-const KNOWN_CN_ONLY_BUN_VERSION = "1.4.2";
+const KNOWN_CN_ONLY_BUN_VERSIONS = new Set(["1.4.2", "1.4.3"]);
 let directory: string;
 let authority: Awaited<ReturnType<typeof generate>>;
 
@@ -48,7 +48,7 @@ describe.each([
   ["discovery", "cn-only"],
 ] as const)("§3.9/6 PKIX: %s / %s", (mode, scenario) => {
   const knownFailure =
-    Bun.version === KNOWN_CN_ONLY_BUN_VERSION && scenario === "cn-only";
+    KNOWN_CN_ONLY_BUN_VERSIONS.has(Bun.version) && scenario === "cn-only";
   let server: Bun.Server<undefined> | undefined;
   let observed: { outcome: string; upgrades: number; discoveries: number };
 
@@ -168,7 +168,7 @@ describe.each([
   // RFC 9525 §2: CN is not a service identity. #50 remains nonconforming on
   // this exact runtime; a fixed or different version must reject it normally.
   test.failingIf(knownFailure)(
-    `validates endpoint identity before HTTP discovery or WS upgrade${knownFailure ? ` [expected Bun ${KNOWN_CN_ONLY_BUN_VERSION} violation #50]` : ""}`,
+    `validates endpoint identity before HTTP discovery or WS upgrade${knownFailure ? ` [expected Bun ${Bun.version} violation #50]` : ""}`,
     () => {
       const accepted = scenario === "valid";
       expect(observed).toEqual({
