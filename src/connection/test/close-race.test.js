@@ -3,6 +3,10 @@ import { EventEmitter } from "../../events/index.js";
 import xml from "../../xml/index.js";
 import Connection from "../index.js";
 
+const STREAM = "http://etherx.jabber.org/streams";
+const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
+const CLIENT = "jabber:client";
+
 // A replacement transport must not inherit an earlier transport's shutdown.
 function attachSession(conn) {
   const socket = new EventEmitter();
@@ -50,6 +54,130 @@ test("synchronous parser-error response cannot detach a replacement parser", asy
   expect(replacement.ends).toEqual([]);
   expect(errors).toEqual([]);
 });
+
+test.each(["transport", "parser"])(
+  "malformed feature error cannot poison a synchronous replacement %s",
+  async (replacementKind) => {
+    const conn = new Connection();
+    conn.NS = CLIENT;
+    const old = attachSession(conn);
+    const errors = [];
+    const elements = [];
+    conn.on("error", (error) => errors.push(error));
+    conn.on("element", (element) => elements.push(element));
+    let replacement;
+    old.socket.write = (data, callback) => {
+      old.writes.push(data);
+      if (replacementKind === "transport") {
+        old.socket.emit("close");
+        replacement = attachSession(conn);
+      } else {
+        const parser = new EventEmitter();
+        conn._attachParser(parser);
+        replacement = { socket: old.socket, parser };
+      }
+      callback();
+    };
+
+    // A synchronous write can replace either the transport or its parser.
+    old.parser.emit(
+      "element",
+      xml("features", { xmlns: STREAM }, xml("future")),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(old.writes).toEqual([
+      `<stream:error xmlns:stream="${STREAM}"><bad-format xmlns="${STREAM_ERRORS}"/></stream:error>`,
+    ]);
+    expect(conn.socket).toBe(replacement.socket);
+    expect(conn.parser).toBe(replacement.parser);
+    expect(conn.status).toBe("online");
+    expect(old.ends).toEqual([]);
+    if (replacementKind === "transport") {
+      expect(replacement.writes).toEqual([]);
+      expect(replacement.ends).toEqual([]);
+    }
+    expect(elements).toEqual([]);
+    expect(errors).toEqual([]);
+    const valid = xml(
+      "features",
+      { xmlns: STREAM },
+      xml("future", { xmlns: "urn:test:future" }),
+    );
+    replacement.parser.emit("element", valid);
+    expect(elements).toEqual([valid]);
+  },
+);
+
+test("fatal feature errors preserve the parser for reciprocal close", async () => {
+  const conn = new Connection({ timeout: 100 });
+  conn.NS = CLIENT;
+  const session = attachSession(conn);
+  session.socket.write = (data, callback) => {
+    session.writes.push(data);
+    callback();
+  };
+  const errors = [];
+  const elements = [];
+  conn.on("error", (error) => errors.push(error));
+  conn.on("element", (element) => elements.push(element));
+
+  session.parser.emit(
+    "element",
+    xml("features", { xmlns: STREAM }, xml("future")),
+  );
+  session.parser.emit("element", xml("features", { xmlns: STREAM }));
+  await new Promise((resolve) => setImmediate(resolve));
+
+  expect(conn.parser).toBe(session.parser);
+  expect(conn.status).toBe("closing");
+  expect(session.ends).toEqual([]);
+  expect(errors.map((error) => error.message)).toEqual([
+    "Invalid stream feature namespace",
+  ]);
+  expect(elements).toEqual([]);
+  expect(session.writes).toEqual([
+    `<stream:error xmlns:stream="${STREAM}"><bad-format xmlns="${STREAM_ERRORS}"/></stream:error>`,
+    "<close/>",
+  ]);
+
+  session.parser.emit("end", xml("close"));
+  await new Promise((resolve) => setImmediate(resolve));
+  expect(session.ends).toEqual([true]);
+  expect(conn.status).toBe("disconnect");
+});
+
+test.each(["open", "restart"])(
+  "fatal feature errors reject synchronous %s before another opening",
+  async (method) => {
+    const conn = new Connection();
+    conn.NS = CLIENT;
+    const session = attachSession(conn);
+    session.socket.write = (data, callback) => {
+      session.writes.push(data);
+      callback();
+    };
+    let attempt;
+    conn.once("error", () => {
+      attempt = conn[method]({ domain: "example.test" }).catch(
+        (error) => error,
+      );
+    });
+
+    session.parser.emit(
+      "element",
+      xml("features", { xmlns: STREAM }, xml("future")),
+    );
+    const result = await attempt;
+    expect(result).toBeInstanceOf(Error);
+    expect(result.message).toBe("Connection is closing");
+    expect(conn.parser).toBe(session.parser);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(conn.status).toBe("closing");
+    session.parser.emit("end", xml("close"));
+    await new Promise((resolve) => setImmediate(resolve));
+  },
+);
 
 test("old stream-close rejection cannot close a replacement transport", async () => {
   const conn = new Connection();

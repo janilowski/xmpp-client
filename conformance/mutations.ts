@@ -38,6 +38,96 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "close malformed features without a protocol error",
+    file: "src/connection/index.js",
+    before:
+      'this._streamError("bad-format");\n      if (this.#generation === generation)',
+    after:
+      "this.disconnect().catch(() => {});\n      if (this.#generation === generation)",
+    suite: "conformance/rfc6120-feature-errors.test.ts",
+    test: "malformed initial classic features report error before close / stream namespace$",
+  },
+  {
+    name: "accept a direct feature in the stream namespace",
+    file: "src/connection/index.js",
+    before: "child.getNS() === NS_JABBER_STREAM ||",
+    after: "false ||",
+    suite: "conformance/rfc6120-feature-errors.test.ts",
+    test: "malformed initial classic features report error before close / stream namespace$",
+  },
+  {
+    name: "dispatch a malformed feature offer after reporting its error",
+    file: "src/connection/index.js",
+    before:
+      'this.emit("error", new Error("Invalid stream feature namespace"));\n      }\n      return;',
+    after:
+      'this.emit("error", new Error("Invalid stream feature namespace"));\n      }',
+    suite: "src/connection/test/close-race.test.js",
+    test: "malformed feature error cannot poison a synchronous replacement parser$",
+  },
+  {
+    name: "detach a usable parser after a feature error",
+    file: "src/connection/index.js",
+    before:
+      'this.#streamFailed = true;\n      this._streamError("bad-format");',
+    after:
+      'this.#streamFailed = true;\n      this._detachParser();\n      this._streamError("bad-format");',
+    suite: "src/connection/test/close-race.test.js",
+    test: "fatal feature errors preserve the parser for reciprocal close$",
+  },
+  {
+    name: "dispatch further elements after a fatal feature error",
+    file: "src/connection/index.js",
+    before:
+      "  _onElement(element) {\n    if (this.#streamFailed) {\n      return;\n    }",
+    after: "  _onElement(element) {",
+    suite: "src/connection/test/close-race.test.js",
+    test: "fatal feature errors preserve the parser for reciprocal close$",
+  },
+  {
+    name: "report parser errors again during fatal feature closure",
+    file: "src/connection/index.js",
+    before:
+      "  #onParserError(error) {\n    if (this.#streamFailed) {\n      return;\n    }",
+    after: "  #onParserError(error) {",
+    suite: "conformance/rfc6120-feature-errors.test.ts",
+    test: "initial classic malformed features preserves stream-close wait / further malformed XML$",
+  },
+  {
+    name: "retain failed feature state in a replacement parser",
+    file: "src/connection/index.js",
+    before: "    this.parser = parser;\n    this.#streamFailed = false;",
+    after: "    this.parser = parser;",
+    suite: "src/connection/test/close-race.test.js",
+    test: "malformed feature error cannot poison a synchronous replacement parser$",
+  },
+  {
+    name: "abort fatal feature closure on a later parser error",
+    file: "src/connection/index.js",
+    before:
+      '        if (event === "end" && this.#streamFailed) {\n          return;\n        }',
+    after: "",
+    suite: "conformance/rfc6120-feature-errors.test.ts",
+    test: "initial classic malformed features preserves stream-close wait / further malformed XML$",
+  },
+  {
+    name: "allow opening a failed feature stream",
+    file: "src/connection/index.js",
+    before:
+      "  async open(options) {\n    if (this.#closing || this.#streamFailed)",
+    after: "  async open(options) {\n    if (this.#closing)",
+    suite: "src/connection/test/close-race.test.js",
+    test: "fatal feature errors reject synchronous open before another opening$",
+  },
+  {
+    name: "allow restarting a failed feature stream",
+    file: "src/connection/index.js",
+    before: "  async restart() {\n    if (this.#closing || this.#streamFailed)",
+    after: "  async restart() {\n    if (this.#closing)",
+    suite: "src/connection/test/close-race.test.js",
+    test: "fatal feature errors reject synchronous restart before another opening$",
+  },
+  {
     name: "omit the canonical binding reply matcher",
     file: "src/iq/lib/replyMatcher.js",
     before: "const matcher = matchers.get(stanza);",
@@ -323,7 +413,7 @@ const mutations = [
     name: "reopen a closed stream from its close callback",
     file: "src/connection/index.js",
     before:
-      'async open(options) {\n    if (this.#closing) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }',
+      "async open(options) {\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
     after: "async open(options) {",
     suite: "conformance/rfc7395.test.ts",
     test: "open cannot reopen from the close callback / peer$",
@@ -332,9 +422,9 @@ const mutations = [
     name: "detach the closing parser before rejecting restart",
     file: "src/connection/index.js",
     before:
-      'async restart() {\n    if (this.#closing) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }\n    this._detachParser();',
+      "async restart() {\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }\n    this._detachParser();",
     after:
-      'async restart() {\n    this._detachParser();\n    if (this.#closing) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }',
+      "async restart() {\n    this._detachParser();\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
     suite: "conformance/rfc7395.test.ts",
     test: "restart cannot reopen while awaiting reciprocal close$",
   },
@@ -349,8 +439,7 @@ const mutations = [
   {
     name: "open during uninitiated transport shutdown",
     file: "src/connection/index.js",
-    before:
-      'this.#closing = true;\n    this._status("disconnecting");',
+    before: 'this.#closing = true;\n    this._status("disconnecting");',
     after: 'this._status("disconnecting");',
     suite: "conformance/rfc7395.test.ts",
     test: "open cannot initiate a stream while its transport is shutting down$",
@@ -358,8 +447,9 @@ const mutations = [
   {
     name: "carry stream closure into a fresh transport",
     file: "src/connection/index.js",
-    before: "this.#closing = false;\n    const events = {",
-    after: "const events = {",
+    before:
+      "this.#closing = false;\n    this.#streamFailed = false;\n    const events = {",
+    after: "this.#streamFailed = false;\n    const events = {",
     suite: "conformance/rfc7395.test.ts",
     test: "completed shutdown permits initiation on a fresh transport$",
   },
@@ -1363,8 +1453,8 @@ const mutations = [
   {
     name: "retain feature deadline after negotiation",
     file: "src/stream-features/index.js",
-    before: "    clearFeatureTimer();\n    if (\n      stanza",
-    after: "    if (\n      stanza",
+    before: "    clearFeatureTimer();\n    if (handlers.some(",
+    after: "    if (handlers.some(",
     suite: "conformance/rfc6120-streams.test.ts",
     test: "clear features deadline / online",
   },
@@ -1973,6 +2063,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-outgoing-errors.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
+      "conformance/rfc6120-feature-errors.test.ts",
       "conformance/rfc6120-binding.test.ts",
       "conformance/rfc6120-binding-senders.test.ts",
       "conformance/rfc6120-sasl.test.ts",

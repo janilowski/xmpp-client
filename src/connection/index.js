@@ -44,6 +44,7 @@ class Connection extends EventEmitter {
   #socketListeners = null;
   #parserListeners = null;
   #closing = false;
+  #streamFailed = false;
   #generation = 0;
   #redirectCount = 0;
   #redirecting = false;
@@ -99,6 +100,9 @@ class Connection extends EventEmitter {
   }
 
   #onParserError(error) {
+    if (this.#streamFailed) {
+      return;
+    }
     const generation = this.#generation;
     // https://xmpp.org/rfcs/rfc6120.html#streams-error-conditions-bad-format
     // "This error can be used instead of the more specific XML-related errors,
@@ -162,6 +166,7 @@ class Connection extends EventEmitter {
     this.socket = socket;
     // Only a new transport permits initiation after stream closure.
     this.#closing = false;
+    this.#streamFailed = false;
     const events = {
       data: this._onData.bind(this),
       close: this.#onSocketClosed.bind(this),
@@ -186,6 +191,9 @@ class Connection extends EventEmitter {
   }
 
   _onElement(element) {
+    if (this.#streamFailed) {
+      return;
+    }
     const generation = this.#generation;
     // RFC 6120 §4.8.3: server content cannot enter a client stream.
     if (this.NS === NS_JABBER_CLIENT && element.getNS() === NS_JABBER_SERVER) {
@@ -197,6 +205,27 @@ class Connection extends EventEmitter {
 
     // RFC 6120 §4.8.5: ignore the entire invalid frame before dispatch.
     if (this.NS === NS_JABBER_CLIENT && hasContentPrefix(element, this.NS)) {
+      return;
+    }
+
+    // RFC 6120 §§4.3.2/4.9.1.1: reject fatal feature format before dispatch.
+    if (
+      element.is("features", NS_JABBER_STREAM) &&
+      element
+        .getChildElements()
+        .some(
+          (child) =>
+            !child.getNS() ||
+            child.getNS() === NS_JABBER_STREAM ||
+            child.getNS() === this.NS,
+        )
+    ) {
+      // Keep parsing the reciprocal close, but never negotiate this stream again.
+      this.#streamFailed = true;
+      this._streamError("bad-format");
+      if (this.#generation === generation) {
+        this.emit("error", new Error("Invalid stream feature namespace"));
+      }
       return;
     }
 
@@ -291,6 +320,7 @@ class Connection extends EventEmitter {
     }
     this.#generation += 1;
     this.parser = parser;
+    this.#streamFailed = false;
     const events = {
       element: this._onElement.bind(this),
       error: this.#onParserError.bind(this),
@@ -488,7 +518,7 @@ class Connection extends EventEmitter {
    * Opens the stream
    */
   async open(options) {
-    if (this.#closing) {
+    if (this.#closing || this.#streamFailed) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
     if (this.parser) {
@@ -531,6 +561,13 @@ class Connection extends EventEmitter {
       };
       const ready = (value) => finish(resolve, value);
       const error = (value) => finish(reject, value);
+      const targetError = (value) => {
+        // A failed parser cannot answer the footer; retain the existing close deadline.
+        if (event === "end" && this.#streamFailed) {
+          return;
+        }
+        error(value);
+      };
       const closed = () => {
         if (event !== "end") {
           error(new Error(`Stream closed before ${event}`));
@@ -542,7 +579,7 @@ class Connection extends EventEmitter {
         clearTimeout(timer);
         target.off(event, ready);
         if (target !== this) {
-          target.off("error", error);
+          target.off("error", targetError);
         }
         this.off("error", error);
         this.off("close", closed);
@@ -550,7 +587,7 @@ class Connection extends EventEmitter {
       };
       target.on(event, ready);
       if (target !== this) {
-        target.on("error", error);
+        target.on("error", targetError);
       }
       this.on("error", error);
       this.on("close", closed);
@@ -620,7 +657,7 @@ class Connection extends EventEmitter {
    * https://xmpp.org/rfcs/rfc6120.html#streams-negotiation-restart
    */
   async restart() {
-    if (this.#closing) {
+    if (this.#closing || this.#streamFailed) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
     this._detachParser();

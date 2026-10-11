@@ -53,19 +53,6 @@ export default function streamFeatures({ middleware, entity }) {
       return next();
     }
     clearFeatureTimer();
-    if (
-      stanza
-        .getChildElements()
-        .some(
-          (child) =>
-            !child.getNS() ||
-            child.getNS() === NS ||
-            child.getNS() === entity.NS,
-        )
-    ) {
-      entity.disconnect().catch(() => {});
-      throw new Error("Invalid stream feature namespace");
-    }
     if (handlers.some(([name, xmlns]) => stanza.getChild(name, xmlns))) {
       return next();
     }

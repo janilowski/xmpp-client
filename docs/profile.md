@@ -62,6 +62,8 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   An offer with no supported feature cannot complete an unauthenticated or
   unbound client session and fails explicitly. There is no universal `required`
   marker (RFC 6120 §4.3.2); feature-specific requirements remain authoritative.
+  Malformed direct feature namespaces report `bad-format` before closure;
+  foreign feature payloads remain opaque.
 - After a `conflict` stream error, classic binding avoids the previously bound
   resource (RFC 6120 §4.9.3.3). A repeated or absent choice is replaced with a
   fresh UUID; a different prepared callback/configured choice is preserved.
