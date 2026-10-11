@@ -11,6 +11,7 @@ import { readFrame } from "./xml.ts";
 // Hostile SASL Base64 input: rfc6120-sasl-base64.test.ts.
 // SCRAM authentication proofs: rfc5802-wire.test.ts.
 // Resource binding and completion: rfc6120-binding.test.ts.
+// Canonical binding senders and transaction authority: rfc6120-binding-senders.test.ts.
 // Pre-completion stanza routing and resumption: rfc6120-stanza-routing.test.ts.
 // Confirmed implicit sender and explicit addresses: rfc6120-stanza-addressing.test.ts.
 // Unknown message/presence extensions and legal outcomes (§8.4): rfc6120-extended-content.test.ts.

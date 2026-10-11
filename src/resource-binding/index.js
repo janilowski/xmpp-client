@@ -2,6 +2,7 @@ import xml from "../xml/index.js";
 import { prepareResource } from "../jid/lib/precis.js";
 import parseJID from "../jid/index.js";
 import StreamError from "../connection/lib/StreamError.js";
+import { setReplyMatcher } from "../iq/lib/replyMatcher.js";
 
 /*
  * References
@@ -18,13 +19,7 @@ function makeBindElement(resource) {
   );
 }
 
-async function bind(entity, iqCaller, resource, signal) {
-  const result = await iqCaller.request(
-    xml("iq", { type: "set" }, makeBindElement(resource)),
-    entity.timeout,
-    signal,
-  );
-  signal.throwIfAborted();
+function parseBinding(result) {
   // RFC 6120 §7: only an unambiguous full JID completes resource binding.
   const children = result.getChildElements();
   const binding = result.getChild("bind", NS);
@@ -38,6 +33,26 @@ async function bind(entity, iqCaller, resource, signal) {
   if (!jid.local || !jid.resource) {
     throw new Error("Resource binding requires a full JID");
   }
+  return jid;
+}
+
+async function bind(entity, iqCaller, resource, signal) {
+  const request = xml("iq", { type: "set" }, makeBindElement(resource));
+  // RFC 6120 §§4.3.6/8.1.2.1: binding discovers the canonical account.
+  setReplyMatcher(request, (stanza) => {
+    const sender = parseJID(stanza.attrs.from);
+    if (!sender.local || sender.resource) {
+      return false;
+    }
+    // An account-bare error rejects binding but never establishes identity.
+    return (
+      stanza.attrs.type === "error" ||
+      sender.equals(parseBinding(stanza).bare())
+    );
+  });
+  const result = await iqCaller.request(request, entity.timeout, signal);
+  signal.throwIfAborted();
+  const jid = parseBinding(result);
   entity._jid(jid.toString());
   entity._ready(false);
   return jid;

@@ -4,6 +4,7 @@ import operation from "../events/lib/operation.js";
 import xml from "../xml/index.js";
 import jid from "../jid/index.js";
 import { getAccount, getServer } from "../connection/lib/negotiation.js";
+import { takeReplyMatcher } from "./lib/replyMatcher.js";
 
 // Match prepared wire identities; do not repair malformed sender addresses.
 function replyMatches(from, { to, server, account }) {
@@ -47,7 +48,22 @@ class IQCaller {
 
     const deferred = this.handlers.get(id);
 
-    if (!deferred || !replyMatches(stanza.attrs.from, deferred)) {
+    if (!deferred) {
+      return next();
+    }
+
+    try {
+      // Only an internally owned, unbound no-to transaction can add a sender.
+      if (
+        !replyMatches(stanza.attrs.from, deferred) &&
+        (deferred.to !== undefined ||
+          deferred.account ||
+          !deferred.matchReply?.(stanza))
+      ) {
+        return next();
+      }
+    } catch {
+      // A malformed candidate cannot consume the legitimate pending request.
       return next();
     }
 
@@ -74,6 +90,8 @@ class IQCaller {
   }
 
   async request(stanza, timeout = 30 * 1000, signal) {
+    // Consume even when validation/cancellation fails; Element reuse is ordinary.
+    const matchReply = takeReplyMatcher(stanza);
     if (!stanza.attrs.id) {
       stanza.attrs.id = xid();
     }
@@ -87,6 +105,7 @@ class IQCaller {
       to: to === undefined ? undefined : jid(to.toString()).toString(),
       server: getServer(this.entity),
       account: getAccount(this.entity),
+      matchReply,
     });
     this.handlers.set(id, deferred);
 

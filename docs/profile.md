@@ -168,6 +168,10 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   allow absent `from`; remote destinations do not. An error's `by` attribute
   cannot override this policy. Server/account authorities are private
   protocol-confirmed snapshots, not mutable public JIDs or options.
+  Before the account is known, only the internal binding transaction also
+  accepts an account-bare result agreeing with its validated full-JID payload,
+  or an account-bare error that rejects without granting identity or routing.
+  Ordinary requests, including application-created binding XML, get no exception.
   Reusing caller-supplied IDs for the same peer cannot distinguish delayed
   replies; prefer generated fresh IDs.
 - SM malformed counts or resumption identities close with `bad-format`, a local
