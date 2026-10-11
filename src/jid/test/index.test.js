@@ -1,6 +1,12 @@
 import { test, expect, spyOn } from "bun:test";
 
-import jid, { equal, JID } from "../index.js";
+import jid, { equal, jid as namedJid, JID } from "../index.js";
+
+const factories = [
+  ["default", jid],
+  ["named", namedJid],
+  ["default .jid", jid.jid],
+];
 
 test("equal calls equals on the first argument with the second argument", () => {
   const A = jid("foo");
@@ -31,3 +37,40 @@ test("works as expected with new operator", () => {
   expect(addr instanceof JID).toBe(true);
   expect(addr.toString()).toBe("foo@bar/baz");
 });
+
+for (const [name, factory] of factories) {
+  test(`${name} export dispatches by overload arity`, () => {
+    expect(factory("example.com").toString()).toBe("example.com");
+    expect(factory("user@example.com/r").toString()).toBe(
+      "user@example.com/r",
+    );
+    expect(new factory("user@example.com/r").toString()).toBe(
+      "user@example.com/r",
+    );
+    expect(factory(null, "example.com", "r").toString()).toBe("example.com/r");
+    expect(factory("user", "example.com").toString()).toBe("user@example.com");
+    expect(factory("user", "example.com", null).toString()).toBe(
+      "user@example.com",
+    );
+    expect(factory("user", "example.com", undefined).toString()).toBe(
+      "user@example.com",
+    );
+    expect(factory("user", "example.com", "r").toString()).toBe(
+      "user@example.com/r",
+    );
+    expect(new factory("user", "example.com").toString()).toBe(
+      "user@example.com",
+    );
+
+    // RFC 7622 §3.2: an explicit domainpart cannot be empty or absent.
+    for (const args of [
+      ["user", ""],
+      ["user", "", undefined],
+      ["user", null],
+      ["user", undefined],
+    ]) {
+      expect(() => factory(...args)).toThrow(TypeError);
+      expect(() => new factory(...args)).toThrow(TypeError);
+    }
+  });
+}

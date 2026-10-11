@@ -7,7 +7,7 @@ export function equal(a, b) {
 }
 
 function jid(...args) {
-  if (!args[1] && !args[2]) {
+  if (args.length === 1) {
     return parse(...args);
   }
 

@@ -17,6 +17,14 @@ const MUTATION_TIMEOUT_MS = 15_000;
 
 const mutations = [
   {
+    name: "reinterpret an empty JID domain as a complete address",
+    file: "src/jid/index.js",
+    before: "if (args.length === 1) {",
+    after: "if (!args[1] && !args[2]) {",
+    suite: "src/jid/test/index.test.js",
+    test: "default export dispatches by overload arity$",
+  },
+  {
     name: "defer invalid opening framing until socket write",
     file: "src/websocket/lib/Connection.js",
     before:
