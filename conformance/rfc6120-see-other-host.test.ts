@@ -95,6 +95,44 @@ test("RFC 6120 §4.9.3.19: same-host redirect preserves WebSocket policy and str
   }
 });
 
+test("RFC 6120 §4.9.3.19 / RFC 7622 §3.2: prepared same-host redirect preserves the WebSocket path", async () => {
+  const destination = new ScriptedPeer((frame, peer) => {
+    const [root] = readFrame(frame);
+    if ("open" in root && root.open === `{${FRAMING}}open`) {
+      peer.send(
+        `<open xmlns="${FRAMING}" from="example.test" version="1.0" id="destination"/>`,
+      );
+    } else if ("open" in root && root.open === `{${FRAMING}}close`) {
+      peer.send(`<close xmlns="${FRAMING}"/>`);
+    }
+  });
+  const port = new URL(destination.url).port;
+  const source = redirectPeer(`LOCALHOST.:${port}`);
+  const service = source.url.replace("127.0.0.1", "localhost");
+  const xmpp = client({ ...OPTIONS, service });
+  xmpp.reconnect.stop();
+  const errors: Error[] = [];
+  xmpp.on("error", (error: Error) => errors.push(error));
+  try {
+    await xmpp.connect(service);
+    await xmpp.open(OPTIONS);
+    const frame = await destination.next();
+    expect(readFrame(frame)[0]).toMatchObject({
+      attributes: {
+        "{}to": OPTIONS.domain,
+        "{http://www.w3.org/XML/1998/namespace}lang": OPTIONS.lang,
+      },
+      open: `{${FRAMING}}open`,
+    });
+    expect(new URL(destination.requestUrls[0]).pathname).toBe("/xmpp");
+    expect(errors).toEqual([]);
+  } finally {
+    await xmpp.stop().catch(() => {});
+    await source.stop();
+    await destination.stop();
+  }
+});
+
 const INVALID_TARGETS: [string, (host: string) => string][] = [
   ["empty target", () => ""],
   ["URI scheme", (host) => `ws://${host}/xmpp`],

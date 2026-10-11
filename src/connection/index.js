@@ -240,25 +240,26 @@ class Connection extends EventEmitter {
 
       const target = parseRedirectTarget(host);
       // RFC 6120 delegates the host grammar to the prepared XMPP domainpart.
+      let targetDomain;
       try {
-        jid(target.domain);
+        targetDomain = jid(target.domain).domain;
       } catch {
         throw new TypeError(INVALID_REDIRECT_TARGET);
       }
       const currentService = this.socket?.url || this.options.service;
       const current = parseService(currentService);
-      if (
-        current.protocol &&
-        current.hostname.toLowerCase() === target.hostname.toLowerCase()
-      ) {
+      if (current.protocol && jid(current.hostname).domain === targetDomain) {
         const redirected = new URL(currentService);
-        redirected.hostname = target.hostname;
+        redirected.hostname = targetDomain;
         redirected.port = target.port;
         service = redirected.toString();
       } else {
+        const targetHost = target.port
+          ? `${targetDomain}:${target.port}`
+          : targetDomain;
         service = target.port
-          ? `${current.protocol || "xmpp:"}//${host}`
-          : (current.protocol ? `${current.protocol}//` : "") + host;
+          ? `${current.protocol || "xmpp:"}//${targetHost}`
+          : (current.protocol ? `${current.protocol}//` : "") + targetHost;
       }
       this.#redirecting = true;
     } catch (error_) {

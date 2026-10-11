@@ -43,10 +43,18 @@ const mutations = [
   {
     name: "skip see-other-host domainpart preparation",
     file: "src/connection/index.js",
-    before: "        jid(target.domain);",
-    after: '        jid("example.test");',
+    before: "        targetDomain = jid(target.domain).domain;",
+    after: '        targetDomain = jid("example.test").domain;',
     suite: "conformance/rfc6120-see-other-host.test.ts",
     test: "invalid domainpart causes no network contact$",
+  },
+  {
+    name: "discard the prepared see-other-host domainpart",
+    file: "src/connection/index.js",
+    before: "        targetDomain = jid(target.domain).domain;",
+    after: "        targetDomain = target.hostname;",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "prepared same-host redirect preserves the WebSocket path$",
   },
   {
     name: "start parallel stream redirects",
