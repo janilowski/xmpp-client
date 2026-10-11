@@ -5,8 +5,8 @@ import { datetime } from "../util/time.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
 import {
   completeNegotiation,
-  confirmIdentity,
   getAccount,
+  getIdentity,
 } from "../connection/lib/negotiation.js";
 
 import { setupBind2 } from "./bind2.js";
@@ -79,10 +79,22 @@ export default function streamManagement({
     await sendAck();
   });
 
-  async function resumed(resumed, signal) {
+  async function resumed(resumed, signal, authorizationIdentifier) {
     signal?.throwIfAborted();
-    // XEP-0198 §5: validate the opaque former ID before acknowledging or replaying.
-    if (!sm.id || resumed.attrs.previd !== sm.id) {
+    // XEP-0198 §§5/9.2: resumption keeps this session's account and resource.
+    const retained = session?.id === sm.id ? session : null;
+    const address =
+      authorizationIdentifier === undefined ? null : jid(authorizationIdentifier);
+    const account = getAccount(entity);
+    if (
+      !sm.id ||
+      resumed.attrs.previd !== sm.id ||
+      (address &&
+        (!retained?.jid ||
+          address.bare().toString() !== retained.account ||
+          (address.resource && address.toString() !== retained.jid))) ||
+      (account && retained?.account && account !== retained.account)
+    ) {
       sm.enabled = false;
       sm.enableSent = false;
       entity._streamError("bad-format").catch(() => {});
@@ -91,9 +103,9 @@ export default function streamManagement({
     sm.enabled = true;
     ackQueue(resumed.attrs.h);
     signal?.throwIfAborted();
-    // Restore only a confirmed account retained by this exact SM session.
-    if (!getAccount(entity) && session?.id === sm.id && session.account) {
-      confirmIdentity(entity, jid(session.account));
+    // Restore only the immutable full identity saved by this exact session.
+    if (retained?.jid) {
+      entity._jid(retained.jid);
     }
     // A validated resumed stream can replay before the public ready event.
     completeNegotiation(entity);
@@ -173,7 +185,7 @@ export default function streamManagement({
   function enabled({ id, max }) {
     sm.enabled = true;
     sm.id = id;
-    session = { id, account: getAccount(entity) };
+    session = { id, account: getAccount(entity), jid: getIdentity(entity) };
     sm.max = max;
     // > The counter for the received stanzas ('h') is set to zero and started after receiving either <enable/> or <enabled/>.
     // https://xmpp.org/extensions/xep-0198.html#example-7

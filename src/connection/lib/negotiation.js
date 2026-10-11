@@ -4,7 +4,12 @@ import jid from "../../jid/index.js";
 const connections = new WeakMap();
 
 export function resetConnection(entity) {
-  connections.set(entity, { account: null, server: null, complete: false });
+  connections.set(entity, {
+    account: null,
+    identity: null,
+    server: null,
+    complete: false,
+  });
 }
 
 export function resetStream(entity, domain) {
@@ -15,11 +20,17 @@ export function resetStream(entity, domain) {
 }
 
 export function confirmIdentity(entity, address) {
-  connections.get(entity).account = address.bare().toString();
+  const state = connections.get(entity);
+  state.account = address.bare().toString();
+  state.identity = address.toString();
 }
 
 export function getAccount(entity) {
   return connections.get(entity)?.account ?? undefined;
+}
+
+export function getIdentity(entity) {
+  return connections.get(entity)?.identity ?? undefined;
 }
 
 export function completeNegotiation(entity) {

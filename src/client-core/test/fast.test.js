@@ -46,7 +46,7 @@ test("requests and saves token if server advertises fast", async () => {
     <success xmlns="urn:xmpp:sasl:2">
       <token expiry={expiry} xmlns="urn:xmpp:fast:0" token={token} />
       <authorization-identifier>
-        username@localhost/rOYwkWIywtnF
+        username@localhost
       </authorization-identifier>
     </success>,
   );
@@ -88,6 +88,7 @@ test("waits for the token to be saved before authentication completes", async ()
   await entity.catchOutgoing();
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
+      <authorization-identifier>username@localhost</authorization-identifier>
       <token
         expiry="2099-01-01T00:00:00Z"
         xmlns="urn:xmpp:fast:0"

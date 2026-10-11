@@ -4,6 +4,7 @@ import { disconnectClients } from "../../test/support/mockClient.js";
 afterEach(disconnectClients);
 
 import { mockClient } from "../../test/support/index.js";
+import { tick } from "../events/index.js";
 
 const CREDENTIALS = { username: "user", password: "secret" };
 
@@ -41,11 +42,13 @@ test("enable", async () => {
 
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
+      <authorization-identifier>foo@bar/test</authorization-identifier>
       <bound xmlns="urn:xmpp:bind:0">
         <enabled resume="1" xmlns="urn:xmpp:sm:3" id="2j44j2" max="600" />
       </bound>
     </success>,
   );
+  await tick();
 
   expect(sm.enabled).toBe(true);
   expect(sm.id).toBe("2j44j2");
@@ -87,6 +90,7 @@ test("Client failed to enable stream management", async () => {
 
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
+      <authorization-identifier>foo@bar/test</authorization-identifier>
       <bound xmlns="urn:xmpp:bind:0">
         <failed xmlns="urn:xmpp:sm:3">
           <internal-server-error xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
@@ -94,6 +98,7 @@ test("Client failed to enable stream management", async () => {
       </bound>
     </success>,
   );
+  await tick();
 
   expect(sm.enabled).toBe(false);
   expect(sm.id).toBe("");

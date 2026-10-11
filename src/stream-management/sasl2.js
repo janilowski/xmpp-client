@@ -1,5 +1,7 @@
 import { NS, makeResumeElement } from "./index.js";
 
+const SASL2 = "urn:xmpp:sasl:2";
+
 export function setupSasl2({ sasl2, sm, failed, resumed }) {
   sasl2.use(
     NS,
@@ -9,7 +11,11 @@ export function setupSasl2({ sasl2, sm, failed, resumed }) {
     },
     (element, signal) => {
       if (element.is("resumed")) {
-        return resumed(element, signal);
+        return resumed(
+          element,
+          signal,
+          element.parent.getChildText("authorization-identifier", SASL2),
+        );
       } else if (element.is("failed")) {
         failed(element);
       }

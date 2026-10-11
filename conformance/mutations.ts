@@ -14,8 +14,199 @@ import { join, resolve } from "node:path";
 import process from "node:process";
 
 const MUTATION_TIMEOUT_MS = 15_000;
+const INLINE_RESULT_DISPATCH = `      if (resumption) {
+        // XEP-0198 §9.2: validate the retained session before any side effect.
+        // Failure settles the old queue before Bind2 can enable a new session.
+        await features.get(NS_SM)[1](resumption, signal);
+        signal.throwIfAborted();
+      }
+      if (!resumed) {
+        entity._jid(address.toString());
+      }
+
+      for (const child of element.getChildElements()) {
+        signal.throwIfAborted();
+        if (child === resumption) {
+          continue;
+        }`;
+const XML_ORDER_DISPATCH = `      if (!resumed) {
+        entity._jid(address.toString());
+      }
+
+      for (const child of element.getChildElements()) {
+        signal.throwIfAborted();`;
 
 const mutations = [
+  {
+    name: "confirm SASL2 identity after inline cancellation",
+    file: "src/sasl2/index.js",
+    before:
+      "await features.get(NS_SM)[1](resumption, signal);\n        signal.throwIfAborted();",
+    after: "await features.get(NS_SM)[1](resumption, signal);",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "cancellation during failed resumption stops success side effects$",
+  },
+  {
+    name: "accept foreign SASL2 authorization identifiers",
+    file: "src/sasl2/index.js",
+    before: 'element.getChildren("authorization-identifier", NS)',
+    after: 'element.getChildren("authorization-identifier")',
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject invalid authorization identifier / foreign namespace only$",
+  },
+  {
+    name: "accept duplicate SASL2 authorization identifiers",
+    file: "src/sasl2/index.js",
+    before: "identifiers.length !== 1 ||",
+    after: "identifiers.length === 0 ||",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject invalid authorization identifier / duplicate$",
+  },
+  {
+    name: "accept child elements in a SASL2 authorization identifier",
+    file: "src/sasl2/index.js",
+    before: "identifiers[0].getChildElements().length !== 0",
+    after: "false",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject invalid authorization identifier / element content$",
+  },
+  {
+    name: "accept domain-only SASL2 account identities",
+    file: "src/sasl2/index.js",
+    before: "!address.local ||",
+    after: "false ||",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject invalid authorization identifier / domain-only JID$",
+  },
+  {
+    name: "accept a full SASL2 identity without resource binding",
+    file: "src/sasl2/index.js",
+    before: "(!resumed && Boolean(address.resource) !== Boolean(bound))",
+    after: "false",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject invalid authorization identifier / full JID without binding$",
+  },
+  {
+    name: "resume a SASL2 session under another account",
+    file: "src/stream-management/index.js",
+    before: "address.bare().toString() !== retained.account ||",
+    after: "false ||",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "reject another bare account before token, ack, or replay$",
+  },
+  {
+    name: "erase a resumed resource with a bare SASL2 identifier",
+    file: "src/stream-management/index.js",
+    before: "entity._jid(retained.jid);",
+    after: "entity._jid(authorizationIdentifier ?? retained.jid);",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "bare resumed identity retains authority and replays once$",
+  },
+  {
+    name: "resume under another resource",
+    file: "src/stream-management/index.js",
+    before: "(address.resource && address.toString() !== retained.jid)",
+    after: "false",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "reject another resource before token, ack, or replay$",
+  },
+  {
+    name: "resume under a different confirmed account",
+    file: "src/stream-management/index.js",
+    before: "(account && retained?.account && account !== retained.account)",
+    after: "false",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "post-authentication resumption with different confirmed account$",
+  },
+  {
+    name: "process an inline resumption twice",
+    file: "src/sasl2/index.js",
+    before: "if (child === resumption) {",
+    after: "if (false) {",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "full resumed identity retains authority and replays once$",
+  },
+  {
+    name: "bind before settling failed resumption",
+    file: "src/sasl2/index.js",
+    before: INLINE_RESULT_DISPATCH,
+    after: XML_ORDER_DISPATCH,
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "failed resumption preserves replacement binding / bound before failed$",
+  },
+  {
+    name: "save a token before validating failed resumption",
+    file: "src/sasl2/index.js",
+    before: INLINE_RESULT_DISPATCH,
+    after: XML_ORDER_DISPATCH,
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "invalid failed counter has no token, identity, or binding side effects$",
+  },
+  {
+    name: "accept an unsolicited Bind2 result",
+    file: "src/sasl2/index.js",
+    before:
+      '(bound &&\n          !streamFeatures.some((request) => request?.is("bind", NS_BIND)))',
+    after: "false",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject invalid authorization identifier / unrequested binding result$",
+  },
+  {
+    name: "accept a missing requested resumption result",
+    file: "src/sasl2/index.js",
+    before: "Boolean(resumption) !== resumeRequested ||",
+    after: "(resumption && !resumeRequested) ||",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "requested resumption rejects a missing outcome / full identifier with new binding$",
+  },
+  {
+    name: "accept duplicate Bind2 results",
+    file: "src/sasl2/index.js",
+    before: "bindings.length > 1 ||",
+    after: "false ||",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject duplicate Bind2 results$",
+  },
+  {
+    name: "accept duplicate failed resumption results",
+    file: "src/sasl2/index.js",
+    before: "failures.length > 1 ||",
+    after: "false ||",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "reject duplicate failed result before token, ack, or replay$",
+  },
+  {
+    name: "accept duplicate inline resumption results",
+    file: "src/sasl2/index.js",
+    before: "resumptions.length > 1 ||",
+    after: "false ||",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "reject duplicate resumption result before token, ack, or replay$",
+  },
+  {
+    name: "accept conflicting failed and resumed results",
+    file: "src/sasl2/index.js",
+    before: "(resumed && (bound || failures[0])) ||",
+    after: "(resumed && bound) ||",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "reject failed and resumed results before token, ack, or replay$",
+  },
+  {
+    name: "accept binding on a resumed session",
+    file: "src/sasl2/index.js",
+    before: "(resumed && (bound || failures[0])) ||",
+    after: "(resumed && failures[0]) ||",
+    suite: "conformance/xep0388-resumption-identity.test.ts",
+    test: "reject resumed and bound results before token, ack, or replay$",
+  },
+  {
+    name: "use the authentication name as SASL2 authority",
+    file: "src/sasl2/index.js",
+    before: "entity._jid(address.toString());",
+    after: "entity._jid(`${credentials.username}@${entity.options.domain}`);",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "accept an explicitly requested proxy authorization identity$",
+  },
   {
     name: "reopen a closed stream from its close callback",
     file: "src/connection/index.js",
@@ -526,15 +717,17 @@ const mutations = [
   {
     name: "snapshot a public identity hint for resumption",
     file: "src/stream-management/index.js",
-    before: "session = { id, account: getAccount(entity) };",
-    after: "session = { id, account: entity.jid?.bare().toString() };",
+    before:
+      "session = { id, account: getAccount(entity), jid: getIdentity(entity) };",
+    after:
+      "session = { id, account: entity.jid?.bare().toString(), jid: entity.jid?.toString() };",
     suite: "conformance/rfc6120-stanza-addressing.test.ts",
     test: "verified resumption preserves the implicit account / mutated-hints$",
   },
   {
     name: "lose confirmed account on ordinary resumption",
     file: "src/stream-management/index.js",
-    before: "confirmIdentity(entity, jid(session.account));",
+    before: "entity._jid(retained.jid);",
     after: "// Do not restore the retained account.",
     suite: "conformance/rfc6120-stanza-addressing.test.ts",
     test: "verified resumption preserves the implicit account / ordinary$",
@@ -812,9 +1005,9 @@ const mutations = [
   {
     name: "retain a former authenticated account on reconnect",
     file: "src/connection/lib/negotiation.js",
-    before: "account: null, server: null, complete: false",
+    before: "account: null,\n    identity: null,",
     after:
-      "account: connections.get(entity)?.account ?? null, server: null, complete: false",
+      "account: connections.get(entity)?.account ?? null,\n    identity: null,",
     suite: "conformance/rfc6120-stanza-routing.test.ts",
     test: "reject remote stanzas.*reconnect / sasl / authentication",
   },
@@ -945,16 +1138,16 @@ const mutations = [
   {
     name: "accept a different ordinary SM resumption ID",
     file: "src/stream-management/index.js",
-    before: "if (!sm.id || resumed.attrs.previd !== sm.id) {",
-    after: "if (false) {",
+    before: "resumed.attrs.previd !== sm.id ||",
+    after: "false ||",
     suite: "conformance/xep0198-resumption.test.ts",
     test: "ordinary resumption.*mismatched",
   },
   {
     name: "accept a different inline SM resumption ID",
     file: "src/stream-management/index.js",
-    before: "if (!sm.id || resumed.attrs.previd !== sm.id) {",
-    after: "if (false) {",
+    before: "resumed.attrs.previd !== sm.id ||",
+    after: "false ||",
     suite: "conformance/xep0198-resumption.test.ts",
     test: "inline resumption.*mismatched",
   },
@@ -985,8 +1178,8 @@ const mutations = [
   {
     name: "require features after successful inline resumption",
     file: "src/sasl2/index.js",
-    before: "if (!resumed) {",
-    after: "if (true) {",
+    before: "if (!resumed) {\n          expectFeatures();",
+    after: "if (true) {\n          expectFeatures();",
     suite: "conformance/xep0388-features.test.ts",
     test: "omits features / resume / missing",
   },
@@ -1679,6 +1872,8 @@ for (const mutation of mutations) {
       "conformance/xep0198-acknowledgements.test.ts",
       "conformance/xep0198-resumption.test.ts",
       "conformance/xep0388-features.test.ts",
+      "conformance/xep0388-authorization-identifier.test.ts",
+      "conformance/xep0388-resumption-identity.test.ts",
       "conformance/xep0156.test.js",
       "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",

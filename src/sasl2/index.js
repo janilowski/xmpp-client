@@ -4,11 +4,13 @@ import xml from "../xml/index.js";
 import exchange from "../sasl/exchange.js";
 import prepareCredentials from "../sasl/credentials.js";
 import { getAvailableMechanisms } from "../sasl/index.js";
+import jid from "../jid/index.js";
 
 // https://xmpp.org/extensions/xep-0388.html
 
 const NS = "urn:xmpp:sasl:2";
 const NS_SM = "urn:xmpp:sm:3";
+const NS_BIND = "urn:xmpp:bind:0";
 
 async function authenticate({
   saslMechanisms,
@@ -40,15 +42,53 @@ async function authenticate({
     mech,
     creds,
     async (element, signal) => {
-      // https://xmpp.org/extensions/xep-0388.html#success
-      // this is a bare JID, unless resource binding or stream resumption has occurred, in which case it is a full JID.
-      const aid = element.getChildText("authorization-identifier");
-      if (aid) {
-        entity._jid(aid);
+      // XEP-0388 §§2.6.1/8: one account identifier, before granting authority.
+      const identifiers = element.getChildren("authorization-identifier", NS);
+      if (
+        identifiers.length !== 1 ||
+        identifiers[0].getChildElements().length !== 0
+      ) {
+        throw new SASLError("SASL2: Invalid authorization identifier");
+      }
+      const address = jid(identifiers[0].text());
+      const bindings = element.getChildren("bound", NS_BIND);
+      const resumptions = element.getChildren("resumed", NS_SM);
+      const failures = element.getChildren("failed", NS_SM);
+      const bound = bindings[0];
+      const resumed = resumptions[0];
+      const resumption = resumed ?? failures[0];
+      const resumeRequested = streamFeatures.some((request) =>
+        request?.is("resume", NS_SM),
+      );
+      if (
+        !address.local ||
+        bindings.length > 1 ||
+        resumptions.length > 1 ||
+        failures.length > 1 ||
+        (resumed && (bound || failures[0])) ||
+        (bound &&
+          !streamFeatures.some((request) => request?.is("bind", NS_BIND))) ||
+        Boolean(resumption) !== resumeRequested ||
+        (!resumed && Boolean(address.resource) !== Boolean(bound))
+      ) {
+        throw new SASLError("SASL2: Invalid authorization context");
+      }
+
+      if (resumption) {
+        // XEP-0198 §9.2: validate the retained session before any side effect.
+        // Failure settles the old queue before Bind2 can enable a new session.
+        await features.get(NS_SM)[1](resumption, signal);
+        signal.throwIfAborted();
+      }
+      if (!resumed) {
+        entity._jid(address.toString());
       }
 
       for (const child of element.getChildElements()) {
         signal.throwIfAborted();
+        if (child === resumption) {
+          continue;
+        }
         const feature = features.get(child.getNS());
         await feature?.[1]?.(child, signal);
       }

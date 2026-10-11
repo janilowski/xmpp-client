@@ -4,6 +4,7 @@ import { disconnectClients } from "../../test/support/mockClient.js";
 afterEach(disconnectClients);
 
 import { mockClient } from "../../test/support/index.js";
+import { tick } from "../events/index.js";
 
 const CREDENTIALS = { username: "user", password: "secret" };
 
@@ -12,7 +13,21 @@ test("resume", async () => {
     credentials: CREDENTIALS,
   });
 
-  sm.id = Math.random().toString().slice(2);
+  // A resumable session already owns a bound resource and its opaque ID.
+  entity._jid("foo@bar/test");
+  entity.status = "online";
+  const enabling = entity.catchOutgoing();
+  entity.mockInput(
+    <features xmlns="http://etherx.jabber.org/streams">
+      <sm xmlns="urn:xmpp:sm:3" />
+    </features>,
+  );
+  await enabling;
+  entity.mockInput(
+    <enabled xmlns="urn:xmpp:sm:3" id="session" resume="true" />,
+  );
+  await tick();
+  entity.emit("disconnect");
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -37,9 +52,11 @@ test("resume", async () => {
 
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
+      <authorization-identifier>foo@bar</authorization-identifier>
       <resumed xmlns="urn:xmpp:sm:3" previd={sm.id} h="45" />
     </success>,
   );
+  await tick();
 
   expect(entity.streamManagement.outbound).toBe(45);
   expect(entity.streamManagement.inbound).toBe(54);
@@ -77,11 +94,13 @@ test("Client failed to resume stream", async () => {
 
   entity.mockInput(
     <success xmlns="urn:xmpp:sasl:2">
+      <authorization-identifier>foo@bar</authorization-identifier>
       <failed xmlns="urn:xmpp:sm:3" h="45">
         <item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas" />
       </failed>
     </success>,
   );
+  await tick();
 
   expect(entity.streamManagement.outbound).toBe(0);
   expect(entity.streamManagement.inbound).toBe(54);

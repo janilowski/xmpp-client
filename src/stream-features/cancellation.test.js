@@ -5,6 +5,7 @@ afterEach(disconnectClients);
 
 import { expect, test } from "bun:test";
 import { mockClient, xml } from "../../test/support/index.js";
+import { tick } from "../events/index.js";
 
 // RFC 6120 §§4.4, 4.6, 6–7: cancelled negotiation must not affect a new stream.
 // Also exercises XEP-0388/0198 integration, not full coverage of either XEP.
@@ -40,6 +41,20 @@ test.each([SM, SASL2])(
     const gate = Promise.withResolvers();
     const entered = Promise.withResolvers();
     const entity = mockClient({ username: "foo", password: "bar" });
+    if (ns === SASL2) {
+      entity._jid("foo@bar/test");
+      entity.status = "online";
+      const enabling = entity.catchOutgoing();
+      entity.mockInput(
+        xml("features", { xmlns: STREAMS }, xml("sm", { xmlns: SM })),
+      );
+      await enabling;
+      entity.mockInput(
+        xml("enabled", { xmlns: SM, id: "old-session", resume: "true" }),
+      );
+      await tick();
+      entity.emit("disconnect");
+    }
     const errors = [];
     entity.on("error", (error) => errors.push(error));
     entity.streamManagement.id = "old-session";
@@ -76,7 +91,14 @@ test.each([SM, SASL2])(
       previd: "old-session",
     });
     entity.mockInput(
-      ns === SM ? resumed : xml("success", { xmlns: SASL2 }, resumed),
+      ns === SM
+        ? resumed
+        : xml(
+            "success",
+            { xmlns: SASL2 },
+            xml("authorization-identifier", {}, "foo@bar"),
+            resumed,
+          ),
     );
     await entered.promise;
     entity.emit("disconnect");
@@ -167,7 +189,12 @@ test("SASL2 final verification cannot bind a replacement session", async () => {
     xml(
       "features",
       { xmlns: STREAMS },
-      xml("authentication", { xmlns: SASL2 }, xml("mechanism", {}, "TEST")),
+      xml(
+        "authentication",
+        { xmlns: SASL2 },
+        xml("mechanism", {}, "TEST"),
+        xml("inline", {}, xml("bind", { xmlns: "urn:xmpp:bind:0" })),
+      ),
     ),
   );
   await entity.catchOutgoing();

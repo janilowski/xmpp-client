@@ -50,7 +50,7 @@ test("with object credentials", async () => {
     </authenticate>,
   );
 
-  const jid = "username@localhost/example~Ln8YSSzsyK-b_3-vIFvOJNnE";
+  const jid = "username@localhost";
 
   expect(entity.jid?.toString()).not.toBe(jid);
 
@@ -94,7 +94,7 @@ test("with function credentials", async () => {
     </authenticate>,
   );
 
-  const jid = "username@localhost/example~Ln8YSSzsyK-b_3-vIFvOJNnE";
+  const jid = "username@localhost";
 
   expect(entity.jid?.toString()).not.toBe(jid);
 
@@ -151,7 +151,7 @@ test("with FAST token only", async () => {
     </authenticate>,
   );
 
-  const jid = "username@localhost/example~Ln8YSSzsyK-b_3-vIFvOJNnE";
+  const jid = "username@localhost";
 
   expect(entity.jid?.toString()).not.toBe(jid);
 

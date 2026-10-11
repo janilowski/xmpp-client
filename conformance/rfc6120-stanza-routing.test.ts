@@ -713,14 +713,14 @@ for (const mode of ["ordinary", "inline"] as const) {
               ? `<features xmlns="${STREAM}"><bind xmlns="${BIND}"/><sm xmlns="${SM}"/></features>`
               : mode === "ordinary"
                 ? `<features xmlns="${STREAM}"><mechanisms xmlns="${SASL}"><mechanism>PLAIN</mechanism></mechanisms></features>`
-                : `<features xmlns="${STREAM}"><authentication xmlns="${SASL2}"><mechanism>PLAIN</mechanism><inline><sm xmlns="${SM}"/><bind xmlns="${BIND2}"/></inline></authentication></features>`,
+                : `<features xmlns="${STREAM}"><authentication xmlns="${SASL2}"><mechanism>${PROOF_MECHANISM}</mechanism><inline><sm xmlns="${SM}"/><bind xmlns="${BIND2}"/></inline></authentication></features>`,
           );
         } else if (el.open === `{${SASL}}auth`) {
           authenticated = true;
           remote.send(`<success xmlns="${SASL}"/>`);
         } else if (el.open === `{${SASL2}}authenticate`) {
           remote.send(
-            `<success xmlns="${SASL2}"><authorization-identifier>${FULL_JID}</authorization-identifier><hold xmlns="${EXTENSION}"/>${response}</success>`,
+            `<success xmlns="${SASL2}"><authorization-identifier>${FULL_JID}</authorization-identifier>${response}</success>`,
           );
         } else if (el.open === `{${SM}}resume`) {
           paused.resolve();
@@ -736,14 +736,16 @@ for (const mode of ["ordinary", "inline"] as const) {
         timeout: TIMEOUT_MS,
       });
       xmpp.reconnect.stop();
-      xmpp.sasl2.use(
-        EXTENSION,
-        async () => undefined,
-        async () => {
+      xmpp.saslMechanisms.register(PROOF_MECHANISM, () => ({
+        name: PROOF_MECHANISM,
+        clientFirst: true,
+        response: () => "",
+        // Proof verification, not extension XML order, gates resumption.
+        final: async () => {
           paused.resolve();
           await release.promise;
         },
-      );
+      }));
       const enabled = Promise.withResolvers<void>();
       xmpp.on("nonza", (element: Element) => {
         if (element.is("enabled", SM)) {
@@ -826,13 +828,17 @@ for (const mode of ["ordinary", "inline"] as const) {
           expect(result.message).toBe("Stream negotiation is not complete");
         }
         if (mode === "inline") {
-          // A verified full aid confirms this account, not the former SM session.
-          await xmpp.send(
-            xml("message", {
-              id: "self-before-resume",
-              to: `${ACCOUNT}/another`,
-            }),
-          );
+          // Neither an old public JID nor an unverified aid grants authority.
+          const self = await xmpp
+            .send(
+              xml("message", {
+                id: "forbidden-self-before-resume",
+                to: `${ACCOUNT}/another`,
+              }),
+            )
+            .catch((error: Error) => error);
+          expect(self).toBeInstanceOf(Error);
+          expect(self.message).toBe("Stream negotiation is not complete");
         }
         await flushWire(xmpp, second);
         expect(

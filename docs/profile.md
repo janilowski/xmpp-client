@@ -181,6 +181,13 @@ server-selected replacement resources are accepted. Binding errors are surfaced
 as stanza errors, without automatic resource retries or credential replacement.
 RFC 6120 §7.7.3's retry allowance is a server obligation, not a client retry mandate.
 
+SASL2 success requires one same-namespace, text-only account identifier. It is
+bare before binding and full after requested, successful Bind2; it need not match
+the authentication username. Inline resumption validates the retained session
+before processing other success extensions. A bare or matching full identifier
+keeps that session's full JID/resource; it cannot switch accounts or resources
+(XEP-0388 §2.6.1/example 9, XEP-0386 §3.2.1, XEP-0198 §9.2).
+
 Password authentication prefers SCRAM-SHA-256, then SCRAM-SHA-1, then PLAIN,
 independently of the server's advertisement order. Both SCRAM variants use native
 Web Crypto and verify the server proof before stream restart, binding or online.
