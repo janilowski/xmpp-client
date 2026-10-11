@@ -19,7 +19,7 @@ const TIMEOUT_MS = 300;
 const OBSERVATION_MS = TIMEOUT_MS * 3;
 
 type Mode = "initial" | "ordinary" | "inline";
-type Result = { resumed: string } | { failed: true };
+type Result = { resumed: string; handled?: number } | { failed: true };
 
 // XEP-0198 v1.6.3 §§3,5,9.2: IDs are opaque; a response names the former stream.
 // Closing malformed resumption with bad-format is local policy.
@@ -61,7 +61,7 @@ function resumptionPeer(mode: Mode, result: Result) {
       } else {
         const response =
           "resumed" in result
-            ? `<resumed xmlns="${SM}" ${result.resumed} h="1"/>`
+            ? `<resumed xmlns="${SM}" ${result.resumed} h="${result.handled ?? 1}"/>`
             : `<failed xmlns="${SM}" h="1"><item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></failed><bound xmlns="${BIND2}"/>`;
         peer.send(
           `<success xmlns="${SASL2}"><authorization-identifier>user@example.test/${"failed" in result ? "new" : "old"}</authorization-identifier>${response}</success>`,
@@ -75,7 +75,7 @@ function resumptionPeer(mode: Mode, result: Result) {
     } else if (el.open === `{${SM}}resume`) {
       peer.send(
         "resumed" in result
-          ? `<resumed xmlns="${SM}" ${result.resumed} h="1"/>`
+          ? `<resumed xmlns="${SM}" ${result.resumed} h="${result.handled ?? 1}"/>`
           : `<failed xmlns="${SM}" h="1"><item-not-found xmlns="urn:ietf:params:xml:ns:xmpp-stanzas"/></failed>`,
       );
     } else if (el.open === "{jabber:client}iq") {
@@ -91,6 +91,153 @@ function resumptionPeer(mode: Mode, result: Result) {
     }
   });
 }
+
+test.each(["preloaded ID", "replaced ID"] as const)(
+  "XEP-0198 §5: ordinary resumption requires the former bound session / %s",
+  async (kind) => {
+    const first = resumptionPeer("initial", { resumed: SESSION_ATTRIBUTE });
+    const second = resumptionPeer("ordinary", {
+      resumed: 'previd="injected-session"',
+      handled: kind === "preloaded ID" ? 0 : 1,
+    });
+    const xmpp = client({
+      service: kind === "preloaded ID" ? second.url : first.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const sm = xmpp.streamManagement;
+    sm.requestAckInterval = 0;
+    const enabled = Promise.withResolvers<void>();
+    xmpp.on("nonza", (element) => {
+      if (element.is("enabled", SM)) {
+        enabled.resolve();
+      }
+    });
+    const acks: string[] = [];
+    const failures: string[] = [];
+    const errors: Error[] = [];
+    let resumed = 0;
+    let online = 0;
+    let observing = false;
+    const outcome = Promise.withResolvers<"ready" | "closed" | "timeout">();
+    sm.on("ack", (stanza) => acks.push(stanza.attrs.id));
+    sm.on("fail", (stanza) => failures.push(stanza.attrs.id));
+    sm.on("resumed", () => {
+      resumed++;
+      if (observing) {
+        outcome.resolve("ready");
+      }
+    });
+    xmpp.on("status", (status) => {
+      if (status === "online") {
+        online++;
+        if (observing) {
+          outcome.resolve("ready");
+        }
+      }
+    });
+    xmpp.on("error", (error: Error) => errors.push(error));
+    let started: Promise<unknown> | undefined;
+    let watchdog: ReturnType<typeof setTimeout> | undefined;
+    try {
+      if (kind === "replaced ID") {
+        expect((await xmpp.start()).toString()).toBe("user@example.test/old");
+        await enabled.promise;
+        await setImmediate();
+        await xmpp.send(xml("message", { id: "a" }));
+        await xmpp.send(xml("message", { id: "b" }));
+        while (!first.transcript.some((frame) => frame.includes('id="b"'))) {
+          await first.next();
+        }
+        const disconnected = new Promise<void>((resolve) =>
+          xmpp.once("disconnect", resolve),
+        );
+        first.terminate();
+        await disconnected;
+        Object.assign(xmpp.options, { service: second.url });
+      }
+      // Mutable public state cannot replace the private session retained at enable.
+      sm.id = "injected-session";
+      online = 0;
+      resumed = 0;
+      observing = true;
+      const queue = kind === "preloaded ID" ? [] : ["a", "b"];
+      expect(
+        sm.outbound_q.map(({ stanza }: { stanza: Element }) => stanza.attrs.id),
+      ).toEqual(queue);
+      xmpp.once("close", () => outcome.resolve("closed"));
+      if (kind === "preloaded ID") {
+        started = xmpp.start().catch((error: Error) => error);
+      } else {
+        await xmpp.reconnect.reconnect();
+      }
+      watchdog = setTimeout(() => outcome.resolve("timeout"), OBSERVATION_MS);
+      const result = await outcome.promise;
+      clearTimeout(watchdog);
+      await setImmediate();
+      // Keep this first: accepting the response must fail an assertion, not a timeout.
+      expect(result).toBe("closed");
+      expect(acks).toEqual([]);
+      expect(failures).toEqual([]);
+      expect(resumed).toBe(0);
+      expect(online).toBe(0);
+      expect(sm.enabled).toBe(false);
+      expect(sm.outbound).toBe(0);
+      expect(
+        sm.outbound_q.map(({ stanza }: { stanza: Element }) => stanza.attrs.id),
+      ).toEqual(queue);
+      const forbidden = await xmpp
+        .send(xml("message", { id: "forbidden", to: "other@remote.test/r" }))
+        .then(
+          () => undefined,
+          (error: Error) => error,
+        );
+      expect(forbidden).toBeInstanceOf(Error);
+      expect(forbidden?.message).toBe("Stream negotiation is not complete");
+      expect(
+        sm.outbound_q.map(({ stanza }: { stanza: Element }) => stanza.attrs.id),
+      ).toEqual(queue);
+      await second.waitForClose();
+      const request = second.transcript.find((frame) =>
+        frame.startsWith("<resume"),
+      );
+      expect(request).toBeDefined();
+      expect(readFrame(request!)).toContainEqual({
+        open: `{${SM}}resume`,
+        attributes: { "{}previd": "injected-session", "{}h": "0" },
+      });
+      const streamError = second.transcript.find((frame) =>
+        frame.startsWith("<stream:error"),
+      );
+      expect(streamError).toBeDefined();
+      expect(readFrame(streamError!)).toContainEqual({
+        open: `{${STREAM_ERRORS}}bad-format`,
+        attributes: {},
+      });
+      expect(
+        second.transcript.some((frame) => frame.startsWith("<message")),
+      ).toBe(false);
+      expect(second.transcript.some((frame) => frame.startsWith("<iq"))).toBe(
+        false,
+      );
+      expect(
+        second.transcript.some((frame) => frame.startsWith("<enable")),
+      ).toBe(false);
+      expect(errors).toEqual([]);
+      expect(first.errors).toEqual([]);
+      expect(second.errors).toEqual([]);
+    } finally {
+      clearTimeout(watchdog);
+      await xmpp.stop();
+      await started;
+      await first.stop();
+      await second.stop();
+    }
+  },
+);
 
 for (const mode of ["ordinary", "inline"] as const) {
   test.each([
@@ -162,8 +309,15 @@ for (const mode of ["ordinary", "inline"] as const) {
           await first.next();
         }
         expect(
-          sm.outbound_q.map(({ stanza }: { stanza: Element }) => stanza.attrs.id),
+          sm.outbound_q.map(
+            ({ stanza }: { stanza: Element }) => stanza.attrs.id,
+          ),
         ).toEqual(["a", "b"]);
+        if (mode === "ordinary" && kind === "valid") {
+          // Ordinary SASL supplies no JID: resume must restore the private full identity.
+          xmpp.jid!.setResource("mutable-hint");
+          expect(xmpp.jid?.toString()).toBe("user@example.test/mutable-hint");
+        }
         const disconnected = new Promise<void>((resolve) =>
           xmpp.once("disconnect", resolve),
         );
@@ -197,7 +351,9 @@ for (const mode of ["ordinary", "inline"] as const) {
         expect(acks).toEqual(invalid ? [] : ["a"]);
         expect(failures).toEqual(kind === "failed" ? ["b"] : []);
         expect(
-          sm.outbound_q.map(({ stanza }: { stanza: Element }) => stanza.attrs.id),
+          sm.outbound_q.map(
+            ({ stanza }: { stanza: Element }) => stanza.attrs.id,
+          ),
         ).toEqual(invalid ? ["a", "b"] : kind === "valid" ? ["b"] : []);
         const request = second.transcript.find((frame) =>
           frame.startsWith(mode === "inline" ? "<authenticate" : "<resume"),
@@ -215,6 +371,17 @@ for (const mode of ["ordinary", "inline"] as const) {
           expect(replay[0]).toMatchObject({
             open: "{jabber:client}message",
             attributes: { "{}id": "b" },
+          });
+          expect(
+            readFrame(
+              second.transcript.find((frame) => frame.startsWith("<message"))!,
+            ),
+          ).toContainEqual({
+            open: "{urn:xmpp:delay}delay",
+            attributes: {
+              "{}from": "user@example.test/old",
+              "{}stamp": expect.any(String),
+            },
           });
         }
         expect(resumed).toBe(kind === "valid" ? 1 : 0);
@@ -246,6 +413,28 @@ for (const mode of ["ordinary", "inline"] as const) {
           expect(xmpp.jid?.toString()).toBe(
             `user@example.test/${kind === "failed" ? "new" : "old"}`,
           );
+          if (mode === "ordinary" && kind === "valid") {
+            await xmpp.send(
+              xml("message", { id: "authorized", to: "other@remote.test/r" }),
+            );
+            while (
+              !second.transcript.some((frame) =>
+                frame.includes('id="authorized"'),
+              )
+            ) {
+              await second.next();
+            }
+            const delivered = second.transcript.find((frame) =>
+              frame.includes('id="authorized"'),
+            );
+            expect(readFrame(delivered!)[0]).toMatchObject({
+              open: "{jabber:client}message",
+              attributes: {
+                "{}id": "authorized",
+                "{}to": "other@remote.test/r",
+              },
+            });
+          }
         }
         expect(first.errors).toEqual([]);
         expect(second.errors).toEqual([]);

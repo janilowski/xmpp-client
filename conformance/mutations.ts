@@ -38,6 +38,22 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "resume without a retained bound session",
+    file: "src/stream-management/index.js",
+    before: "      !retained?.jid ||\n      !sm.id ||",
+    after: "      !sm.id ||",
+    suite: "conformance/xep0198-resumption.test.ts",
+    test: "requires the former bound session / preloaded ID$",
+  },
+  {
+    name: "resume under a replaced public session ID",
+    file: "src/stream-management/index.js",
+    before: "const retained = session?.id === sm.id ? session : null;",
+    after: "const retained = session;",
+    suite: "conformance/xep0198-resumption.test.ts",
+    test: "requires the former bound session / replaced ID$",
+  },
+  {
     name: "confirm SASL2 identity after inline cancellation",
     file: "src/sasl2/index.js",
     before:

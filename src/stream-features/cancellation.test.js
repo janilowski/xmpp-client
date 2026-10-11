@@ -41,23 +41,22 @@ test.each([SM, SASL2])(
     const gate = Promise.withResolvers();
     const entered = Promise.withResolvers();
     const entity = mockClient({ username: "foo", password: "bar" });
-    if (ns === SASL2) {
-      entity._jid("foo@bar/test");
-      entity.status = "online";
-      const enabling = entity.catchOutgoing();
-      entity.mockInput(
-        xml("features", { xmlns: STREAMS }, xml("sm", { xmlns: SM })),
-      );
-      await enabling;
-      entity.mockInput(
-        xml("enabled", { xmlns: SM, id: "old-session", resume: "true" }),
-      );
-      await tick();
-      entity.emit("disconnect");
-    }
+    // Replay begins only for a retained, previously bound session.
+    entity._jid("foo@bar/test");
+    entity.status = "online";
+    const enabling = entity.catchOutgoing();
+    entity.mockInput(
+      xml("features", { xmlns: STREAMS }, xml("sm", { xmlns: SM })),
+    );
+    await enabling;
+    entity.mockInput(
+      xml("enabled", { xmlns: SM, id: "old-session", resume: "true" }),
+    );
+    await tick();
+    entity.emit("disconnect");
+
     const errors = [];
     entity.on("error", (error) => errors.push(error));
-    entity.streamManagement.id = "old-session";
     entity.streamManagement.outbound_q.push({
       stanza: xml("presence"),
       stamp: "stamp",

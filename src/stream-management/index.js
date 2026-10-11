@@ -87,11 +87,11 @@ export default function streamManagement({
       authorizationIdentifier === undefined ? null : jid(authorizationIdentifier);
     const account = getAccount(entity);
     if (
+      !retained?.jid ||
       !sm.id ||
       resumed.attrs.previd !== sm.id ||
       (address &&
-        (!retained?.jid ||
-          address.bare().toString() !== retained.account ||
+        (address.bare().toString() !== retained.account ||
           (address.resource && address.toString() !== retained.jid))) ||
       (account && retained?.account && account !== retained.account)
     ) {

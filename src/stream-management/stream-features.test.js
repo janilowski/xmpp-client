@@ -134,8 +134,20 @@ test("enable - failed", async () => {
 test("resume - resumed", async () => {
   const { entity } = mockClient();
 
+  // Retain the bound identity through a completed SM enable exchange.
+  entity._jid("foo@bar/test");
+  entity.status = "online";
+  const enabling = entity.catchOutgoing();
+  entity.mockInput(
+    <features xmlns="http://etherx.jabber.org/streams">
+      <sm xmlns="urn:xmpp:sm:3" />
+    </features>,
+  );
+  await enabling;
+  entity.mockInput(<enabled xmlns="urn:xmpp:sm:3" id="bar" resume="true" />);
+  await tick();
+  entity.emit("disconnect");
   entity.status = "offline";
-  entity.streamManagement.id = "bar";
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -186,8 +198,20 @@ test("resume - resumed", async () => {
 test("resumed event", async () => {
   const { entity } = mockClient();
 
+  // Retain the bound identity through a completed SM enable exchange.
+  entity._jid("foo@bar/test");
+  entity.status = "online";
+  const enabling = entity.catchOutgoing();
+  entity.mockInput(
+    <features xmlns="http://etherx.jabber.org/streams">
+      <sm xmlns="urn:xmpp:sm:3" />
+    </features>,
+  );
+  await enabling;
+  entity.mockInput(<enabled xmlns="urn:xmpp:sm:3" id="bar" resume="true" />);
+  await tick();
+  entity.emit("disconnect");
   entity.status = "offline";
-  entity.streamManagement.id = "bar";
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">

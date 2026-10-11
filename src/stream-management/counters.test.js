@@ -26,22 +26,20 @@ for (const mode of ["features", "sasl2"]) {
     async (result) => {
       const xmpp = mockClient({ credentials: CREDENTIALS });
       const sm = xmpp.streamManagement;
-      if (mode === "sasl2") {
-        // Inline resumption requires a retained, previously bound session.
-        xmpp._jid("foo@bar/test");
-        xmpp.status = "online";
-        const enabling = xmpp.catchOutgoing();
-        xmpp.mockInput(
-          <features xmlns="http://etherx.jabber.org/streams">
-            <sm xmlns={NS} />
-          </features>,
-        );
-        await enabling;
-        xmpp.mockInput(<enabled xmlns={NS} id="old-session" resume="true" />);
-        await tick();
-        xmpp.emit("disconnect");
-      }
-      sm.id = "old-session";
+      // Both adapters resume a retained, previously bound session.
+      xmpp._jid("foo@bar/test");
+      xmpp.status = "online";
+      const enabling = xmpp.catchOutgoing();
+      xmpp.mockInput(
+        <features xmlns="http://etherx.jabber.org/streams">
+          <sm xmlns={NS} />
+        </features>,
+      );
+      await enabling;
+      xmpp.mockInput(<enabled xmlns={NS} id="old-session" resume="true" />);
+      await tick();
+      xmpp.emit("disconnect");
+
       sm.outbound = MAX_H;
       sm.outbound_q = ["a", "b"].map((id) => ({
         stanza: <message id={id} />,

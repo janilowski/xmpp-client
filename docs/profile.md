@@ -170,6 +170,8 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   cannot distinguish delayed replies; prefer generated fresh IDs.
 - SM malformed counts or resumption identities close with `bad-format`, a local
   validation policy. Resumption IDs are opaque and must match exactly.
+  Both resumption paths require the private bound identity retained from that
+  enabled session; assigning a public ID alone cannot restore a session.
   `sm.outbound` means last acknowledged sequence, not total sent; retransmission
   does not count twice. SM supplies neither persistence nor exactly-once delivery.
 
