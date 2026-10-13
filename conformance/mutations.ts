@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept a framing element in an unrelated namespace",
+    file: "src/websocket/lib/FramedParser.js",
+    before: "element.getNS() !== NS_FRAMING",
+    after: "false",
+    suite: "conformance/rfc7395-properties.test.ts",
+    test: "invalid documents fail atomically",
+  },
+  {
+    name: "accept content in a framing element",
+    file: "src/websocket/lib/FramedParser.js",
+    before: "if ((opening || closing) && element.children.length) {",
+    after: "if (false) {",
+    suite: "conformance/rfc7395-properties.test.ts",
+    test: "invalid documents fail atomically",
+  },
+  {
+    name: "dispatch ordinary frames after a fatal RFC 7395 document",
+    file: "src/websocket/lib/FramedParser.js",
+    before: "if (this.#failed && !closing) {\n        return;\n      }",
+    after: "/* fatal state incorrectly permits ordinary frames */",
+    suite: "conformance/rfc7395-properties.test.ts",
+    test: "invalid documents fail atomically",
+  },
+  {
     name: "ignore reciprocal close after a fatal XML frame",
     file: "src/websocket/lib/FramedParser.js",
     before: 'if (this.#state === "closed") {',
@@ -2231,6 +2255,7 @@ for (const mutation of mutations) {
       "tsconfig.json",
       "bunfig.toml",
       "conformance/rfc7395.test.ts",
+      "conformance/rfc7395-properties.test.ts",
       "conformance/rfc7395-outgoing-framing.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
