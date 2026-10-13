@@ -50,3 +50,20 @@ test("header", () => {
   entity.isSecure = () => true;
   expect(entity.header(<foo />)).toEqual(<foo from="foo@bar" />);
 });
+
+test("_validateHeader forwards the prepared semantics", () => {
+  class Transport {
+    _validateHeader(...args) {
+      return args;
+    }
+  }
+
+  const entity = new Client();
+  entity.Transport = Transport;
+  const expected = { to: "example.test", version: "1.0" };
+
+  expect(entity._validateHeader("<open/>", expected)).toEqual([
+    "<open/>",
+    expected,
+  ]);
+});

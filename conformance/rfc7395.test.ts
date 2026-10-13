@@ -543,7 +543,11 @@ describe("RFC 7395 — client wire behavior", () => {
   });
 
   test("§3.3.2/3.4 first message is a standalone framing open", async () => {
-    await openStream();
+    const result = await openStream().then(
+      () => undefined,
+      (error: Error) => error,
+    );
+    expect(result).toBeUndefined();
     expect(readFrame(await peer.next())).toEqual(readFrame(CLIENT_OPEN));
     expect(peer.transcript).toHaveLength(1);
   });

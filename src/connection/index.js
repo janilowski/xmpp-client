@@ -562,9 +562,10 @@ class Connection extends EventEmitter {
     const headerElement = this.headerElement();
     headerElement.attrs.to = preparedDomain;
     headerElement.attrs["xml:lang"] = lang;
+    const expectedHeader = { to: preparedDomain };
     // Validate the captured transport header before taking ownership of a stream.
     const source = this.header(headerElement);
-    this._validateHeader(source);
+    this._validateHeader(source, expectedHeader);
 
     this._status("opening");
     this.root = headerElement;

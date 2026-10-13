@@ -13,6 +13,8 @@ const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const TIMEOUT_MS = 500;
 const CLOSE = `<close xmlns="${FRAMING}"/>`;
 const OPEN = `<open xmlns="${FRAMING}" to="example.test" version="1.0" xml:lang="en"/>`;
+const MUTATED_PREPARED_TARGET = "mutated prepared target";
+const MUTATED_HEADER_ELEMENT = "mutated header element";
 
 const DOMAINS = [
   ["prepared ASCII", "example.test", "example.test"],
@@ -40,9 +42,28 @@ test.each([
   ["processing instruction", `${OPEN}<?forbidden value?>`],
   ["standalone yes", `<?xml version="1.0" standalone="yes"?>${OPEN}`],
   ["standalone no", `<?xml version="1.0" standalone="no"?>${OPEN}`],
+  ["wrong element", OPEN.replace("<open ", "<message ")],
+  ["wrong namespace", OPEN.replace(FRAMING, CONTENT)],
+  ["missing to", OPEN.replace(' to="example.test"', "")],
+  ["empty to", OPEN.replace('to="example.test"', 'to=""')],
+  ["mismatched to", OPEN.replace("example.test", "attacker.test")],
+  ["missing version", OPEN.replace(' version="1.0"', "")],
+  ["unsupported version", OPEN.replace('version="1.0"', 'version="2.0"')],
+  ["non-canonical version", OPEN.replace('version="1.0"', 'version="01.00"')],
+  ["initiator stream id", OPEN.replace("/>", ' id="client-id"/>')],
+  [
+    "child element",
+    OPEN.replace(
+      "/>",
+      `><open xmlns="${FRAMING}" to="example.test" version="1.0"/></open>`,
+    ),
+  ],
+  ["character data", OPEN.replace("/>", ">content</open>")],
+  [MUTATED_PREPARED_TARGET, OPEN],
+  [MUTATED_HEADER_ELEMENT, OPEN],
 ] as const)(
-  "RFC 6120 §§4.7.4/11: serialized opening rejects before writing and recovers / %s",
-  async (_name, source) => {
+  "RFC 6120 §§4.7/11 / RFC 7395 §3.4: serialized opening rejects before writing and recovers / %s",
+  async (name, source) => {
     const peer = new ScriptedPeer((frame, remote) => {
       remote.send(
         frame.startsWith("<close")
@@ -60,7 +81,21 @@ test.each([
     const errors: Error[] = [];
     xmpp.on("error", (error: Error) => errors.push(error));
     const header = xmpp.header;
-    xmpp.header = () => source;
+    const headerElement = xmpp.headerElement;
+    if (name === MUTATED_HEADER_ELEMENT) {
+      xmpp.headerElement = () =>
+        xml("message", { xmlns: CONTENT, version: "2.0" });
+    }
+    xmpp.header = (element) => {
+      if (name === MUTATED_PREPARED_TARGET) {
+        element.attrs.to = "attacker.test";
+        return element.toString();
+      }
+      if (name === MUTATED_HEADER_ELEMENT) {
+        return element.toString();
+      }
+      return source;
+    };
     try {
       await xmpp.connect(peer.url);
       const result = await xmpp
@@ -70,6 +105,7 @@ test.each([
       expect(peer.transcript).toEqual([]);
       expect(xmpp.status).toBe("connect");
       xmpp.header = header;
+      xmpp.headerElement = headerElement;
       await xmpp.open(xmpp.options);
       // The valid opening response is an ordered barrier and proves no stale parser remained.
       expect(peer.transcript.map(readFrame)).toEqual([readFrame(OPEN)]);
@@ -457,6 +493,12 @@ test.each([
     xmpp.reconnect.stop();
     const errors: Error[] = [];
     xmpp.on("error", (error: Error) => errors.push(error));
+    const header = xmpp.header;
+    let headerCalls = 0;
+    xmpp.header = (element) => {
+      headerCalls += 1;
+      return header.call(xmpp, element);
+    };
     try {
       await xmpp.connect(peer.url);
       const result = await xmpp.open(options).then(
@@ -465,12 +507,14 @@ test.each([
       );
       expect(peer.transcript).toEqual([]);
       expect(result).toBeInstanceOf(TypeError);
+      expect(headerCalls).toBe(0);
       expect(xmpp.status).toBe("connect");
       await xmpp.open({ domain: "example.test" });
       // A successful reply is the ordered wire barrier after invalid config.
       expect(peer.transcript.map(readFrame)).toEqual([
         readFrame(`<open xmlns="${FRAMING}" to="example.test" version="1.0"/>`),
       ]);
+      expect(headerCalls).toBe(1);
       expect(errors).toEqual([]);
       expect(peer.errors).toEqual([]);
     } finally {

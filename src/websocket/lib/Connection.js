@@ -8,6 +8,8 @@ import FramedParser from "./FramedParser.js";
 
 const NS_FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const XML_START_CHARACTER = "<";
+const OPEN_ELEMENT = "open";
+const XMPP_VERSION = "1.0";
 
 /* References
  * WebSocket protocol https://tools.ietf.org/html/rfc6455
@@ -16,18 +18,48 @@ const XML_START_CHARACTER = "<";
  */
 
 class ConnectionWebSocket extends Connection {
-  _validateHeader(source) {
+  _validateHeader(source, expected) {
     // The socket repeats this guard for raw writes; openings must reject before stream setup.
     if (typeof source !== "string" || !source.startsWith(XML_START_CHARACTER)) {
       throw new TypeError("XMPP WebSocket frames must start with '<'");
     }
     try {
-      validateDocument(source, XML_CONTEXT.XMPP, (tag) => {
-        const lang = tag.attributes["xml:lang"]?.value;
-        if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {
-          throw new TypeError("Invalid language tag");
-        }
-      });
+      let depth = 0;
+      validateDocument(
+        source,
+        XML_CONTEXT.XMPP,
+        (tag) => {
+          depth += 1;
+          if (
+            depth !== 1 ||
+            tag.local !== OPEN_ELEMENT ||
+            tag.uri !== NS_FRAMING
+          ) {
+            throw new TypeError("Serialized opening has an invalid root");
+          }
+          if (tag.attributes.to?.value !== expected.to) {
+            throw new TypeError("Serialized opening has an invalid target");
+          }
+          if (tag.attributes.version?.value !== XMPP_VERSION) {
+            throw new TypeError("Serialized opening has an invalid version");
+          }
+          if (tag.attributes.id !== undefined) {
+            throw new TypeError("An initiating opening must not contain an id");
+          }
+          const lang = tag.attributes["xml:lang"]?.value;
+          if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {
+            throw new TypeError("Invalid language tag");
+          }
+        },
+        () => {
+          depth -= 1;
+        },
+        (value) => {
+          if (depth === 1 && value) {
+            throw new TypeError("Serialized opening must be empty");
+          }
+        },
+      );
     } catch (error) {
       throw new TypeError("Invalid outgoing XML", { cause: error });
     }

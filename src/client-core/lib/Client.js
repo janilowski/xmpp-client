@@ -52,8 +52,8 @@ class Client extends Connection {
     return this.Transport.prototype.header(headerElement, ...args);
   }
 
-  _validateHeader(source) {
-    return this.Transport.prototype._validateHeader.call(this, source);
+  _validateHeader(...args) {
+    return this.Transport.prototype._validateHeader.call(this, ...args);
   }
 
   headerElement(...args) {
