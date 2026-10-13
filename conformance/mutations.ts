@@ -141,6 +141,15 @@ const mutations = [
     test: "old disconnect completion cannot clear a replacement shutdown$",
   },
   {
+    name: "process completion features before SASL2 proof",
+    file: "src/stream-features/index.js",
+    before:
+      "      await features.authentication;\n      signal.throwIfAborted();",
+    after: "      signal.throwIfAborted();",
+    suite: "conformance/xep0388-features.test.ts",
+    test: "completion features wait for inline proof and keep stanzas usable / empty / adjacent$",
+  },
+  {
     name: "close malformed features without a protocol error",
     file: "src/connection/index.js",
     before:

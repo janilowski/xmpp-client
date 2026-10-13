@@ -1,5 +1,7 @@
 import { expect, test } from "bun:test";
 import { client } from "../src/client/index.js";
+import xml from "../src/xml/index.js";
+import type { Element } from "../types/index.js";
 import { ScriptedPeer } from "./peer.ts";
 import { readFrame } from "./xml.ts";
 
@@ -9,6 +11,9 @@ const ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 const SM = "urn:xmpp:sm:3";
+const CLIENT = "jabber:client";
+const FULL_JID = "user@example.test/r";
+const REMOTE_JID = "contact@remote.test/device";
 const AUTH = `<mechanisms xmlns="${SASL}"><mechanism>PLAIN</mechanism></mechanisms>`;
 const BINDING = `<bind xmlns="${BIND}"/>`;
 const OPTIONAL = '<future xmlns="urn:test:optional"/>';
@@ -19,6 +24,7 @@ function negotiationPeer(
   before: string | null,
   after: string | null,
   closing: "reply" | "silent" = "reply",
+  completion: string | null = "",
 ) {
   let authenticated = false;
   return new ScriptedPeer((frame, peer) => {
@@ -41,7 +47,13 @@ function negotiationPeer(
       peer.send(
         `<iq xmlns="jabber:client" id="${root.attributes["{}id"]}" type="result"><bind xmlns="${BIND}"><jid>user@example.test/r</jid></bind></iq>`,
       );
-      peer.send(`<features xmlns="${STREAM}"/>`);
+      if (completion !== null) {
+        peer.send(`<features xmlns="${STREAM}">${completion}</features>`);
+      }
+    } else if (root.open === `{${CLIENT}}message`) {
+      peer.send(
+        `<message xmlns="${CLIENT}" from="${REMOTE_JID}" to="${FULL_JID}" id="after-negotiation-in" type="chat"><body>reply</body></message>`,
+      );
     } else if (root.open === `{${SM}}enable`) {
       peer.send(`<enabled xmlns="${SM}"/>`);
     } else if (root.open === `{${SM}}resume`) {
@@ -53,6 +65,171 @@ function negotiationPeer(
     }
   });
 }
+
+// RFC 6120 §4.3.2 has no universal required marker; unknown payloads are
+// opaque under this profile. The literal peer accepts the supported alternative.
+test.each([
+  [
+    "inherited required before",
+    '<future xmlns="urn:test:future"><required/></future>',
+    "before",
+  ],
+  [
+    "inherited required after",
+    '<future xmlns="urn:test:future"><required/></future>',
+    "after",
+  ],
+  [
+    "foreign required namespaces before",
+    '<f:future xmlns:f="urn:test:future"><f:required/><required xmlns=""/><tls:required xmlns:tls="urn:ietf:params:xml:ns:xmpp-tls"/></f:future>',
+    "before",
+  ],
+  [
+    "foreign required namespaces after",
+    '<f:future xmlns:f="urn:test:future"><f:required/><required xmlns=""/><tls:required xmlns:tls="urn:ietf:params:xml:ns:xmpp-tls"/></f:future>',
+    "after",
+  ],
+] as const)(
+  "RFC 6120 §4.3.2 profile: required-named opaque payloads do not override supported features / %s",
+  async (_name, optional, order) => {
+    const before = order === "before" ? optional + AUTH : AUTH + optional;
+    const after = order === "before" ? optional + BINDING : BINDING + optional;
+    const peer = negotiationPeer(before, after);
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    const online: string[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    xmpp.on("online", (address: { toString(): string }) =>
+      online.push(address.toString()),
+    );
+    try {
+      expect((await xmpp.start()).toString()).toBe(FULL_JID);
+      expect(online).toEqual([FULL_JID]);
+      expect(xmpp.status).toBe("online");
+      expect(
+        peer.transcript
+          .map((frame) => readFrame(frame)[0])
+          .map((root) => ("open" in root ? root.open : "")),
+      ).toEqual([
+        `{${FRAMING}}open`,
+        `{${SASL}}auth`,
+        `{${FRAMING}}open`,
+        `{${CLIENT}}iq`,
+      ]);
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
+// RFC 6120 §4.3.5 defines the completion offer. This profile also accepts the
+// no-offer sequence illustrated by §§9.1.3–9.1.4 for server compatibility.
+test.each([
+  ["no additional offer", null],
+  ["empty completion offer", ""],
+  ["unknown voluntary completion offer", OPTIONAL],
+] as const)(
+  "RFC 6120 §§4.3.5/9.1.3–9.1.4 profile: completed classic binding keeps stanzas usable / %s",
+  async (_name, completion) => {
+    const peer = negotiationPeer(AUTH, BINDING, "reply", completion);
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+      timeout: FEATURE_TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    const online: string[] = [];
+    const received = Promise.withResolvers<Element | Error>();
+    xmpp.on("error", (error: Error) => {
+      errors.push(error);
+      received.resolve(error);
+    });
+    xmpp.on("online", (address: { toString(): string }) =>
+      online.push(address.toString()),
+    );
+    xmpp.on("stanza", (element: Element) => {
+      if (element.attrs.id === "after-negotiation-in") {
+        received.resolve(element);
+      }
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      expect((await xmpp.start()).toString()).toBe(FULL_JID);
+      const sent = await xmpp
+        .send(
+          xml(
+            "message",
+            { id: "after-negotiation-out", to: REMOTE_JID, type: "chat" },
+            xml("body", {}, "request"),
+          ),
+        )
+        .then(
+          () => "sent",
+          (error: Error) => error,
+        );
+      expect(sent).toBe("sent");
+      const incoming = await Promise.race([
+        received.promise,
+        new Promise<Error>((resolve) => {
+          timer = setTimeout(
+            () => resolve(new Error("test watchdog: no post-binding stanza")),
+            WATCHDOG_MS,
+          );
+        }),
+      ]);
+      expect(incoming.toString()).toBe(
+        `<message xmlns="${CLIENT}" from="${REMOTE_JID}" to="${FULL_JID}" id="after-negotiation-in" type="chat"><body>reply</body></message>`,
+      );
+      const outbound = peer.transcript.find((frame) =>
+        readFrame(frame).some(
+          (event) =>
+            "open" in event &&
+            event.open === `{${CLIENT}}message` &&
+            event.attributes["{}id"] === "after-negotiation-out",
+        ),
+      );
+      expect(outbound).toBeDefined();
+      expect(readFrame(outbound!)).toEqual([
+        {
+          open: `{${CLIENT}}message`,
+          attributes: {
+            "{}id": "after-negotiation-out",
+            "{}to": REMOTE_JID,
+            "{}type": "chat",
+          },
+        },
+        { open: `{${CLIENT}}body`, attributes: {} },
+        { text: "request" },
+        { close: `{${CLIENT}}body` },
+        { close: `{${CLIENT}}message` },
+      ]);
+      await new Promise((resolve) =>
+        setTimeout(resolve, FEATURE_TIMEOUT_MS * 2),
+      );
+      expect(xmpp.status).toBe("online");
+      expect(xmpp.jid?.toString()).toBe(FULL_JID);
+      expect(online).toEqual([FULL_JID]);
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
 
 test.each([BINDING, BINDING + `<sm xmlns="${SM}"/>`])(
   "RFC 6120 §§4.3.5/4.4: completion features cannot poison immediate stop / %s",

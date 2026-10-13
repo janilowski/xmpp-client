@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
+import { setImmediate } from "node:timers/promises";
 import { client } from "../src/client/index.js";
 import TimeoutError from "../src/events/lib/TimeoutError.js";
+import xml from "../src/xml/index.js";
 import type { Element } from "../types/index.js";
 import { ScriptedPeer } from "./peer.ts";
 import { readFrame } from "./xml.ts";
@@ -11,6 +13,10 @@ const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 const BIND2 = "urn:xmpp:bind:0";
 const SM = "urn:xmpp:sm:3";
+const CLIENT = "jabber:client";
+const FULL_JID = "user@example.test/r";
+const REMOTE_JID = "contact@remote.test/device";
+const OPTIONAL = '<future xmlns="urn:test:optional"/>';
 const TIMEOUT_MS = 150;
 const WATCHDOG_MS = TIMEOUT_MS * 4;
 const PROOF_MECHANISM = "TEST-FEATURES";
@@ -20,7 +26,11 @@ const PROOF_MECHANISM = "TEST-FEATURES";
 // The deadline below is client policy, not a duration prescribed by either XEP.
 type Binding = "classic" | "inline" | "resume" | "failed-resume";
 
-function sasl2Peer(binding: Binding, offer: "present" | "missing") {
+function sasl2Peer(
+  binding: Binding,
+  offer: "present" | "missing",
+  completion?: string,
+) {
   return new ScriptedPeer((frame, peer) => {
     const el = readFrame(frame)[0];
     if (!el || !("open" in el)) {
@@ -45,7 +55,7 @@ function sasl2Peer(binding: Binding, offer: "present" | "missing") {
       );
       if (offer === "present") {
         peer.send(
-          `<features xmlns="${STREAM}">${binding === "classic" ? `<bind xmlns="${BIND}"/>` : ""}<sm xmlns="${SM}"/></features>`,
+          `<features xmlns="${STREAM}">${completion ?? `${binding === "classic" ? `<bind xmlns="${BIND}"/>` : ""}<sm xmlns="${SM}"/>`}</features>`,
         );
       }
     } else if (el.open === "{jabber:client}iq") {
@@ -54,6 +64,10 @@ function sasl2Peer(binding: Binding, offer: "present" | "missing") {
       );
     } else if (el.open === `{${SM}}enable`) {
       peer.send(`<enabled xmlns="${SM}" id="session" resume="true"/>`);
+    } else if (el.open === `{${CLIENT}}message`) {
+      peer.send(
+        `<message xmlns="${CLIENT}" from="${REMOTE_JID}" to="${FULL_JID}" id="after-proof-in" type="chat"><body>reply</body></message>`,
+      );
     } else if (el.open === `{${FRAMING}}close`) {
       peer.send(`<close xmlns="${FRAMING}"/>`);
     }
@@ -124,6 +138,368 @@ test.each([
       await xmpp.stop();
       await started;
       await peer.stop();
+    }
+  },
+);
+
+// RFC 6120 §4.3.5 permits empty/voluntary completion offers after binding.
+// XEP-0388 §§2.4/2.6.1: receiving them cannot bypass the SASL proof.
+// The controlled adapter below tests ordering; RFC 5802 owns proof validation.
+test.each([
+  ["empty", "adjacent", ""],
+  ["unknown voluntary", "adjacent", OPTIONAL],
+  ["empty", "after verifier entered", ""],
+  ["unknown voluntary", "after verifier entered", OPTIONAL],
+] as const)(
+  "XEP-0388 §§2.4/2.6.1: completion features wait for inline proof and keep stanzas usable / %s / %s",
+  async (_offer, timing, completion) => {
+    const peer = sasl2Peer(
+      "inline",
+      timing === "adjacent" ? "present" : "missing",
+      completion,
+    );
+    const proofEntered = Promise.withResolvers<void>();
+    const releaseProof = Promise.withResolvers<void>();
+    const received = Promise.withResolvers<void>();
+    const incoming = Promise.withResolvers<Element | Error>();
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      timeout: TIMEOUT_MS,
+      credentials: async (
+        authenticate: (credentials: object, mechanism: string) => Promise<void>,
+      ) => {
+        await authenticate({}, PROOF_MECHANISM);
+      },
+    });
+    let verified = false;
+    xmpp.saslMechanisms.register(PROOF_MECHANISM, () => ({
+      name: PROOF_MECHANISM,
+      clientFirst: true,
+      response: () => "",
+      final: async () => {
+        proofEntered.resolve();
+        await releaseProof.promise;
+        verified = true;
+      },
+    }));
+    xmpp.reconnect.stop();
+    const online: string[] = [];
+    const errors: Error[] = [];
+    xmpp.on("online", (jid) => online.push(jid.toString()));
+    xmpp.on("error", (error: Error) => {
+      errors.push(error);
+      incoming.resolve(error);
+    });
+    xmpp.on("nonza", (el: Element) => {
+      if (el.is("features", STREAM) && !el.getChild("authentication", SASL2)) {
+        received.resolve();
+      }
+    });
+    xmpp.on("stanza", (el: Element) => {
+      if (el.attrs.id === "after-proof-in") {
+        incoming.resolve(el);
+      }
+    });
+    let outcome = "pending";
+    const started = xmpp.start().then(
+      (jid) => {
+        outcome = "ready";
+        return jid;
+      },
+      (error: Error) => {
+        outcome = "failed";
+        return error;
+      },
+    );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const watchdog = new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Inline proof/feature exchange stalled")),
+          WATCHDOG_MS,
+        );
+      });
+      await Promise.race([proofEntered.promise, watchdog]);
+      if (timing === "after verifier entered") {
+        peer.send(`<features xmlns="${STREAM}">${completion}</features>`);
+      }
+      await Promise.race([received.promise, watchdog]);
+      clearTimeout(timer);
+      await setImmediate();
+      await setImmediate();
+      expect(verified).toBe(false);
+      expect(outcome).toBe("pending");
+      expect(xmpp.status).toBe("open");
+      expect(xmpp.jid).toBeNull();
+      expect(online).toEqual([]);
+      expect(errors).toEqual([]);
+
+      // §2.4 permits no extra outbound IQ/nonza as a pre-proof barrier.
+      const blocked = await xmpp
+        .send(xml("message", { to: REMOTE_JID, id: "before-proof" }))
+        .then(
+          () => "sent",
+          (error: Error) => error,
+        );
+      expect(blocked).toBeInstanceOf(Error);
+      expect(blocked instanceof Error && blocked.message).toBe(
+        "Stream negotiation is not complete",
+      );
+      expect(peer.transcript.map((frame) => readFrame(frame)[0])).toEqual([
+        {
+          open: `{${FRAMING}}open`,
+          attributes: {
+            "{}to": "example.test",
+            "{}version": "1.0",
+          },
+        },
+        {
+          open: `{${SASL2}}authenticate`,
+          attributes: { "{}mechanism": PROOF_MECHANISM },
+        },
+      ]);
+      expect(readFrame(peer.transcript[1]!)).toContainEqual({
+        open: `{${BIND2}}bind`,
+        attributes: {},
+      });
+
+      releaseProof.resolve();
+      expect((await started).toString()).toBe(FULL_JID);
+      expect(verified).toBe(true);
+      expect(online).toEqual([FULL_JID]);
+      const sent = await xmpp
+        .send(
+          xml(
+            "message",
+            { id: "after-proof-out", to: REMOTE_JID, type: "chat" },
+            xml("body", {}, "request"),
+          ),
+        )
+        .then(
+          () => "sent",
+          (error: Error) => error,
+        );
+      expect(sent).toBe("sent");
+      const reply = await Promise.race([
+        incoming.promise,
+        new Promise<Error>((resolve) => {
+          timer = setTimeout(
+            () => resolve(new Error("No stanza after verified inline binding")),
+            WATCHDOG_MS,
+          );
+        }),
+      ]);
+      expect(reply.toString()).toBe(
+        `<message xmlns="${CLIENT}" from="${REMOTE_JID}" to="${FULL_JID}" id="after-proof-in" type="chat"><body>reply</body></message>`,
+      );
+      expect(readFrame(peer.transcript.at(-1)!)).toEqual([
+        {
+          open: `{${CLIENT}}message`,
+          attributes: {
+            "{}id": "after-proof-out",
+            "{}to": REMOTE_JID,
+            "{}type": "chat",
+          },
+        },
+        { open: `{${CLIENT}}body`, attributes: {} },
+        { text: "request" },
+        { close: `{${CLIENT}}body` },
+        { close: `{${CLIENT}}message` },
+      ]);
+      expect(
+        peer.transcript.map((frame) => {
+          const root = readFrame(frame)[0];
+          return root && "open" in root ? root.open : undefined;
+        }),
+      ).toEqual([
+        `{${FRAMING}}open`,
+        `{${SASL2}}authenticate`,
+        `{${CLIENT}}message`,
+      ]);
+      await Bun.sleep(TIMEOUT_MS * 2);
+      expect(xmpp.status).toBe("online");
+      expect(xmpp.jid?.toString()).toBe(FULL_JID);
+      expect(online).toEqual([FULL_JID]);
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+      releaseProof.resolve();
+      await xmpp.stop();
+      await started;
+      await peer.stop();
+    }
+  },
+);
+
+test.each([
+  ["empty", ""],
+  ["unknown voluntary", OPTIONAL],
+] as const)(
+  "XEP-0388 §§2.4/2.6.1: stopping a queued completion offer isolates the next inline session / %s",
+  async (_offer, completion) => {
+    const first = sasl2Peer("inline", "present", completion);
+    const second = sasl2Peer("inline", "present", "");
+    const proofEntered = Promise.withResolvers<void>();
+    const releaseProof = Promise.withResolvers<void>();
+    const received = Promise.withResolvers<void>();
+    const incoming = Promise.withResolvers<Element | Error>();
+    const xmpp = client({
+      service: first.url,
+      domain: "example.test",
+      timeout: TIMEOUT_MS,
+      credentials: async (
+        authenticate: (credentials: object, mechanism: string) => Promise<void>,
+      ) => {
+        await authenticate({}, PROOF_MECHANISM);
+      },
+    });
+    let verification = 0;
+    xmpp.saslMechanisms.register(PROOF_MECHANISM, () => ({
+      name: PROOF_MECHANISM,
+      clientFirst: true,
+      response: () => "",
+      final: async () => {
+        if (++verification === 1) {
+          proofEntered.resolve();
+          await releaseProof.promise;
+        }
+      },
+    }));
+    xmpp.reconnect.stop();
+    const online: string[] = [];
+    const errors: Error[] = [];
+    xmpp.on("online", (jid) => online.push(jid.toString()));
+    xmpp.on("error", (error: Error) => {
+      errors.push(error);
+      incoming.resolve(error);
+    });
+    xmpp.on("nonza", (el: Element) => {
+      if (el.is("features", STREAM) && !el.getChild("authentication", SASL2)) {
+        received.resolve();
+      }
+    });
+    xmpp.on("stanza", (el: Element) => {
+      if (el.attrs.id === "after-proof-in") {
+        incoming.resolve(el);
+      }
+    });
+    const listeners = xmpp.listenerCount("nonza");
+    const started = xmpp.start().catch((error: Error) => error);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.all([proofEntered.promise, received.promise]),
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("No queued inline completion offer")),
+            WATCHDOG_MS,
+          );
+        }),
+      ]);
+      clearTimeout(timer);
+      await setImmediate();
+      await setImmediate();
+      expect(xmpp.status).toBe("open");
+      expect(xmpp.jid).toBeNull();
+      expect(online).toEqual([]);
+      expect(errors).toEqual([]);
+      expect(
+        first.transcript.map((frame) => {
+          const root = readFrame(frame)[0];
+          return root && "open" in root ? root.open : undefined;
+        }),
+      ).toEqual([`{${FRAMING}}open`, `{${SASL2}}authenticate`]);
+
+      await xmpp.stop();
+      expect(await started).toBeInstanceOf(Error);
+      expect(xmpp.listenerCount("nonza")).toBe(listeners);
+      expect(online).toEqual([]);
+      expect(errors).toEqual([]);
+      Object.assign(xmpp.options, { service: second.url });
+      expect((await xmpp.start()).toString()).toBe(FULL_JID);
+      expect(verification).toBe(2);
+      expect(online).toEqual([FULL_JID]);
+
+      // Releasing the cancelled verifier must not complete or poison its successor.
+      releaseProof.resolve();
+      await setImmediate();
+      await setImmediate();
+      const sent = await xmpp
+        .send(
+          xml(
+            "message",
+            { id: "after-proof-out", to: REMOTE_JID, type: "chat" },
+            xml("body", {}, "request"),
+          ),
+        )
+        .then(
+          () => "sent",
+          (error: Error) => error,
+        );
+      expect(sent).toBe("sent");
+      const reply = await Promise.race([
+        incoming.promise,
+        new Promise<Error>((resolve) => {
+          timer = setTimeout(
+            () => resolve(new Error("Replacement inline session is unusable")),
+            WATCHDOG_MS,
+          );
+        }),
+      ]);
+      expect(reply.toString()).toBe(
+        `<message xmlns="${CLIENT}" from="${REMOTE_JID}" to="${FULL_JID}" id="after-proof-in" type="chat"><body>reply</body></message>`,
+      );
+      expect(readFrame(second.transcript.at(-1)!)).toEqual([
+        {
+          open: `{${CLIENT}}message`,
+          attributes: {
+            "{}id": "after-proof-out",
+            "{}to": REMOTE_JID,
+            "{}type": "chat",
+          },
+        },
+        { open: `{${CLIENT}}body`, attributes: {} },
+        { text: "request" },
+        { close: `{${CLIENT}}body` },
+        { close: `{${CLIENT}}message` },
+      ]);
+      await Bun.sleep(TIMEOUT_MS * 2);
+      expect(xmpp.status).toBe("online");
+      expect(xmpp.jid?.toString()).toBe(FULL_JID);
+      expect(online).toEqual([FULL_JID]);
+      expect(errors).toEqual([]);
+      expect(xmpp.listenerCount("nonza")).toBe(listeners);
+      expect(
+        first.transcript.map((frame) => {
+          const root = readFrame(frame)[0];
+          return root && "open" in root ? root.open : undefined;
+        }),
+      ).toEqual([
+        `{${FRAMING}}open`,
+        `{${SASL2}}authenticate`,
+        `{${FRAMING}}close`,
+      ]);
+      expect(
+        second.transcript.map((frame) => {
+          const root = readFrame(frame)[0];
+          return root && "open" in root ? root.open : undefined;
+        }),
+      ).toEqual([
+        `{${FRAMING}}open`,
+        `{${SASL2}}authenticate`,
+        `{${CLIENT}}message`,
+      ]);
+      expect(first.errors).toEqual([]);
+      expect(second.errors).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+      releaseProof.resolve();
+      await xmpp.stop();
+      await started;
+      await first.stop();
+      await second.stop();
     }
   },
 );
