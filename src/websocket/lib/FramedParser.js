@@ -9,7 +9,7 @@ export default class FramedParser extends EventEmitter {
   #state = "opening";
 
   write(data) {
-    if (this.#failed || this.#state === "closed") {
+    if (this.#state === "closed") {
       return;
     }
     let element;
@@ -32,6 +32,10 @@ export default class FramedParser extends EventEmitter {
       if ((opening || closing) && element.children.length) {
         throw new XMLError("A framing header must be empty");
       }
+      // A fatal frame permits only reciprocal closure, never another exchange.
+      if (this.#failed && !closing) {
+        return;
+      }
       if (opening) {
         // RFC 6120 §4.7.5: compare numeric components, not decimal numbers.
         const version = /^(\d+)\.(\d+)$/.exec(element.attrs.version ?? "0.9");
@@ -48,6 +52,9 @@ export default class FramedParser extends EventEmitter {
         throw new XMLError("Unexpected stream frame");
       }
     } catch (error_) {
+      if (this.#failed) {
+        return;
+      }
       this.#failed = true;
       const error =
         error_ instanceof XMLError

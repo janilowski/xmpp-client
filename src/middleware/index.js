@@ -2,6 +2,7 @@ import IncomingContext from "./lib/IncomingContext.js";
 import OutgoingContext from "./lib/OutgoingContext.js";
 import Context from "./lib/Context.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
+import { isReported } from "../events/lib/reportedError.js";
 
 export async function runMiddleware(stack, context) {
   if (!Array.isArray(stack)) {
@@ -52,11 +53,14 @@ function listener(entity, middleware, StanzaContext) {
 
 function errorHandler(entity) {
   return (ctx, next) => {
-    next()
+    return next()
       .then((reply) => reply && entity.send(reply))
       .catch((error) => {
         // Cancellation of an old exchange must not poison a replacement stream.
-        if (!(error instanceof ConnectionClosedError)) {
+        if (
+          !(error instanceof ConnectionClosedError) &&
+          !isReported(entity, error)
+        ) {
           entity.emit("error", error);
         }
       });

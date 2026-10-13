@@ -38,6 +38,109 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "ignore reciprocal close after a fatal XML frame",
+    file: "src/websocket/lib/FramedParser.js",
+    before: 'if (this.#state === "closed") {',
+    after: 'if (this.#failed || this.#state === "closed") {',
+    suite: "src/websocket/test/fatal-close.test.js",
+    test: "fatal truncated stanza accepts one reciprocal close without revival / default namespace$",
+  },
+  {
+    name: "resume normal dispatch after a fatal XML frame",
+    file: "src/websocket/lib/FramedParser.js",
+    before: "if (this.#failed && !closing) {\n        return;\n      }",
+    after: "/* normal dispatch incorrectly resumed */",
+    suite: "src/websocket/test/fatal-close.test.js",
+    test: "fatal truncated stanza accepts one reciprocal close without revival / default namespace$",
+  },
+  {
+    name: "accept a new opening after a fatal opening document",
+    file: "src/websocket/lib/FramedParser.js",
+    before: "if (this.#failed && !closing) {",
+    after: "if (this.#failed && !opening && !closing) {",
+    suite: "src/websocket/test/fatal-close.test.js",
+    test: "fatal truncated opening accepts one reciprocal close without revival / default namespace$",
+  },
+  {
+    name: "report further XML errors during fatal teardown",
+    file: "src/websocket/lib/FramedParser.js",
+    before:
+      "    } catch (error_) {\n      if (this.#failed) {\n        return;\n      }",
+    after: "    } catch (error_) {",
+    suite: "src/websocket/test/fatal-close.test.js",
+    test: "fatal parser ignores an invalid reciprocal close without another error / truncated document$",
+  },
+  {
+    name: "accept a nonempty reciprocal close after XML failure",
+    file: "src/websocket/lib/FramedParser.js",
+    before: "if ((opening || closing) && element.children.length) {",
+    after:
+      "if ((opening || closing) && element.children.length && !this.#failed) {",
+    suite: "src/websocket/test/fatal-close.test.js",
+    test: "fatal parser ignores an invalid reciprocal close without another error / child element$",
+  },
+  {
+    name: "detach close reception after a fatal parser error",
+    file: "src/connection/index.js",
+    before: '    this.emit("error", error);\n  }\n\n  #onSocketClosed',
+    after:
+      '    this._detachParser();\n    this.emit("error", error);\n  }\n\n  #onSocketClosed',
+    suite: "src/connection/test/parserError.test.js",
+    test: "fatal parser errors preserve reciprocal close without dispatch$",
+  },
+  {
+    name: "leave negotiation active after a fatal parser error",
+    file: "src/connection/index.js",
+    before:
+      "// Fatal XML stops normal dispatch, not the reciprocal-close handshake.\n    this.#streamFailed = true;",
+    after: "/* failed stream remains active */",
+    suite: "src/connection/test/parserError.test.js",
+    test: "fatal parser errors preserve reciprocal close without dispatch$",
+  },
+  {
+    name: "report a fatal parser error twice through middleware",
+    file: "src/connection/index.js",
+    before: '    markReported(this, error);\n    this.emit("error", error);',
+    after: '    this.emit("error", error);',
+    suite: "conformance/rfc6120-parser-errors.test.ts",
+    test: "authentication recognizes reciprocal after restricted XML$",
+  },
+  {
+    name: "hide a distinct middleware failure after a connection error",
+    file: "src/middleware/index.js",
+    before: "          !isReported(entity, error)",
+    after: "          false",
+    suite: "src/middleware/test/errorPropagation.test.js",
+    test: "middleware reports a pending rejection once / different local error$",
+  },
+  {
+    name: "consume a reported error after one active operation",
+    file: "src/events/lib/reportedError.js",
+    before: "  return reported.get(entity) === error;",
+    after:
+      "  const match = reported.get(entity) === error;\n  reported.delete(entity);\n  return match;",
+    suite: "src/middleware/test/errorPropagation.test.js",
+    test: "middleware suppresses one reported error across concurrent operations$",
+  },
+  {
+    name: "start a second reciprocal-close exchange",
+    file: "src/connection/index.js",
+    before:
+      "    if (this.#disconnecting?.generation === this.#generation) {\n      return this.#disconnecting.promise;\n    }",
+    after: "    /* concurrent callers incorrectly start another exchange */",
+    suite: "src/connection/test/concurrent-disconnect.test.js",
+    test: "pending disconnect shares its deadline and result with disconnect$",
+  },
+  {
+    name: "let an old shutdown clear its replacement",
+    file: "src/connection/index.js",
+    before:
+      "        if (this.#disconnecting === pending) {\n          this.#disconnecting = null;\n        }",
+    after: "        this.#disconnecting = null;",
+    suite: "src/connection/test/concurrent-disconnect.test.js",
+    test: "old disconnect completion cannot clear a replacement shutdown$",
+  },
+  {
     name: "close malformed features without a protocol error",
     file: "src/connection/index.js",
     before:
@@ -2064,6 +2167,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
       "conformance/rfc6120-feature-errors.test.ts",
+      "conformance/rfc6120-parser-errors.test.ts",
       "conformance/rfc6120-binding.test.ts",
       "conformance/rfc6120-binding-senders.test.ts",
       "conformance/rfc6120-sasl.test.ts",

@@ -5,6 +5,7 @@ import {
   onoff,
   promise,
 } from "../events/index.js";
+import { clearReported, markReported } from "../events/lib/reportedError.js";
 import jid from "../jid/index.js";
 import xml from "../xml/index.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
@@ -45,6 +46,7 @@ class Connection extends EventEmitter {
   #parserListeners = null;
   #closing = false;
   #streamFailed = false;
+  #disconnecting = null;
   #generation = 0;
   #redirectCount = 0;
   #redirecting = false;
@@ -104,6 +106,8 @@ class Connection extends EventEmitter {
       return;
     }
     const generation = this.#generation;
+    // Fatal XML stops normal dispatch, not the reciprocal-close handshake.
+    this.#streamFailed = true;
     // https://xmpp.org/rfcs/rfc6120.html#streams-error-conditions-bad-format
     // "This error can be used instead of the more specific XML-related errors,
     // such as <bad-namespace-prefix/>, <invalid-xml/>, <not-well-formed/>, <restricted-xml/>,
@@ -113,7 +117,7 @@ class Connection extends EventEmitter {
     if (this.#generation !== generation) {
       return;
     }
-    this._detachParser();
+    markReported(this, error);
     this.emit("error", error);
   }
 
@@ -163,6 +167,7 @@ class Connection extends EventEmitter {
       this.#socketListeners?.unsubscribe(this.socket);
     }
     this.#generation += 1;
+    clearReported(this);
     this.socket = socket;
     // Only a new transport permits initiation after stream closure.
     this.#closing = false;
@@ -319,6 +324,7 @@ class Connection extends EventEmitter {
       this.#parserListeners?.unsubscribe(this.parser);
     }
     this.#generation += 1;
+    clearReported(this);
     this.parser = parser;
     this.#streamFailed = false;
     const events = {
@@ -385,6 +391,30 @@ class Connection extends EventEmitter {
   }
 
   async disconnect() {
+    if (this.#disconnecting?.generation === this.#generation) {
+      return this.#disconnecting.promise;
+    }
+    let resolveShutdown;
+    let rejectShutdown;
+    const promise = new Promise((resolve, reject) => {
+      resolveShutdown = resolve;
+      rejectShutdown = reject;
+    });
+    const pending = { generation: this.#generation, promise };
+    // Own the exchange before hooks can reenter; replacements get a new one.
+    this.#disconnecting = pending;
+    this.#closeConnection()
+      .then(resolveShutdown, rejectShutdown)
+      .finally(() => {
+        if (this.#disconnecting === pending) {
+          this.#disconnecting = null;
+        }
+      })
+      .catch(() => {});
+    return promise;
+  }
+
+  async #closeConnection() {
     const generation = this.#generation;
     const socket = this.socket;
     const parser = this.parser;
@@ -562,7 +592,7 @@ class Connection extends EventEmitter {
       const ready = (value) => finish(resolve, value);
       const error = (value) => finish(reject, value);
       const targetError = (value) => {
-        // A failed parser cannot answer the footer; retain the existing close deadline.
+        // Later parser errors must not cancel the reciprocal-close deadline.
         if (event === "end" && this.#streamFailed) {
           return;
         }

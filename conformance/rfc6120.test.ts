@@ -29,6 +29,7 @@ import { readFrame } from "./xml.ts";
 // Serialized envelope and replay metadata: rfc6120-serialized-stanzas.test.ts.
 // Feature negotiation and stream errors: rfc6120-streams.test.ts.
 // Malformed feature namespaces and error-before-close: rfc6120-feature-errors.test.ts.
+// Fatal XML errors and reciprocal close on usable transport: rfc6120-parser-errors.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).
 
 const OPEN =
