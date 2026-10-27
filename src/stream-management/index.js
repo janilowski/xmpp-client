@@ -43,6 +43,11 @@ export default function streamManagement({
   let session = null;
   const replaying = new Set();
 
+  // A present opaque ID can be empty; public ID hints still need validation.
+  function hasResumeId() {
+    return Boolean(sm.id) || (session !== null && session.id === sm.id);
+  }
+
   const sm = Object.assign(new EventEmitter(), {
     preferredMaximum: null,
     enabled: false,
@@ -71,6 +76,10 @@ export default function streamManagement({
     clearTimeout(requestAckDebounce);
     sm.enabled = false;
     sm.enableSent = false;
+    if (!session) {
+      failQueue();
+      sm.inbound = 0;
+    }
   });
 
   // It is RECOMMENDED that initiating entities (usually clients) send an element right before they gracefully close the stream, in order to inform the peer about received stanzas
@@ -88,7 +97,6 @@ export default function streamManagement({
     const account = getAccount(entity);
     if (
       !retained?.jid ||
-      !sm.id ||
       resumed.attrs.previd !== sm.id ||
       (address &&
         (address.bare().toString() !== retained.account ||
@@ -182,10 +190,15 @@ export default function streamManagement({
     sm.outbound = 0;
   }
 
-  function enabled({ id, max }) {
+  function enabled({ id, max, resume }) {
+    // XEP-0198 §§3/5: ID presence alone does not authorize resumption.
+    const resumable =
+      /^[\t\n\r ]*(true|1)[\t\n\r ]*$/.test(resume) && id !== undefined;
     sm.enabled = true;
-    sm.id = id;
-    session = { id, account: getAccount(entity), jid: getIdentity(entity) };
+    sm.id = resumable ? id : "";
+    session = resumable
+      ? { id, account: getAccount(entity), jid: getIdentity(entity) }
+      : null;
     sm.max = max;
     // > The counter for the received stanzas ('h') is set to zero and started after receiving either <enable/> or <enabled/>.
     // https://xmpp.org/extensions/xep-0198.html#example-7
@@ -228,7 +241,7 @@ export default function streamManagement({
     setupBind2({ bind2, sm, failed, enabled });
   }
   if (sasl2) {
-    setupSasl2({ sasl2, sm, failed, resumed });
+    setupSasl2({ sasl2, sm, failed, resumed, hasResumeId });
   }
 
   // Periodically send r to check the connection
@@ -288,6 +301,7 @@ export default function streamManagement({
       resumed,
       failed,
       enabled,
+      hasResumeId,
     });
   }
 

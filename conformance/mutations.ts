@@ -38,6 +38,48 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "invent an SM session from an undefined public ID",
+    file: "src/stream-management/index.js",
+    before:
+      "return Boolean(sm.id) || (session !== null && session.id === sm.id);",
+    after: "return Boolean(sm.id) || session?.id === sm.id;",
+    suite: "src/stream-management/sasl2.test.js",
+    test: "clearing a public SM ID cannot invent a session$",
+  },
+  {
+    name: "grant SM resumption from ID presence alone",
+    file: "src/stream-management/index.js",
+    before:
+      "const resumable =\n      /^[\\t\\n\\r ]*(true|1)[\\t\\n\\r ]*$/.test(resume) && id !== undefined;",
+    after: "const resumable = id !== undefined;",
+    suite: "conformance/xep0198-enable.test.ts",
+    test: "ordinary enable / ordinary reconnect / absent$",
+  },
+  {
+    name: "discard a permitted empty ordinary SM identifier",
+    file: "src/stream-management/stream-feature.js",
+    before: "if (hasResumeId()) {",
+    after: "if (sm.id) {",
+    suite: "conformance/xep0198-enable.test.ts",
+    test: "ordinary enable / ordinary reconnect / empty ID / true$",
+  },
+  {
+    name: "discard a permitted empty SASL2 SM identifier",
+    file: "src/stream-management/sasl2.js",
+    before: "if (hasResumeId()) {",
+    after: "if (sm.id) {",
+    suite: "conformance/xep0198-enable.test.ts",
+    test: "inline enable / inline reconnect / empty ID / one$",
+  },
+  {
+    name: "discard nonresumable stanzas without failure notification",
+    file: "src/stream-management/index.js",
+    before: '      sm.emit("fail", item.stanza);',
+    after: "      /* queued ownership was discarded silently */",
+    suite: "conformance/xep0198-enable.test.ts",
+    test: "inline enable / ordinary reconnect / zero$",
+  },
+  {
     name: "accept a framing element in an unrelated namespace",
     file: "src/websocket/lib/FramedParser.js",
     before: "element.getNS() !== NS_FRAMING",
@@ -362,8 +404,8 @@ const mutations = [
   {
     name: "resume without a retained bound session",
     file: "src/stream-management/index.js",
-    before: "      !retained?.jid ||\n      !sm.id ||",
-    after: "      !sm.id ||",
+    before: "      !retained?.jid ||\n",
+    after: "",
     suite: "conformance/xep0198-resumption.test.ts",
     test: "requires the former bound session / preloaded ID$",
   },
@@ -1132,9 +1174,9 @@ const mutations = [
     name: "snapshot a public identity hint for resumption",
     file: "src/stream-management/index.js",
     before:
-      "session = { id, account: getAccount(entity), jid: getIdentity(entity) };",
+      "{ id, account: getAccount(entity), jid: getIdentity(entity) }",
     after:
-      "session = { id, account: entity.jid?.bare().toString(), jid: entity.jid?.toString() };",
+      "{ id, account: entity.jid?.bare().toString(), jid: entity.jid?.toString() }",
     suite: "conformance/rfc6120-stanza-addressing.test.ts",
     test: "verified resumption preserves the implicit account / mutated-hints$",
   },
@@ -2288,6 +2330,7 @@ for (const mutation of mutations) {
       "conformance/rfc4013.test.js",
       "conformance/rfc5802-wire.test.ts",
       "conformance/xep0198.test.ts",
+      "conformance/xep0198-enable.test.ts",
       "conformance/xep0198-acknowledgements.test.ts",
       "conformance/xep0198-resumption.test.ts",
       "conformance/xep0388-features.test.ts",

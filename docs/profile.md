@@ -178,6 +178,10 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   replies; prefer generated fresh IDs.
 - SM malformed counts or resumption identities close with `bad-format`, a local
   validation policy. Resumption IDs are opaque and must match exactly.
+  Resumption requires `enabled@resume` to be true or 1 and a present ID;
+  an empty ID remains valid. ID-only, false and 0 responses enable acknowledgements
+  without permitting resumption. Disconnecting such a session emits `fail` once
+  per unhandled stanza; applications own notification or intentional resend.
   Both resumption paths require the private bound identity retained from that
   enabled session; assigning a public ID alone cannot restore a session.
   `sm.outbound` means last acknowledged sequence, not total sent; retransmission

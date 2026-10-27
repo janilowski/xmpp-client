@@ -2,12 +2,14 @@ import { NS, makeResumeElement } from "./index.js";
 
 const SASL2 = "urn:xmpp:sasl:2";
 
-export function setupSasl2({ sasl2, sm, failed, resumed }) {
+export function setupSasl2({ sasl2, sm, failed, resumed, hasResumeId }) {
   sasl2.use(
     NS,
     (element) => {
       if (!element.is("sm")) return;
-      if (sm.id) return makeResumeElement({ sm });
+      if (hasResumeId()) {
+        return makeResumeElement({ sm });
+      }
     },
     (element, signal) => {
       if (element.is("resumed")) {

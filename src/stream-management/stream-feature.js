@@ -10,6 +10,7 @@ export function setupStreamFeature({
   resumed,
   failed,
   enabled,
+  hasResumeId,
 }) {
   // https://xmpp.org/extensions/xep-0198.html#enable
   // For client-to-server connections, the client MUST NOT attempt to enable stream management until after it has completed Resource Binding unless it is resuming a previous session
@@ -18,7 +19,7 @@ export function setupStreamFeature({
     await streamFeatures.authentication;
     signal.throwIfAborted();
     // Resuming
-    if (sm.id) {
+    if (hasResumeId()) {
       try {
         const element = await resume(entity, sm);
         signal.throwIfAborted();

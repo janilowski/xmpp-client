@@ -7,6 +7,29 @@ import { mockClient } from "../../test/support/index.js";
 import { tick } from "../events/index.js";
 
 const CREDENTIALS = { username: "user", password: "secret" };
+const SM = "urn:xmpp:sm:3";
+const SASL2 = "urn:xmpp:sasl:2";
+const STREAM = "http://etherx.jabber.org/streams";
+
+test("clearing a public SM ID cannot invent a session", async () => {
+  const { entity, streamManagement: sm } = mockClient({
+    credentials: CREDENTIALS,
+  });
+  sm.id = undefined;
+  entity.mockInput(
+    <features xmlns={STREAM}>
+      <authentication xmlns={SASL2}>
+        <mechanism>PLAIN</mechanism>
+        <inline>
+          <sm xmlns={SM} />
+        </inline>
+      </authentication>
+    </features>,
+  );
+  const request = await entity.catchOutgoing();
+  expect(request.is("authenticate", SASL2)).toBe(true);
+  expect(request.getChild("resume", SM)).toBeUndefined();
+});
 
 test("resume", async () => {
   const { entity, streamManagement: sm } = mockClient({
