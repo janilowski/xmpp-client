@@ -8,6 +8,7 @@ const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 
 // Handled counts across consuming IQ routes: xep0198-acknowledgements.test.ts.
 // Enable permission and opaque session IDs: xep0198-enable.test.ts.
+// Per-stream attempts and cancellation: xep0198-enable-attempts.test.ts.
 
 // XEP-0198 §§4–6: real enable/ack exchange, including the stream error wire shape.
 test.each([

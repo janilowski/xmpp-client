@@ -16,6 +16,8 @@ import { setupStreamFeature } from "./stream-feature.js";
 // https://xmpp.org/extensions/xep-0198.html
 
 export const NS = "urn:xmpp:sm:3";
+const SASL2 = "urn:xmpp:sasl:2";
+const BIND2 = "urn:xmpp:bind:0";
 const COUNTER_MODULUS = 2 ** 32;
 
 export function makeEnableElement({ sm }) {
@@ -42,6 +44,7 @@ export default function streamManagement({
   let requestAckDebounce = null;
   let session = null;
   const replaying = new Set();
+  const enableState = { attempted: false };
 
   // A present opaque ID can be empty; public ID hints still need validation.
   function hasResumeId() {
@@ -76,6 +79,7 @@ export default function streamManagement({
     clearTimeout(requestAckDebounce);
     sm.enabled = false;
     sm.enableSent = false;
+    enableState.attempted = false;
     if (!session) {
       failQueue();
       sm.inbound = 0;
@@ -238,7 +242,7 @@ export default function streamManagement({
   });
 
   if (bind2) {
-    setupBind2({ bind2, sm, failed, enabled });
+    setupBind2({ bind2, sm, failed, enabled, enableState });
   }
   if (sasl2) {
     setupSasl2({ sasl2, sm, failed, resumed, hasResumeId });
@@ -276,6 +280,12 @@ export default function streamManagement({
     const { stanza } = context;
     if (stanza.is("enable", NS)) {
       sm.enableSent = true;
+    } else if (
+      stanza.is("authenticate", SASL2) &&
+      stanza.getChild("bind", BIND2)?.getChild("enable", NS)
+    ) {
+      // Count sent inline requests, never abandoned asynchronous builders.
+      enableState.attempted = true;
     }
     if (!sm.enabled && !sm.enableSent) return next();
     if (!entity.isStanza(stanza)) {
@@ -302,6 +312,7 @@ export default function streamManagement({
       failed,
       enabled,
       hasResumeId,
+      enableState,
     });
   }
 

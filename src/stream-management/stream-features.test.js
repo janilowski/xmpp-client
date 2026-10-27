@@ -272,7 +272,8 @@ test("resume - failed", async () => {
   const errors = [];
   entity.on("error", (error) => errors.push(error.message));
   entity.streamManagement.id = "bar";
-  entity.streamManagement.enabled = true;
+  // A replacement stream retains the ID but has not resumed SM yet.
+  entity.streamManagement.enabled = false;
   entity.streamManagement.outbound = 45;
   entity.streamManagement.outbound_q = [];
 
@@ -309,7 +310,8 @@ test("resume - failed with something in queue", async () => {
   const errors = [];
   entity.on("error", (error) => errors.push(error.message));
   entity.streamManagement.id = "bar";
-  entity.streamManagement.enabled = true;
+  // A replacement stream retains the ID but has not resumed SM yet.
+  entity.streamManagement.enabled = false;
   entity.streamManagement.outbound = 45;
   entity.streamManagement.outbound_q = [{ stanza: "hai" }];
 

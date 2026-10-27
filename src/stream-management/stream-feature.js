@@ -11,6 +11,7 @@ export function setupStreamFeature({
   failed,
   enabled,
   hasResumeId,
+  enableState,
 }) {
   // https://xmpp.org/extensions/xep-0198.html#enable
   // For client-to-server connections, the client MUST NOT attempt to enable stream management until after it has completed Resource Binding unless it is resuming a previous session
@@ -18,6 +19,10 @@ export function setupStreamFeature({
     // SASL2 can deliver features while its proof/inline binding is still pending.
     await streamFeatures.authentication;
     signal.throwIfAborted();
+    // XEP-0198 §3: inline success or refusal also spends this stream's attempt.
+    if (sm.enabled || enableState.attempted) {
+      return next();
+    }
     // Resuming
     if (hasResumeId()) {
       try {
@@ -41,7 +46,7 @@ export function setupStreamFeature({
     await next();
     signal.throwIfAborted();
     // An online listener may stop immediately after binding completes.
-    if (entity.status === "closing") {
+    if (entity.status === "closing" || enableState.attempted) {
       return;
     }
     if (entity.status !== "online") {
@@ -49,6 +54,7 @@ export function setupStreamFeature({
       throw new Error("Stream Management requires resource binding");
     }
 
+    enableState.attempted = true;
     const promiseEnable = enable(entity, sm);
 
     if (sm.outbound_q.length > 0) {
@@ -72,6 +78,7 @@ export function setupStreamFeature({
       if (!(error instanceof XMPPError)) {
         throw error;
       }
+      failed();
     }
   });
 }

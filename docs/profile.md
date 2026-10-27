@@ -182,6 +182,9 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   an empty ID remains valid. ID-only, false and 0 responses enable acknowledgements
   without permitting resumption. Disconnecting such a session emits `fail` once
   per unhandled stanza; applications own notification or intentional resend.
+  Ordinary and Bind2 enabling share one attempt per stream. Refusal does not
+  permit a retry; it reports provisional queued stanzas through `fail`.
+  A new connection permits a new attempt or resumption of its retained session.
   Both resumption paths require the private bound identity retained from that
   enabled session; assigning a public ID alone cannot restore a session.
   `sm.outbound` means last acknowledged sequence, not total sent; retransmission

@@ -38,6 +38,57 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "forget the ordinary SM enable attempt",
+    file: "src/stream-management/stream-feature.js",
+    before:
+      "    enableState.attempted = true;\n    const promiseEnable = enable(entity, sm);",
+    after: "    const promiseEnable = enable(entity, sm);",
+    suite: "conformance/xep0198-enable-attempts.test.ts",
+    test: "ordinary makes one enable attempt after failed$",
+  },
+  {
+    name: "forget a sent inline SM enable attempt",
+    file: "src/stream-management/index.js",
+    before:
+      "// Count sent inline requests, never abandoned asynchronous builders.\n      enableState.attempted = true;",
+    after: "/* the sent inline attempt was forgotten */",
+    suite: "conformance/xep0198-enable-attempts.test.ts",
+    test: "unanswered inline enable still spends the stream's attempt$",
+  },
+  {
+    name: "resume an already active SM stream again",
+    file: "src/stream-management/stream-feature.js",
+    before: "if (sm.enabled || enableState.attempted) {",
+    after: "if (enableState.attempted) {",
+    suite: "conformance/xep0198-enable-attempts.test.ts",
+    test: "repeated offers preserve an already resumed stream$",
+  },
+  {
+    name: "retain an old SM attempt on a fresh connection",
+    file: "src/stream-management/index.js",
+    before: "    enableState.attempted = false;",
+    after: "/* the old attempt leaked into the new stream */",
+    suite: "conformance/xep0198-enable-attempts.test.ts",
+    test: "ordinary makes one enable attempt after failed$",
+  },
+  {
+    name: "leave refused SM stanzas without a disposition",
+    file: "src/stream-management/stream-feature.js",
+    before: "      failed();",
+    after: "/* provisional stanza ownership was orphaned */",
+    suite: "conformance/xep0198-enable-attempts.test.ts",
+    test: "refused enable resolves provisional stanza ownership once$",
+  },
+  {
+    name: "spend a new SM attempt from an abandoned Bind2 builder",
+    file: "src/stream-management/bind2.js",
+    before: "      return makeEnableElement({ sm });",
+    after:
+      "      enableState.attempted = true;\n      return makeEnableElement({ sm });",
+    suite: "conformance/xep0198-enable-attempts.test.ts",
+    test: "cancelled Bind2 builder cannot spend a new stream's enable attempt$",
+  },
+  {
     name: "invent an SM session from an undefined public ID",
     file: "src/stream-management/index.js",
     before:
@@ -2331,6 +2382,7 @@ for (const mutation of mutations) {
       "conformance/rfc5802-wire.test.ts",
       "conformance/xep0198.test.ts",
       "conformance/xep0198-enable.test.ts",
+      "conformance/xep0198-enable-attempts.test.ts",
       "conformance/xep0198-acknowledgements.test.ts",
       "conformance/xep0198-resumption.test.ts",
       "conformance/xep0388-features.test.ts",

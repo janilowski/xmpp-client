@@ -1,10 +1,13 @@
 import { NS, makeEnableElement } from "./index.js";
 
-export function setupBind2({ bind2, sm, failed, enabled }) {
+export function setupBind2({ bind2, sm, failed, enabled, enableState }) {
   bind2.use(
     NS,
     // https://xmpp.org/extensions/xep-0198.html#inline-examples
     () => {
+      if (enableState.attempted) {
+        return;
+      }
       return makeEnableElement({ sm });
     },
     async (element) => {
