@@ -38,6 +38,58 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept 1024-octet binding identity parts",
+    file: "src/jid/lib/precis.js",
+    before: "export const MAX_PART_BYTES = 1023;",
+    after: "export const MAX_PART_BYTES = 1024;",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "reject prepared 1024 octets before authority / (ASCII local|ASCII resource|IPvFuture domain)$",
+  },
+  {
+    name: "undercount UTF-8 in a returned binding identity",
+    file: "src/jid/lib/precis.js",
+    before: "encoder.encode(value).length > MAX_PART_BYTES",
+    after: "value.length > MAX_PART_BYTES",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "reject prepared 1024 octets before authority / supplementary resource$",
+  },
+  {
+    name: "reject a returned JID before full-address preparation",
+    file: "src/jid/lib/parse.js",
+    before: "export default function parse(s) {",
+    after:
+      'export default function parse(s) {\n  if (new TextEncoder().encode(s).length > 3071) { throw new TypeError("Raw JID too long"); }',
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "accept prepared boundary before granting identity / NFC-contracted 3071-octet full JID$",
+  },
+  {
+    name: "reject a returned localpart before NFC contraction",
+    file: "src/jid/lib/precis.js",
+    before: '    value = value.toLowerCase().normalize("NFC");',
+    after:
+      '    checkLength(value);\n    value = value.toLowerCase().normalize("NFC");',
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "accept prepared boundary before granting identity / NFC-contracted local$",
+  },
+  {
+    name: "reject a returned resource before space mapping",
+    file: "src/jid/lib/precis.js",
+    before: '  value = value.replace(/\\p{Zs}/gu, " ").normalize("NFC");',
+    after:
+      '  checkLength(value);\n  value = value.replace(/\\p{Zs}/gu, " ").normalize("NFC");',
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "accept prepared boundary before granting identity / space-mapped resource$",
+  },
+  {
+    name: "guess the bound account from configured hints",
+    file: "src/resource-binding/index.js",
+    before: "entity._jid(jid.toString());",
+    after:
+      "entity._jid(`${entity.options.username}@${entity.options.domain}/${jid.resource}`);",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "server-selected canonical account, domain and resource replace configured hints$",
+  },
+  {
     name: "skip requested resource preparation",
     file: "src/resource-binding/index.js",
     before: "let selected = requested && prepareResource(requested);",

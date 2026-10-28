@@ -217,8 +217,10 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
 
 Classic resource binding requires completed authentication and one unambiguous
 full client JID in the matching IQ result. Malformed binding results fail closed;
-server-selected replacement resources are accepted. Binding errors are surfaced
-as stanza errors, without automatic resource retries or credential replacement.
+the returned JID is prepared before granting session identity. Server-selected
+accounts, domains and replacement resources are accepted rather than guessed
+from login options. Binding errors are surfaced as stanza errors, without
+automatic resource retries or credential replacement.
 RFC 6120 §7.7.3's retry allowance is a server obligation, not a client retry mandate.
 
 The fixed or asynchronous `resource` option is prepared as an OpaqueString before

@@ -543,6 +543,380 @@ describe("RFC 6120 §7.7.1 — requested resource preparation", () => {
   );
 });
 
+describe("RFC 6120 §7.6.1 — received binding identity boundaries", () => {
+  const CONTENT = "jabber:client";
+  const PROBE = "urn:test:binding-identity";
+  const CANONICAL_DOMAIN = "canonical.example";
+  const MAX_PART_BYTES = 1023;
+  const MAX_JID_BYTES = 3071;
+  const MAX_LITERAL = `[v1.${"a".repeat(1018)}]`;
+  const encoder = new TextEncoder();
+  const valid = [
+    ["ASCII local", "local", "A".repeat(1023), "a".repeat(1023)],
+    ["multibyte local", "local", `${"É".repeat(511)}a`, `${"é".repeat(511)}a`],
+    [
+      "NFC-contracted local",
+      "local",
+      `${"e\u0301".repeat(511)}a`,
+      `${"é".repeat(511)}a`,
+    ],
+    ["width-mapped local", "local", "Ａ".repeat(1023), "a".repeat(1023)],
+    [
+      "lowercase-expanded local",
+      "local",
+      "İ".repeat(341),
+      "i\u0307".repeat(341),
+    ],
+    ["ASCII resource", "resource", "R".repeat(1023), "R".repeat(1023)],
+    [
+      "multibyte resource",
+      "resource",
+      `${"é".repeat(511)}a`,
+      `${"é".repeat(511)}a`,
+    ],
+    [
+      "supplementary resource",
+      "resource",
+      `${"🙂".repeat(255)}abc`,
+      `${"🙂".repeat(255)}abc`,
+    ],
+    ["fullwidth resource", "resource", "Ａ".repeat(341), "Ａ".repeat(341)],
+    [
+      "NFC-contracted resource",
+      "resource",
+      `${"e\u0301".repeat(511)}a`,
+      `${"é".repeat(511)}a`,
+    ],
+    [
+      "space-mapped resource",
+      "resource",
+      "\u2003".repeat(1023),
+      " ".repeat(1023),
+    ],
+    [
+      "NFC-expanded resource",
+      "resource",
+      `${"\u0344".repeat(255)}abc`,
+      `${"\u0308\u0301".repeat(255)}abc`,
+    ],
+    [
+      "3071-octet IPvFuture full JID",
+      "full",
+      `${"a".repeat(1023)}@${MAX_LITERAL}/${"r".repeat(1023)}`,
+      `${"a".repeat(1023)}@${MAX_LITERAL}/${"r".repeat(1023)}`,
+    ],
+    [
+      "NFC-contracted 3071-octet full JID",
+      "full",
+      `${"e\u0301".repeat(511)}a@${MAX_LITERAL}/${"e\u0301".repeat(511)}a`,
+      `${"é".repeat(511)}a@${MAX_LITERAL}/${"é".repeat(511)}a`,
+    ],
+  ] as const;
+  const invalid = [
+    ["ASCII local", "local", "a".repeat(1024), "a".repeat(1024)],
+    ["multibyte local", "local", "é".repeat(512), "é".repeat(512)],
+    [
+      "lowercase-expanded local",
+      "local",
+      `${"İ".repeat(341)}a`,
+      `${"i\u0307".repeat(341)}a`,
+    ],
+    [
+      "IPvFuture domain",
+      "domain",
+      `[v1.${"a".repeat(1019)}]`,
+      `[v1.${"a".repeat(1019)}]`,
+    ],
+    ["ASCII resource", "resource", "R".repeat(1024), "R".repeat(1024)],
+    ["multibyte resource", "resource", "é".repeat(512), "é".repeat(512)],
+    ["supplementary resource", "resource", "🙂".repeat(256), "🙂".repeat(256)],
+    [
+      "NFC-expanded resource",
+      "resource",
+      "\u0344".repeat(256),
+      "\u0308\u0301".repeat(256),
+    ],
+  ] as const;
+
+  // RFC 7622 §§3.1–3.4/4 assign enforcement to servers. Refusing an invalid
+  // received identity before granting authority is our existing fail-closed
+  // client policy. RFC 8265 supplies the selected PRECIS mappings; RFC 9844 §3
+  // preserves RFC 3986 IPvFuture syntax, without a reachability/DNS requirement.
+  function identityPeer(raw: string, prepared: string) {
+    return bindingPeer((iq, remote) => {
+      if (iq.getChild("bind", BIND)) {
+        // Bootstrap without from: malformed payloads reach validation rather
+        // than being ignored by an unrelated-sender reply matcher.
+        remote.send(
+          `<iq xmlns="${CONTENT}" type="result" id="${iq.attrs.id}"><bind xmlns="${BIND}"><jid>${raw}</jid></bind></iq>`,
+        );
+        return;
+      }
+      if (iq.attrs.id === "identity-probe") {
+        remote.send(
+          `<iq xmlns="${CONTENT}" type="result" id="identity-probe" from="${prepared}" to="${prepared}"><verified xmlns="${PROBE}"/></iq>`,
+        );
+      }
+    });
+  }
+
+  function identityClient(raw: string, prepared: string) {
+    const peer = identityPeer(raw, prepared);
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const initialIdentity = String(xmpp.jid);
+    const online: string[] = [];
+    const errors: Error[] = [];
+    const sent: string[] = [];
+    xmpp.on("online", (address: { toString(): string }) =>
+      online.push(String(address)),
+    );
+    xmpp.on("error", (error: Error) => errors.push(error));
+    xmpp.on("send", (element: Element) => {
+      if (element.is("message", CONTENT)) {
+        sent.push(element.attrs.id);
+      }
+    });
+    async function start() {
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          xmpp.start().then(
+            (address) => ({
+              kind: "result" as const,
+              address: String(address),
+            }),
+            (error: Error) => ({ kind: "error" as const, error }),
+          ),
+          new Promise<{ kind: "deadline" }>((resolve) => {
+            watchdog = setTimeout(
+              () => resolve({ kind: "deadline" }),
+              TIMEOUT_MS * 3,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(watchdog);
+      }
+    }
+    return { xmpp, peer, initialIdentity, online, errors, sent, start };
+  }
+
+  for (const [name, part, rawPart, preparedPart] of valid) {
+    test(`RFC 7622 §§3.1–3.4: accept prepared boundary before granting identity / ${name}`, async () => {
+      const raw =
+        part === "local"
+          ? `${rawPart}@${CANONICAL_DOMAIN}/selected`
+          : part === "resource"
+            ? `canonical@${CANONICAL_DOMAIN}/${rawPart}`
+            : rawPart;
+      const prepared =
+        part === "local"
+          ? `${preparedPart}@${CANONICAL_DOMAIN}/selected`
+          : part === "resource"
+            ? `canonical@${CANONICAL_DOMAIN}/${preparedPart}`
+            : preparedPart;
+      const fixture = identityClient(raw, prepared);
+      const { xmpp, peer, online, errors } = fixture;
+      try {
+        expect(encoder.encode(preparedPart).byteLength).toBe(
+          part === "full" ? MAX_JID_BYTES : MAX_PART_BYTES,
+        );
+        if (name.includes("contracted") || name.includes("mapped")) {
+          expect(encoder.encode(rawPart).byteLength).toBeGreaterThan(
+            part === "full" ? MAX_JID_BYTES : MAX_PART_BYTES,
+          );
+        }
+        if (part === "full") {
+          expect(encoder.encode(MAX_LITERAL).byteLength).toBe(MAX_PART_BYTES);
+        }
+        expect(await fixture.start()).toEqual({
+          kind: "result",
+          address: prepared,
+        });
+        expect(String(xmpp.jid)).toBe(prepared);
+        expect(online).toEqual([prepared]);
+        // Exercise the granted sender/recipient on the wire, not a public JID edit.
+        const reply = await xmpp.iqCaller
+          .request(
+            xml(
+              "iq",
+              {
+                type: "get",
+                id: "identity-probe",
+                from: prepared,
+                to: prepared,
+              },
+              xml("probe", { xmlns: PROBE }),
+            ),
+            TIMEOUT_MS,
+          )
+          .catch((error: Error) => error);
+        expect(reply).not.toBeInstanceOf(Error);
+        expect(reply).toHaveProperty("attrs.id", "identity-probe");
+        expect(reply.getChild("verified", PROBE)).toBeDefined();
+        const probe = peer.transcript.find((frame) =>
+          frame.includes('id="identity-probe"'),
+        );
+        expect(probe).toBeDefined();
+        expect(readFrame(probe!)[0]).toEqual({
+          open: `{${CONTENT}}iq`,
+          attributes: {
+            "{}type": "get",
+            "{}id": "identity-probe",
+            "{}from": prepared,
+            "{}to": prepared,
+          },
+        });
+        expect(readFrame(probe!).slice(1)).toEqual([
+          { open: `{${PROBE}}probe`, attributes: {} },
+          { close: `{${PROBE}}probe` },
+          { close: `{${CONTENT}}iq` },
+        ]);
+        expect(errors).toEqual([]);
+        expect(peer.errors).toEqual([]);
+      } finally {
+        await xmpp.stop();
+        await peer.stop();
+      }
+    });
+  }
+
+  for (const [name, part, rawPart, preparedPart] of invalid) {
+    test(`RFC 7622 §§3.1–3.4 local identity policy: reject prepared 1024 octets before authority / ${name}`, async () => {
+      const raw =
+        part === "local"
+          ? `${rawPart}@${CANONICAL_DOMAIN}/selected`
+          : part === "domain"
+            ? `canonical@${rawPart}/selected`
+            : `canonical@${CANONICAL_DOMAIN}/${rawPart}`;
+      const fixture = identityClient(raw, FULL_JID);
+      const { xmpp, peer, initialIdentity, online, sent, errors } = fixture;
+      const replacement = identityPeer(FULL_JID, FULL_JID);
+      try {
+        expect(encoder.encode(preparedPart).byteLength).toBe(
+          MAX_PART_BYTES + 1,
+        );
+        if (name.includes("expanded")) {
+          expect(encoder.encode(rawPart).byteLength).toBeLessThanOrEqual(
+            MAX_PART_BYTES,
+          );
+        }
+        const outcome = await fixture.start();
+        expect(outcome.kind).toBe("error");
+        expect(outcome).toMatchObject({ error: expect.any(TypeError) });
+        expect(String(xmpp.jid)).toBe(initialIdentity);
+        expect(xmpp.jid?.getResource()).toBe("");
+        expect(online).toEqual([]);
+        const denied = await xmpp
+          .send(
+            xml("message", { id: "unauthorized", to: "other@remote.test/r" }),
+          )
+          .catch((error: Error) => error);
+        expect(denied).toBeInstanceOf(Error);
+        await xmpp.stop();
+        await peer.waitForClose();
+        expect(sent).toEqual([]);
+        expect(
+          peer.transcript.some((frame) => frame.includes('id="unauthorized"')),
+        ).toBe(false);
+        expect(
+          peer.transcript.filter((frame) => frame.startsWith("<iq")),
+        ).toHaveLength(1);
+        expect(online).toEqual([]);
+        expect(errors).toHaveLength(1);
+        expect(errors[0]).toBeInstanceOf(TypeError);
+        expect(peer.errors).toEqual([]);
+
+        // A new stream may bind a valid identity after this session was refused.
+        xmpp.options = { ...xmpp.options, service: replacement.url };
+        expect(await fixture.start()).toEqual({
+          kind: "result",
+          address: FULL_JID,
+        });
+        expect(String(xmpp.jid)).toBe(FULL_JID);
+        expect(online).toEqual([FULL_JID]);
+        const recovered = await xmpp.iqCaller
+          .request(
+            xml(
+              "iq",
+              {
+                type: "get",
+                id: "identity-probe",
+                from: FULL_JID,
+                to: FULL_JID,
+              },
+              xml("probe", { xmlns: PROBE }),
+            ),
+            TIMEOUT_MS,
+          )
+          .catch((error: Error) => error);
+        expect(recovered).not.toBeInstanceOf(Error);
+        expect(recovered).toHaveProperty("attrs.id", "identity-probe");
+        expect(recovered.getChild("verified", PROBE)).toBeDefined();
+        expect(
+          replacement.transcript.some((frame) =>
+            frame.includes('id="identity-probe"'),
+          ),
+        ).toBe(true);
+        expect(errors).toHaveLength(1);
+        expect(replacement.errors).toEqual([]);
+      } finally {
+        await xmpp.stop();
+        await peer.stop();
+        await replacement.stop();
+      }
+    });
+  }
+
+  test("RFC 6120 §§4.3.6/7.6.1: server-selected canonical account, domain and resource replace configured hints", async () => {
+    const raw = "Other@CANONICAL.EXAMPLE/Re\u0301s";
+    const prepared = "other@canonical.example/Rés";
+    const fixture = identityClient(raw, prepared);
+    const { xmpp, peer, initialIdentity, online, errors } = fixture;
+    try {
+      expect(initialIdentity).toBe("user@example.test");
+      expect(await fixture.start()).toEqual({
+        kind: "result",
+        address: prepared,
+      });
+      expect(String(xmpp.jid)).toBe(prepared);
+      expect(online).toEqual([prepared]);
+      const result = await xmpp.iqCaller
+        .request(
+          xml(
+            "iq",
+            { type: "get", id: "identity-probe", from: prepared, to: prepared },
+            xml("probe", { xmlns: PROBE }),
+          ),
+          TIMEOUT_MS,
+        )
+        .catch((error: Error) => error);
+      expect(result).not.toBeInstanceOf(Error);
+      expect(result).toHaveProperty("attrs.id", "identity-probe");
+      expect(result.getChild("verified", PROBE)).toBeDefined();
+      const frame = peer.transcript.find((value) =>
+        value.includes('id="identity-probe"'),
+      );
+      expect(frame).toBeDefined();
+      expect(readFrame(frame!)[0]).toMatchObject({
+        attributes: { "{}from": prepared, "{}to": prepared },
+      });
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  });
+});
+
 test("RFC 6120 §§7.1/7.4: premature binding cannot bypass authentication", async () => {
   const peer = new ScriptedPeer((frame, remote) => {
     const el = parse(frame) as Element | undefined;
