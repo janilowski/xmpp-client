@@ -15,6 +15,11 @@ const OPEN =
 const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';
 const HTTP_OK = 200;
 const HTTP_FOUND = 302;
+const STREAM = "http://etherx.jabber.org/streams";
+const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
+const OBSERVATION_TIMEOUT_MS = 2000;
+const CROSS_HOST_REDIRECT_MESSAGE =
+  "Cross-host stream redirects are not supported";
 
 // Native browser XML parsing is independent of both saxes and ltx.
 function inspectFrames(frames) {
@@ -408,6 +413,73 @@ test("Chromium independently validates outgoing RFC 7395 documents", async () =>
   } finally {
     await page.close();
     await peer.stop();
+  }
+});
+
+test("Chromium blocks cross-host stream redirects before contacting the target", async () => {
+  const destination = new ScriptedPeer((frame, peer) => {
+    if (frame.startsWith("<open ")) {
+      peer.send(OPEN);
+    } else if (frame === CLOSE) {
+      peer.send(CLOSE);
+    }
+  });
+  const target = new URL(destination.url);
+  target.hostname = "localhost";
+  const source = new ScriptedPeer((frame, peer) => {
+    if (frame.startsWith("<open ")) {
+      peer.send(OPEN);
+      peer.send(
+        `<stream:error xmlns:stream="${STREAM}"><see-other-host xmlns="${STREAM_ERRORS}">${target.host}</see-other-host></stream:error>`,
+      );
+    } else if (frame === CLOSE) {
+      peer.send(CLOSE);
+    }
+  });
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(
+      async ({ service, timeout }) => {
+        const xmpp = globalThis.XMPP.client({
+          service,
+          domain: "example.test",
+        });
+        xmpp.reconnect.stop();
+        let opens = 0;
+        let timer;
+        const outcome = new Promise((resolve) => {
+          xmpp.on("error", (error) => resolve(error.message));
+          xmpp.on("open", () => {
+            opens++;
+            if (opens > 1) {
+              resolve("contacted");
+            }
+          });
+          timer = setTimeout(() => resolve("timeout"), timeout);
+        });
+        try {
+          await xmpp.connect(service);
+          await xmpp.open({ domain: "example.test" });
+          return await outcome;
+        } finally {
+          clearTimeout(timer);
+          await xmpp.stop();
+        }
+      },
+      { service: source.url, timeout: OBSERVATION_TIMEOUT_MS },
+    );
+    expect(result).toBe(CROSS_HOST_REDIRECT_MESSAGE);
+    await source.waitForClose();
+    expect(destination.requests).toEqual([]);
+    expect(destination.transcript).toEqual([]);
+    expect(source.errors).toEqual([]);
+    expect(destination.errors).toEqual([]);
+  } finally {
+    await page.close();
+    await source.stop();
+    await destination.stop();
   }
 });
 

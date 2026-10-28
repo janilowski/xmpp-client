@@ -38,6 +38,48 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "follow cross-host stream redirects without reference identity validation",
+    file: "src/connection/index.js",
+    before: "if (jid(redirected.hostname).domain !== targetDomain) {",
+    after: "if (false) {",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "cross-host redirect makes no contact / IP to name$",
+  },
+  {
+    name: "trust configured service instead of the actual redirect source",
+    file: "src/connection/index.js",
+    before: "const currentService = this.socket?.url || this.options.service;",
+    after: "const currentService = this.options.service;",
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "actual socket overrides configured target$",
+  },
+  {
+    name: "allow secure cross-host stream redirects",
+    file: "src/connection/index.js",
+    before: "if (jid(redirected.hostname).domain !== targetDomain) {",
+    after:
+      'if (redirected.protocol === "ws:" && jid(redirected.hostname).domain !== targetDomain) {',
+    suite: "src/connection/test/seeOtherHost.test.js",
+    test: "cross-host wss redirect does not initiate a connection$",
+  },
+  {
+    name: "strip IPv6 brackets before preparing redirect authority",
+    file: "src/connection/index.js",
+    before: "jid(redirected.hostname).domain !== targetDomain",
+    after:
+      'jid(redirected.hostname.replace(/^\\[|\\]$/g, "")).domain !== targetDomain',
+    suite: "src/connection/test/seeOtherHost.test.js",
+    test: "prepared same-host redirect preserves URL policy / wss://\\[::1\\]",
+  },
+  {
+    name: "compare redirect hosts without IDNA preparation",
+    file: "src/connection/index.js",
+    before: "jid(redirected.hostname).domain !== targetDomain",
+    after: "redirected.hostname !== targetDomain",
+    suite: "src/connection/test/seeOtherHost.test.js",
+    test: "prepared same-host redirect preserves URL policy / wss://xn--bcher",
+  },
+  {
     name: "forget the ordinary SM enable attempt",
     file: "src/stream-management/stream-feature.js",
     before:
@@ -900,8 +942,9 @@ const mutations = [
   {
     name: "discard the WebSocket path on same-host redirect",
     file: "src/connection/index.js",
-    before: "const redirected = new URL(currentService);",
-    after: "const redirected = new URL(`${current.protocol}//${host}`);",
+    before: "      redirected.hostname = targetDomain;",
+    after:
+      '      redirected.hostname = targetDomain;\n      redirected.pathname = "/";\n      redirected.search = "";',
     suite: "conformance/rfc6120-see-other-host.test.ts",
     test: "same-host redirect preserves WebSocket policy and stream identity$",
   },
@@ -1224,8 +1267,7 @@ const mutations = [
   {
     name: "snapshot a public identity hint for resumption",
     file: "src/stream-management/index.js",
-    before:
-      "{ id, account: getAccount(entity), jid: getIdentity(entity) }",
+    before: "{ id, account: getAccount(entity), jid: getIdentity(entity) }",
     after:
       "{ id, account: entity.jid?.bare().toString(), jid: entity.jid?.toString() }",
     suite: "conformance/rfc6120-stanza-addressing.test.ts",

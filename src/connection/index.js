@@ -17,7 +17,6 @@ import hasContentPrefix from "./lib/hasContentPrefix.js";
 import {
   INVALID_REDIRECT_TARGET,
   parseRedirectTarget,
-  parseService,
 } from "./lib/util.js";
 import {
   canSendStanza,
@@ -32,6 +31,7 @@ const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
 const NS_JABBER_CLIENT = "jabber:client";
 const NS_JABBER_SERVER = "jabber:server";
 const CONNECTION_CLOSING_MESSAGE = "Connection is closing";
+const CROSS_HOST_REDIRECT_MESSAGE = "Cross-host stream redirects are not supported";
 const MAX_REDIRECTS = 5;
 const IQ_TYPES = new Set(["get", "set", "result", "error"]);
 const RESERVED_NAMESPACES = new Set([
@@ -286,20 +286,14 @@ class Connection extends EventEmitter {
         throw new TypeError(INVALID_REDIRECT_TARGET);
       }
       const currentService = this.socket?.url || this.options.service;
-      const current = parseService(currentService);
-      if (current.protocol && jid(current.hostname).domain === targetDomain) {
-        const redirected = new URL(currentService);
-        redirected.hostname = targetDomain;
-        redirected.port = target.port;
-        service = redirected.toString();
-      } else {
-        const targetHost = target.port
-          ? `${targetDomain}:${target.port}`
-          : targetDomain;
-        service = target.port
-          ? `${current.protocol || "xmpp:"}//${targetHost}`
-          : (current.protocol ? `${current.protocol}//` : "") + targetHost;
+      const redirected = new URL(currentService);
+      // Browser TLS cannot verify the original XMPP identity at a different host.
+      if (jid(redirected.hostname).domain !== targetDomain) {
+        throw new Error(CROSS_HOST_REDIRECT_MESSAGE);
       }
+      redirected.hostname = targetDomain;
+      redirected.port = target.port;
+      service = redirected.toString();
       this.#redirecting = true;
     } catch (error_) {
       this.emit("error", error_);

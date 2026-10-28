@@ -72,9 +72,12 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   `domainpart[:port]`. Same-host port redirects preserve the WebSocket scheme,
   path, query, stream `to` and language. A connection attempt stops after five
   successive redirects; completed negotiation starts a new sequence
-  (RFC 6120 §4.9.3.19). Cross-host browser TLS cannot currently verify the
-  original XMPP service reference identity as required; that unsafe automatic
-  path remains an explicit defect in #58, not a conformance claim.
+  (RFC 6120 §4.9.3.19). Hosts are compared after preparation against the actual
+  WebSocket endpoint, not the stream destination or mutable configuration.
+  Cross-host redirects are rejected before contact: browser TLS cannot verify
+  the original XMPP service reference identity at a different URL host.
+  This browser-profile boundary rejects otherwise valid cross-host deployments;
+  callers may configure a trusted endpoint explicitly, with runtime TLS checks.
 - Malformed correlated IQ responses reject that request locally without replying
   to a result/error stanza. Stanza errors are recoverable; stream errors close
   the transport. Unknown standard error conditions map to `undefined-condition`.

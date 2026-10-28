@@ -12,6 +12,8 @@ const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 const OPTIONS = { domain: "example.test", lang: "pl" };
 const EVENT_TIMEOUT_MS = 2000;
 const MAX_REDIRECTS = 5;
+const CROSS_HOST_REDIRECT_MESSAGE =
+  "Cross-host stream redirects are not supported";
 
 function target(peer: ScriptedPeer) {
   return new URL(peer.url).host;
@@ -58,6 +60,89 @@ function onlinePeer(index: number) {
     }
   });
 }
+
+// RFC 6120 §4.9.3.19 retains the original service reference identity.
+// Browser policy: reject another URL host before contacting it, even if it
+// resolves to the same address; explicit caller-selected connections still work.
+test.each([
+  ["IP to name", "127.0.0.1", "localhost", "original"],
+  ["name to IP", "localhost", "127.0.0.1", "original"],
+  [
+    "actual socket overrides configured target",
+    "127.0.0.1",
+    "localhost",
+    "target",
+  ],
+] as const)(
+  "RFC 6120 §4.9.3.19 / browser policy: cross-host redirect makes no contact / %s",
+  async (_label, sourceHost, destinationHost, configuration) => {
+    const destination = onlinePeer(99);
+    const destinationUrl = new URL(destination.url);
+    destinationUrl.hostname = destinationHost;
+    const source = redirectPeer(destinationUrl.host);
+    const sourceUrl = new URL(source.url);
+    sourceUrl.hostname = sourceHost;
+    const service = sourceUrl.toString();
+    const xmpp = client({
+      ...OPTIONS,
+      service,
+      username: "user",
+      password: "secret",
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    const observed = once(xmpp, "error", {
+      signal: AbortSignal.timeout(EVENT_TIMEOUT_MS),
+    });
+    try {
+      await xmpp.connect(service);
+      if (configuration === "target") {
+        Object.assign(xmpp.options, { service: destinationUrl.toString() });
+      }
+      await xmpp.open(OPTIONS);
+      const result = await Promise.race([
+        observed.then(([error]) => error),
+        destination.next().then(() => "contacted"),
+      ]);
+      // A permissive destination accepts the old unsafe path: RED is an assertion.
+      expect(result).toBeInstanceOf(Error);
+      expect((result as Error).message).toBe(CROSS_HOST_REDIRECT_MESSAGE);
+      await source.waitForClose();
+      expect(destination.requests).toEqual([]);
+      expect(destination.transcript).toEqual([]);
+      expect(errors).toHaveLength(1);
+      expect(xmpp.options).toMatchObject({
+        domain: OPTIONS.domain,
+        lang: OPTIONS.lang,
+        service:
+          configuration === "target" ? destinationUrl.toString() : service,
+      });
+
+      await xmpp.stop();
+      Object.assign(xmpp.options, { service: destinationUrl.toString() });
+      expect((await xmpp.start()).toString()).toBe("user@example.test/r99");
+      const openings = destination.transcript.filter((frame) =>
+        frame.startsWith("<open"),
+      );
+      expect(openings).toHaveLength(2);
+      for (const opening of openings) {
+        expect(readFrame(opening)[0]).toMatchObject({
+          attributes: {
+            "{}to": OPTIONS.domain,
+            "{http://www.w3.org/XML/1998/namespace}lang": OPTIONS.lang,
+          },
+        });
+      }
+      expect(source.errors).toEqual([]);
+      expect(destination.errors).toEqual([]);
+    } finally {
+      await xmpp.stop().catch(() => {});
+      await source.stop();
+      await destination.stop();
+    }
+  },
+);
 
 test("RFC 6120 §4.9.3.19: same-host redirect preserves WebSocket policy and stream identity", async () => {
   const destination = new ScriptedPeer((frame, peer) => {
@@ -112,12 +197,17 @@ test("RFC 6120 §4.9.3.19 / RFC 7622 §3.2: prepared same-host redirect preserve
   const xmpp = client({ ...OPTIONS, service });
   xmpp.reconnect.stop();
   const errors: Error[] = [];
-  xmpp.on("error", (error: Error) => errors.push(error));
+  const failed = Promise.withResolvers<Error>();
+  xmpp.on("error", (error: Error) => {
+    errors.push(error);
+    failed.resolve(error);
+  });
   try {
     await xmpp.connect(service);
     await xmpp.open(OPTIONS);
-    const frame = await destination.next();
-    expect(readFrame(frame)[0]).toMatchObject({
+    const frame = await Promise.race([destination.next(), failed.promise]);
+    expect(typeof frame).toBe("string");
+    expect(readFrame(frame as string)[0]).toMatchObject({
       attributes: {
         "{}to": OPTIONS.domain,
         "{http://www.w3.org/XML/1998/namespace}lang": OPTIONS.lang,
