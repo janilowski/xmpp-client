@@ -2,7 +2,8 @@ import IncomingContext from "./lib/IncomingContext.js";
 import OutgoingContext from "./lib/OutgoingContext.js";
 import Context from "./lib/Context.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
-import { isReported } from "../events/lib/reportedError.js";
+import { isReported, markReported } from "../events/lib/reportedError.js";
+import { QueueFullError, sendPolicies } from "../connection/lib/sendPolicy.js";
 
 export async function runMiddleware(stack, context) {
   if (!Array.isArray(stack)) {
@@ -53,8 +54,39 @@ function listener(entity, middleware, StanzaContext) {
 
 function errorHandler(entity) {
   return (ctx, next) => {
+    const socket = entity.socket;
+    const parser = entity.parser;
+    const requiredReply =
+      entity.isStanza(ctx.stanza) &&
+      ctx.name === "iq" &&
+      (ctx.type === "get" || ctx.type === "set");
     return next()
-      .then((reply) => reply && entity.send(reply))
+      .then((reply) => {
+        if (!reply) {
+          return;
+        }
+        return entity.send(reply).catch(async (error) => {
+          // Only a failed returned reply is terminal, not optional middleware sends.
+          if (error instanceof QueueFullError && requiredReply) {
+            if (entity.socket !== socket || entity.parser !== parser) {
+              return;
+            }
+            const shutdown = sendPolicies.get(entity)?.fail();
+            try {
+              if (entity.socket === socket && entity.parser === parser) {
+                if (entity.listenerCount("error") > 0) {
+                  markReported(entity, error);
+                }
+                entity.emit("error", error);
+              }
+            } finally {
+              await shutdown;
+            }
+            return;
+          }
+          throw error;
+        });
+      })
       .catch((error) => {
         // Cancellation of an old exchange must not poison a replacement stream.
         if (

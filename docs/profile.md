@@ -193,6 +193,25 @@ certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
   enabled session; assigning a public ID alone cannot restore a session.
   `sm.outbound` means last acknowledged sequence, not total sent; retransmission
   does not count twice. SM supplies neither persistence nor exactly-once delivery.
+  Local queue admission defaults to 1024 stanzas and 8 MiB of serialized UTF-8
+  XML, including in-flight writes. `streamManagement.maxStanzas` and `maxBytes`
+  configure these budgets at construction; both must be positive integers,
+  `maxStanzas` below 2^32 and `maxBytes` within the safe-integer range.
+  These are local resource limits, not XEP-0198 maxima. Overflow rejects
+  `send`/`sendMany` with an Error whose `code` is `ERR_SM_QUEUE_FULL`, before
+  writing, emitting `send` or accepting SM responsibility. Existing items remain
+  owned; ACKs release capacity. `sendMany` keeps its accepted prefix and stops.
+  Replay reuses the original admission charge. This measures original serialized
+  payloads, not JavaScript heap use: queued Elements remain mutable caller objects,
+  and replay may add delay metadata. It does not claim immutable snapshot replay.
+  SM controls and foreign nonzas do not consume stanza capacity. If admission
+  prevents an internally generated IQ reply, the local terminal policy sends
+  `undefined-condition` with `queue-full` in
+  `https://github.com/janilowski/xmpp-client/errors`, then closes the stream.
+  This ends the session rather than fulfilling the requested IQ exchange;
+  remaining owned items produce `fail` once. Ordinary application overflow alone
+  does not close the connection. Applications own notification and intentional
+  retry; local rejection is not proof of remote delivery failure.
 
 ## Authentication
 

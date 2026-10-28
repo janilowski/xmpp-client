@@ -8,6 +8,7 @@ import { once } from "node:events";
 import server from "./server/index.js";
 import { ScriptedPeer } from "./conformance/peer.ts";
 import { RawPeer } from "./conformance/raw-peer.ts";
+import { readFrame } from "./conformance/xml.ts";
 import { rolldown } from "rolldown";
 
 const OPEN =
@@ -480,6 +481,173 @@ test("Chromium blocks cross-host stream redirects before contacting the target",
     await page.close();
     await source.stop();
     await destination.stop();
+  }
+});
+
+// XEP-0198 v1.6.3 §4 owns unacknowledged stanzas; the limit is local policy.
+test("Chromium bundled SM rejects overflow before sending and recovers after ACK", async () => {
+  const framing = "urn:ietf:params:xml:ns:xmpp-framing";
+  const content = "jabber:client";
+  const sasl = "urn:ietf:params:xml:ns:xmpp-sasl";
+  const bind = "urn:ietf:params:xml:ns:xmpp-bind";
+  const sm = "urn:xmpp:sm:3";
+  const syncNamespace = "urn:test:browser-queue";
+  const queueFull = "ERR_SM_QUEUE_FULL";
+  const ackDebounce = 60_000;
+  let authenticated = false;
+  const messages = [];
+  const peer = new ScriptedPeer((frame, remote) => {
+    const root = readFrame(frame)[0];
+    if (root.open === `{${framing}}open`) {
+      remote.send(OPEN);
+      remote.send(
+        `<features xmlns="${STREAM}">${authenticated ? `<bind xmlns="${bind}"/><sm xmlns="${sm}"/>` : `<mechanisms xmlns="${sasl}"><mechanism>PLAIN</mechanism></mechanisms>`}</features>`,
+      );
+    } else if (root.open === `{${sasl}}auth`) {
+      authenticated = true;
+      remote.send(`<success xmlns="${sasl}"/>`);
+    } else if (root.open === `{${content}}iq`) {
+      remote.send(
+        `<iq xmlns="${content}" type="result" id="${root.attributes["{}id"]}"><bind xmlns="${bind}"><jid>user@example.test/r</jid></bind></iq>`,
+      );
+    } else if (root.open === `{${sm}}enable`) {
+      remote.send(`<enabled xmlns="${sm}"/>`);
+    } else if (root.open === `{${syncNamespace}}sync`) {
+      if (root.attributes["{}id"] === "release") {
+        remote.send(`<a xmlns="${sm}" h="1"/>`);
+      } else if (root.attributes["{}id"] === "final") {
+        remote.send(`<a xmlns="${sm}" h="2"/>`);
+      }
+      remote.send(frame);
+    } else if (root.open === `{${content}}message`) {
+      messages.push(root.attributes["{}id"]);
+    } else if (frame === CLOSE) {
+      remote.send(CLOSE);
+    }
+  });
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(
+      async ({ service, content, sm, syncNamespace, ackDebounce, timeout }) => {
+        const { client, xml } = globalThis.XMPP;
+        const xmpp = client({
+          service,
+          domain: "example.test",
+          username: "user",
+          password: "secret",
+          timeout,
+          streamManagement: { maxStanzas: 1 },
+        });
+        xmpp.reconnect.stop();
+        xmpp.streamManagement.requestAckInterval = 0;
+        xmpp.streamManagement.requestAckDebounce = ackDebounce;
+        const errors = [];
+        const sent = [];
+        const acks = [];
+        const failures = [];
+        const enabled = Promise.withResolvers();
+        const barriers = new Map();
+        xmpp.on("error", (error) => errors.push(error.message));
+        xmpp.on("send", (element) => {
+          if (element.is("message", content)) {
+            sent.push(element.attrs.id);
+          }
+        });
+        xmpp.streamManagement.on("ack", (element) =>
+          acks.push(element.attrs.id),
+        );
+        xmpp.streamManagement.on("fail", (element) =>
+          failures.push(element.attrs.id),
+        );
+        xmpp.on("nonza", (element) => {
+          if (element.is("enabled", sm)) {
+            enabled.resolve();
+          } else if (element.is("sync", syncNamespace)) {
+            barriers.get(element.attrs.id)?.();
+          }
+        });
+        // FIFO round trips observe prior writes and settle prior peer ACKs.
+        async function sync(id) {
+          const observed = Promise.withResolvers();
+          barriers.set(id, observed.resolve);
+          const timer = setTimeout(
+            () => observed.reject(new Error("Missing queue barrier")),
+            timeout,
+          );
+          try {
+            await xmpp.send(xml("sync", { xmlns: syncNamespace, id }));
+            await observed.promise;
+          } finally {
+            clearTimeout(timer);
+            barriers.delete(id);
+          }
+        }
+        try {
+          const address = String(await xmpp.start());
+          await enabled.promise;
+          await sync("ready");
+          await xmpp.send(xml("message", { id: "first" }));
+          let code = null;
+          try {
+            await xmpp.send(xml("message", { id: "overflow" }));
+          } catch (error) {
+            code = error.code;
+          }
+          await sync("blocked");
+          const blocked = {
+            code,
+            status: xmpp.status,
+            sent: [...sent],
+            acks: [...acks],
+            failures: [...failures],
+          };
+          await sync("release");
+          await xmpp.send(xml("message", { id: "next" }));
+          await sync("final");
+          return {
+            address,
+            blocked,
+            status: xmpp.status,
+            sent,
+            acks,
+            failures,
+            errors,
+          };
+        } finally {
+          await xmpp.stop();
+        }
+      },
+      {
+        service: peer.url,
+        content,
+        sm,
+        syncNamespace,
+        ackDebounce,
+        timeout: OBSERVATION_TIMEOUT_MS,
+      },
+    );
+    expect(result).toEqual({
+      address: "user@example.test/r",
+      blocked: {
+        code: queueFull,
+        status: "online",
+        sent: ["first"],
+        acks: [],
+        failures: [],
+      },
+      status: "online",
+      sent: ["first", "next"],
+      acks: ["first", "next"],
+      failures: [],
+      errors: [],
+    });
+    expect(messages).toEqual(["first", "next"]);
+    expect(peer.errors).toEqual([]);
+  } finally {
+    await page.close();
+    await peer.stop();
   }
 });
 

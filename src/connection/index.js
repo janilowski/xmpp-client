@@ -11,6 +11,8 @@ import xml from "../xml/index.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
 import isLanguageTag from "../xml/lib/language.js";
 import createStanzaErrorValidator from "../xml/lib/stanzaError.js";
+import { ConnectionClosedError } from "../events/lib/operation.js";
+import { sendPolicies, takeReplay } from "./lib/sendPolicy.js";
 
 import StreamError from "./lib/StreamError.js";
 import hasContentPrefix from "./lib/hasContentPrefix.js";
@@ -50,6 +52,7 @@ class Connection extends EventEmitter {
   #generation = 0;
   #redirectCount = 0;
   #redirecting = false;
+  #onWriteError = null;
 
   constructor(options = {}) {
     super();
@@ -690,7 +693,10 @@ class Connection extends EventEmitter {
     return this.open({ domain, lang });
   }
 
-  async send(element) {
+  async send(element, token) {
+    const replay = takeReplay(this, token);
+    const generation = this.#generation;
+    const socket = this.socket;
     // Namespace lookup must use the same scalar values as serialization.
     for (const attribute of Object.keys(element.attrs)) {
       const value = element.attrs[attribute];
@@ -870,8 +876,42 @@ class Connection extends EventEmitter {
     } catch (error) {
       throw new TypeError("Invalid outgoing XML", { cause: error });
     }
-    await this.write(source);
-    this.emit("send", element);
+    if (this.#generation !== generation || this.socket !== socket) {
+      throw new ConnectionClosedError();
+    }
+    const admission = sendPolicies.get(this)?.prepare({
+      element,
+      source,
+      name,
+      namespace,
+      replay,
+    });
+    if (admission?.skip) {
+      return;
+    }
+
+    // Release synchronous driver failures before another send can receive an ACK.
+    const previous = this.#onWriteError;
+    this.#onWriteError = admission?.rollback;
+    let written;
+    try {
+      written = this.write(source);
+    } catch (error) {
+      admission?.rollback();
+      throw error;
+    } finally {
+      this.#onWriteError = previous;
+    }
+    try {
+      await written;
+    } catch (error) {
+      admission?.rollback();
+      throw error;
+    }
+    // Old completions cannot schedule SM work on a replacement stream.
+    if (this.#generation === generation && this.socket === socket) {
+      this.emit("send", element);
+    }
   }
 
   async sendReceive(element, timeout = this.timeout) {
@@ -889,8 +929,15 @@ class Connection extends EventEmitter {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
 
-    return new Promise((resolve) => {
-      this.socket.write(string, resolve);
+    const onError = this.#onWriteError;
+    this.#onWriteError = null;
+    return new Promise((resolve, reject) => {
+      try {
+        this.socket.write(string, resolve);
+      } catch (error) {
+        onError?.();
+        reject(error);
+      }
     });
   }
 

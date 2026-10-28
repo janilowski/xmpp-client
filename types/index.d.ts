@@ -149,6 +149,13 @@ export interface ClientOptions {
   credentials?: Credentials | CredentialsProvider;
   userAgent?: Element;
   timeout?: number;
+  /** Local SM admission budgets, captured at construction. */
+  streamManagement?: {
+    /** Positive integer below 2^32; defaults to 1024 unacknowledged stanzas. */
+    maxStanzas?: number;
+    /** Positive safe integer; defaults to 8 MiB of admitted serialized UTF-8 XML. */
+    maxBytes?: number;
+  };
 }
 
 export type ConnectionStatus =
@@ -179,6 +186,7 @@ export interface XMPPClient extends EventEmitter {
   start(): Promise<JID>;
   stop(): Promise<Element | undefined>;
   disconnect(): Promise<Element | undefined>;
+  /** Rejects before writing with ERR_SM_QUEUE_FULL when an SM budget is full. */
   send(element: Element): Promise<void>;
   sendMany(elements: Iterable<Element>): Promise<void>;
   sendReceive(element: Element, timeout?: number): Promise<Element>;

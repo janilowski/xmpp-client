@@ -4,6 +4,11 @@ import jid from "../jid/index.js";
 import { datetime } from "../util/time.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
 import {
+  QueueFullError,
+  sendPolicies,
+  sendReplay,
+} from "../connection/lib/sendPolicy.js";
+import {
   completeNegotiation,
   getAccount,
   getIdentity,
@@ -19,6 +24,11 @@ export const NS = "urn:xmpp:sm:3";
 const SASL2 = "urn:xmpp:sasl:2";
 const BIND2 = "urn:xmpp:bind:0";
 const COUNTER_MODULUS = 2 ** 32;
+const DEFAULT_MAX_STANZAS = 1024;
+const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
+const QUEUE_ERRORS = "https://github.com/janilowski/xmpp-client/errors";
+const STREAM = "http://etherx.jabber.org/streams";
+const encoder = new TextEncoder();
 
 export function makeEnableElement({ sm }) {
   return xml("enable", {
@@ -43,8 +53,31 @@ export default function streamManagement({
   let requestAckTimeout = null;
   let requestAckDebounce = null;
   let session = null;
-  const replaying = new Set();
+  const charges = new WeakMap();
+  const attempts = new WeakMap();
+  let outboundBytes = 0;
+  let closing = false;
+  let enabling = null;
   const enableState = { attempted: false };
+  const options = entity.options.streamManagement;
+  if (
+    options !== undefined &&
+    (!options || typeof options !== "object" || Array.isArray(options))
+  ) {
+    throw new TypeError("Invalid Stream Management options");
+  }
+  const { maxStanzas = DEFAULT_MAX_STANZAS, maxBytes = DEFAULT_MAX_BYTES } =
+    options ?? {};
+  if (
+    !Number.isSafeInteger(maxStanzas) ||
+    maxStanzas < 1 ||
+    maxStanzas >= COUNTER_MODULUS
+  ) {
+    throw new RangeError("Invalid Stream Management maxStanzas");
+  }
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) {
+    throw new RangeError("Invalid Stream Management maxBytes");
+  }
 
   // A present opaque ID can be empty; public ID hints still need validation.
   function hasResumeId() {
@@ -65,6 +98,105 @@ export default function streamManagement({
     requestAckDebounce: 250,
   });
 
+  // Admission uses the validated wire snapshot and includes in-flight writes.
+  sendPolicies.set(entity, {
+    prepare({ element, source, name, namespace, replay }) {
+      if (closing && !(namespace === STREAM && name === "error")) {
+        throw new ConnectionClosedError();
+      }
+      if (namespace === NS && name === "enable") {
+        const attempt = {};
+        enabling = attempt;
+        sm.enableSent = true;
+        return {
+          rollback() {
+            if (enabling === attempt && !sm.enabled) {
+              sm.enableSent = false;
+            }
+          },
+        };
+      }
+      if (
+        namespace !== entity.NS ||
+        !["message", "presence", "iq"].includes(name) ||
+        (!sm.enabled && !sm.enableSent)
+      ) {
+        return;
+      }
+      const attempt = {};
+      if (replay) {
+        if (!sm.outbound_q.includes(replay)) {
+          return { skip: true };
+        }
+        // Replay retains its original admission charge, not a second slot.
+        attempts.set(replay, attempt);
+        return;
+      }
+      const available = maxBytes - outboundBytes;
+      if (sm.outbound_q.length >= maxStanzas || source.length > available) {
+        throw new QueueFullError();
+      }
+      const bytes = encoder.encode(source).length;
+      if (bytes > available) {
+        throw new QueueFullError();
+      }
+      const item = { stanza: element, stamp: datetime() };
+      sm.outbound_q.push(item);
+      charges.set(item, bytes);
+      attempts.set(item, attempt);
+      outboundBytes += bytes;
+      return {
+        rollback() {
+          // A late old failure cannot erase a replay or an acknowledged item.
+          if (attempts.get(item) !== attempt) {
+            return;
+          }
+          const index = sm.outbound_q.indexOf(item);
+          if (index !== -1) {
+            sm.outbound_q.splice(index, 1);
+            release(item);
+          }
+        },
+      };
+    },
+    async fail() {
+      if (closing) {
+        return;
+      }
+      closing = true;
+      sm.id = "";
+      session = null;
+      sm.enableSent = false;
+      clearTimeout(timeoutTimeout);
+      clearTimeout(requestAckTimeout);
+      clearTimeout(requestAckDebounce);
+      sm.enabled = false;
+      const failed = takeQueue();
+      // Capture the old transport before failure observers can replace it.
+      const shutdown = entity._streamError(
+        "undefined-condition",
+        undefined,
+        xml("queue-full", { xmlns: QUEUE_ERRORS }),
+      );
+      try {
+        failQueue(failed);
+      } finally {
+        await shutdown;
+      }
+    },
+  });
+
+  function release(item) {
+    outboundBytes -= charges.get(item) ?? 0;
+    charges.delete(item);
+    attempts.delete(item);
+  }
+
+  entity.on("connecting", () => {
+    closing = false;
+    enabling = null;
+  });
+
   async function sendAck() {
     try {
       await entity.send(xml("a", { xmlns: NS, h: sm.inbound }));
@@ -79,6 +211,7 @@ export default function streamManagement({
     clearTimeout(requestAckDebounce);
     sm.enabled = false;
     sm.enableSent = false;
+    enabling = null;
     enableState.attempted = false;
     if (!session) {
       failQueue();
@@ -88,7 +221,9 @@ export default function streamManagement({
 
   // It is RECOMMENDED that initiating entities (usually clients) send an element right before they gracefully close the stream, in order to inform the peer about received stanzas
   entity.hook("close", async () => {
-    if (!sm.enabled) return;
+    if (!sm.enabled || closing) {
+      return;
+    }
     await sendAck();
   });
 
@@ -125,12 +260,10 @@ export default function streamManagement({
     // Keep unacknowledged items owned by SM even if replay is cancelled.
     for (const item of q) {
       signal?.throwIfAborted();
-      replaying.add(item.stanza);
-      try {
-        await entity.send(queueToStanza({ entity, item }));
-      } finally {
-        replaying.delete(item.stanza);
+      if (!sm.outbound_q.includes(item)) {
+        continue;
       }
+      await sendReplay(entity, item, queueToStanza({ entity, item }));
     }
     signal?.throwIfAborted();
     sm.emit("resumed");
@@ -179,22 +312,33 @@ export default function streamManagement({
         .catch(() => {});
       throw new ConnectionClosedError();
     }
-    for (let i = 0; i < distance; i++) {
-      const item = sm.outbound_q.shift();
-      sm.outbound = (sm.outbound + 1) % COUNTER_MODULUS;
+    const acknowledged = sm.outbound_q.splice(0, distance);
+    sm.outbound = n;
+    for (const item of acknowledged) {
+      release(item);
+    }
+    for (const item of acknowledged) {
       sm.emit("ack", item.stanza);
     }
   }
 
-  function failQueue() {
-    let item;
-    while ((item = sm.outbound_q.shift())) {
+  function takeQueue() {
+    const failed = sm.outbound_q.splice(0);
+    sm.outbound = 0;
+    for (const item of failed) {
+      release(item);
+    }
+    return failed;
+  }
+
+  function failQueue(failed = takeQueue()) {
+    for (const item of failed) {
       sm.emit("fail", item.stanza);
     }
-    sm.outbound = 0;
   }
 
   function enabled({ id, max, resume }) {
+    enabling = null;
     // XEP-0198 §§3/5: ID presence alone does not authorize resumption.
     const resumable =
       /^[\t\n\r ]*(true|1)[\t\n\r ]*$/.test(resume) && id !== undefined;
@@ -211,12 +355,12 @@ export default function streamManagement({
   }
 
   entity.on("offline", () => {
-    failQueue();
     sm.inbound = 0;
     sm.enabled = false;
     sm.enableSent = false;
     sm.id = "";
     session = null;
+    failQueue();
   });
 
   middleware.use(async (context, next) => {
@@ -253,7 +397,9 @@ export default function streamManagement({
   function scheduleRequestAck(timeout = sm.requestAckInterval) {
     clearTimeout(requestAckTimeout);
 
-    if (!sm.enabled) return;
+    if (!sm.enabled || closing) {
+      return;
+    }
     if (!timeout) return;
 
     requestAckTimeout = setTimeout(requestAck, timeout);
@@ -263,7 +409,9 @@ export default function streamManagement({
     clearTimeout(requestAckTimeout);
     clearTimeout(requestAckDebounce);
 
-    if (!sm.enabled) return;
+    if (!sm.enabled || closing) {
+      return;
+    }
 
     if (sm.timeout && !timeoutTimeout) {
       timeoutTimeout = setTimeout(() => {
@@ -292,8 +440,8 @@ export default function streamManagement({
       return next();
     }
 
-    if (!replaying.delete(stanza)) {
-      sm.outbound_q.push({ stanza, stamp: datetime() });
+    if (closing) {
+      return next();
     }
     // Debounce requests so we send only one after a big run of stanza together
     clearTimeout(requestAckTimeout);

@@ -8,6 +8,7 @@ const presence = xml("presence", { to: address.bare() });
 const xmpp = client({
   service: "wss://example.net/xmpp-websocket",
   credentials: { username: "romeo", password: "secret" },
+  streamManagement: { maxStanzas: 1024, maxBytes: 8 * 1024 * 1024 },
 });
 
 xmpp.on("stanza", (stanza: typeof presence) => stanza.toString());
@@ -29,3 +30,5 @@ void xmpp.send("<presence/>");
 client({ password: 123 });
 // @ts-expect-error Service addresses must be strings.
 client({ service: 123 });
+// @ts-expect-error Queue budgets are numeric, not serialized configuration values.
+client({ streamManagement: { maxBytes: "1024" } });
