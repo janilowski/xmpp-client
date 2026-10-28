@@ -3,6 +3,8 @@ import jid, { JID, escapeLocal } from "../src/jid/index.js";
 
 // RFC 7622 §§3–4, verified errata 4534/4560, RFC 9844 §3.
 // RFC 8264/8265 replace RFC 7564/7613; Unicode 16 is the selected repertoire.
+// Wire preparation/correlation: rfc7622-wire.test.ts.
+// Protocol-slot octet boundaries and SM ownership: rfc7622-address-lengths.test.ts.
 describe("RFC 7622 §§3.1, 3.5, 4 — address structure and comparison", () => {
   for (const value of [
     "juliet@example.com",

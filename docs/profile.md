@@ -281,10 +281,16 @@ domains serialize as U-labels and resource case remains significant. Migrate
 stored keys with collision checks. This is not SASLprep, account provisioning
 or authorization.
 
+Core stanza `to`/`from` values are prepared before serialization and SM admission.
+Length checks use prepared UTF-8, so longer input can normalize to a valid JID.
+Strict local rejection implements RFC 7622 §4's client SHOULD; generic foreign
+nonza attributes retain their own semantics, not implicit JID-slot validation.
+
 Invalid addresses cannot enter middleware or complete IQs, but raw
 `element`/`stanza` events are untrusted wire observations. Extension fields must
-explicitly use JID preparation. Bound standalone untrusted input before
-normalization. Confusable detection and safe display remain application duties;
+explicitly use JID preparation. Standalone input resource budgets before
+normalization are separate from post-preparation address limits.
+Confusable detection and safe display remain application duties;
 never authorize by display text. See [Unicode maintenance](unicode.md).
 
 ## XML dependency maintenance

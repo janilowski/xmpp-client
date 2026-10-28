@@ -38,6 +38,66 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "skip outgoing to-slot preparation",
+    file: "src/connection/index.js",
+    before: 'for (const attribute of ["to", "from"]) {',
+    after: 'for (const attribute of ["from"]) {',
+    suite: "conformance/rfc7622-address-lengths.test.ts",
+    test: "accept 1023 prepared octets / ASCII local / send to message$",
+  },
+  {
+    name: "validate outgoing from only after writing",
+    file: "src/connection/index.js",
+    before: 'for (const attribute of ["to", "from"]) {',
+    after: 'for (const attribute of ["to"]) {',
+    suite: "conformance/rfc7622-address-lengths.test.ts",
+    test: "reject 1024 prepared octets before admission / ASCII local / sendMany from message$",
+  },
+  {
+    name: "count prepared JID UTF-16 units instead of UTF-8 octets",
+    file: "src/jid/lib/precis.js",
+    before: "encoder.encode(value).length > MAX_PART_BYTES",
+    after: "value.length > MAX_PART_BYTES",
+    suite: "conformance/rfc7622-address-lengths.test.ts",
+    test: "reject 1024 prepared octets before admission / supplementary resource / send to presence$",
+  },
+  {
+    name: "reject localpart input before its NFC contraction",
+    file: "src/jid/lib/precis.js",
+    before: '    value = value.toLowerCase().normalize("NFC");',
+    after:
+      '    checkLength(value);\n    value = value.toLowerCase().normalize("NFC");',
+    suite: "conformance/rfc7622-address-lengths.test.ts",
+    test: "accept 1023 prepared octets / NFC-contracted local / send to message$",
+  },
+  {
+    name: "reject resource input before its space mapping",
+    file: "src/jid/lib/precis.js",
+    before: '  value = value.replace(/\\p{Zs}/gu, " ").normalize("NFC");',
+    after:
+      '  checkLength(value);\n  value = value.replace(/\\p{Zs}/gu, " ").normalize("NFC");',
+    suite: "conformance/rfc7622-address-lengths.test.ts",
+    test: "accept 1023 prepared octets / width/space-mapped full 3071-octet JID / send to presence$",
+  },
+  {
+    name: "reject long complete input before JID preparation",
+    file: "src/jid/lib/parse.js",
+    before: "export default function parse(s) {",
+    after:
+      'export default function parse(s) {\n  if (new TextEncoder().encode(s).length > 3071) { throw new TypeError("Raw JID too long"); }',
+    suite: "conformance/rfc7622-address-lengths.test.ts",
+    test: "accept 1023 prepared octets / width/space-mapped full 3071-octet JID / send to iq$",
+  },
+  {
+    name: "interpret foreign nonza attributes as JID slots",
+    file: "src/connection/index.js",
+    before: "    if (this.isStanza(element)) {",
+    after:
+      "    if (this.isStanza(element) || element.attrs.to !== undefined || element.attrs.from !== undefined) {",
+    suite: "conformance/rfc7622-address-lengths.test.ts",
+    test: "foreign stanza-named nonzas preserve overlength raw addresses / sendMany$",
+  },
+  {
     name: "ignore the SM stanza count budget",
     file: "src/stream-management/index.js",
     before: "sm.outbound_q.length >= maxStanzas || source.length > available",
@@ -2588,6 +2648,7 @@ for (const mutation of mutations) {
       "conformance/xep0156.test.js",
       "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",
+      "conformance/rfc7622-address-lengths.test.ts",
       "conformance/peer.ts",
       "conformance/xml.ts",
     ]) {
