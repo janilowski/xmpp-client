@@ -8,6 +8,11 @@ import { ScriptedPeer } from "./peer.ts";
 import { readFrame } from "./xml.ts";
 
 const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
+const STREAM = "http://etherx.jabber.org/streams";
+const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
+const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
+const CONTENT = "jabber:client";
+const SM = "urn:xmpp:sm:3";
 const XML = "http://www.w3.org/XML/1998/namespace";
 const EXTENSION = "urn:example:language-test";
 const TIMEOUT_MS = 500;
@@ -16,8 +21,13 @@ let peer: ScriptedPeer;
 let xmpp: ReturnType<typeof client>;
 let errors: Error[];
 
-// Leave authentication paused: no negotiation writes can disguise a leaked stanza.
-async function connectStream(lang: string | undefined = "en") {
+// Default to paused authentication so negotiation cannot disguise leaked stanzas.
+async function connectStream(
+  lang: string | undefined = "en",
+  mode: "paused" | "managed" = "paused",
+) {
+  let authenticated = false;
+  const enabled = Promise.withResolvers<void>();
   peer = new ScriptedPeer((frame, remote) => {
     const root = readFrame(frame)[0];
     if (!root || !("open" in root)) {
@@ -27,8 +37,26 @@ async function connectStream(lang: string | undefined = "en") {
       remote.send(
         `<open xmlns="${FRAMING}" from="example.test" version="1.0" id="language"/>`,
       );
-    }
-    if (root.open === `{${FRAMING}}close`) {
+      if (mode === "managed") {
+        remote.send(
+          `<features xmlns="${STREAM}">${authenticated ? `<bind xmlns="${BIND}"/><sm xmlns="${SM}"/>` : `<mechanisms xmlns="${SASL}"><mechanism>PLAIN</mechanism></mechanisms>`}</features>`,
+        );
+      }
+    } else if (root.open === `{${SASL}}auth`) {
+      authenticated = true;
+      remote.send(`<success xmlns="${SASL}"/>`);
+    } else if (
+      root.open === `{${CONTENT}}iq` &&
+      frame.includes(`<bind xmlns="${BIND}"`)
+    ) {
+      remote.send(
+        `<iq xmlns="${CONTENT}" type="result" id="${root.attributes["{}id"]}"><bind xmlns="${BIND}"><jid>user@example.test/r</jid></bind></iq>`,
+      );
+    } else if (root.open === `{${SM}}enable`) {
+      remote.send(
+        `<enabled xmlns="${SM}" id="language-session" resume="true"/>`,
+      );
+    } else if (root.open === `{${FRAMING}}close`) {
       remote.send(`<close xmlns="${FRAMING}"/>`);
     }
   });
@@ -38,10 +66,26 @@ async function connectStream(lang: string | undefined = "en") {
     domain: "example.test",
     lang,
     timeout: TIMEOUT_MS,
+    ...(mode === "managed" ? { username: "user", password: "secret" } : {}),
   });
   xmpp.reconnect.stop();
   xmpp.on("error", (error: Error) => errors.push(error));
+  xmpp.on("nonza", (element: Element) => {
+    if (element.is("enabled", SM)) {
+      enabled.resolve();
+    }
+  });
   await xmpp.connect(peer.url);
+  if (mode === "managed") {
+    await xmpp.open(xmpp.options);
+    await enabled.promise;
+    await xmpp.send(xml("sync", { xmlns: EXTENSION }));
+    while (!(await peer.next()).startsWith("<sync ")) {
+      // Observe the later frame before asserting the committed SM state.
+    }
+    expect(xmpp.status).toBe("online");
+    expect(xmpp.streamManagement.enabled).toBe(true);
+  }
 }
 
 afterEach(async () => {
@@ -100,6 +144,150 @@ const GRANDFATHERED = [
 
 describe("RFC 6120 §§4.7.4/8.1.5 — outgoing language tag format", () => {
   for (const method of ["send", "sendMany"] as const) {
+    for (const origin of ["tree", "serialized document"] as const) {
+      test.each(["message", "presence", "iq"] as const)(
+        `§8.1.5: ${method} rejects an empty core root language without send or SM admission / ${origin} / %s`,
+        async (kind) => {
+          await connectStream("en", "managed");
+          const value = xml(
+            kind,
+            {
+              id: "invalid-root",
+              "xml:lang": origin === "tree" ? "" : "pl",
+              ...(kind === "iq" ? { type: "get" } : {}),
+            },
+            kind === "iq" ? xml("query", { xmlns: EXTENSION }) : undefined,
+          );
+          if (origin === "serialized document") {
+            value.toString = () =>
+              `<${kind} xmlns="${CONTENT}" id="invalid-root" xml:lang=""${kind === "iq" ? ' type="get"' : ""}>${kind === "iq" ? `<query xmlns="${EXTENSION}"/>` : ""}</${kind}>`;
+          }
+          const sent: string[] = [];
+          const failures: string[] = [];
+          xmpp.on("send", (element: Element) => sent.push(element.attrs.id));
+          xmpp.streamManagement.on("fail", (element: Element) =>
+            failures.push(element.attrs.id),
+          );
+          const result = await (
+            method === "send" ? xmpp.send(value) : xmpp.sendMany([value])
+          ).catch((error: Error) => error);
+          expect(result).toBeInstanceOf(TypeError);
+
+          // A later foreign frame proves delivery without adding a core queue item.
+          await xmpp.send(xml("barrier", { xmlns: EXTENSION, id: "barrier" }));
+          expect(readFrame(await peer.next())[0]).toMatchObject({
+            open: `{${EXTENSION}}barrier`,
+            attributes: { "{}id": "barrier" },
+          });
+          expect(sent).toEqual(["barrier"]);
+          expect(failures).toEqual([]);
+          expect(xmpp.streamManagement.outbound_q).toEqual([]);
+          expect(
+            peer.transcript.some((frame) => frame.includes("invalid-root")),
+          ).toBe(false);
+          expect(xmpp.status).toBe("online");
+
+          // Local rejection leaves this negotiated session usable and accountable.
+          await xmpp.send(
+            xml("message", { id: "valid-root", "xml:lang": "pl" }),
+          );
+          expect(readFrame(await peer.next())[0]).toMatchObject({
+            open: `{${CONTENT}}message`,
+            attributes: { "{}id": "valid-root", [`{${XML}}lang`]: "pl" },
+          });
+          expect(sent).toEqual(["barrier", "valid-root"]);
+          expect(
+            xmpp.streamManagement.outbound_q.map(
+              ({ stanza }: { stanza: Element }) => stanza.attrs.id,
+            ),
+          ).toEqual(["valid-root"]);
+        },
+      );
+    }
+
+    test(`§8.1.5 / XML §2.12: ${method} preserves empty descendant and foreign-root resets`, async () => {
+      await connectStream("en", "managed");
+      const values = [
+        xml(
+          "message",
+          { id: "core-reset", "xml:lang": "pl" },
+          xml("body", { "xml:lang": "" }, "reset"),
+          xml(
+            "extra",
+            { xmlns: EXTENSION, "xml:lang": "" },
+            xml("label", {}, "reset"),
+          ),
+        ),
+        xml("notice", {
+          xmlns: EXTENSION,
+          id: "foreign-reset",
+          "xml:lang": "",
+        }),
+      ];
+      let failure: unknown;
+      try {
+        if (method === "sendMany") {
+          await xmpp.sendMany(values);
+        } else {
+          for (const value of values) {
+            await xmpp.send(value);
+          }
+        }
+      } catch (error) {
+        failure = error;
+      }
+      expect(failure).toBeUndefined();
+      expect(readFrame(await peer.next())).toEqual(
+        readFrame(
+          `<message xmlns="${CONTENT}" id="core-reset" xml:lang="pl"><body xml:lang="">reset</body><extra xmlns="${EXTENSION}" xml:lang=""><label>reset</label></extra></message>`,
+        ),
+      );
+      expect(readFrame(await peer.next())).toEqual(
+        readFrame(
+          `<notice xmlns="${EXTENSION}" id="foreign-reset" xml:lang=""/>`,
+        ),
+      );
+      expect(
+        xmpp.streamManagement.outbound_q.map(
+          ({ stanza }: { stanza: Element }) => stanza.attrs.id,
+        ),
+      ).toEqual(["core-reset"]);
+    });
+  }
+
+  test("§8.1.5: sendMany stops at an empty root language and retains earlier valid ownership", async () => {
+    await connectStream("en", "managed");
+    const sent: string[] = [];
+    xmpp.on("send", (element: Element) => sent.push(element.attrs.id));
+    const result = await xmpp
+      .sendMany([
+        xml("message", { id: "first", "xml:lang": "pl" }),
+        xml("presence", { id: "invalid-root", "xml:lang": "" }),
+        xml("message", { id: "last", "xml:lang": "fr" }),
+      ])
+      .catch((error: Error) => error);
+    expect(result).toBeInstanceOf(TypeError);
+    await xmpp.send(xml("message", { id: "barrier" }));
+    for (const id of ["first", "barrier"]) {
+      expect(readFrame(await peer.next())[0]).toMatchObject({
+        attributes: { "{}id": id },
+      });
+    }
+    expect(sent).toEqual(["first", "barrier"]);
+    expect(
+      xmpp.streamManagement.outbound_q.map(
+        ({ stanza }: { stanza: Element }) => stanza.attrs.id,
+      ),
+    ).toEqual(["first", "barrier"]);
+    expect(
+      peer.transcript.some(
+        (frame) =>
+          frame.includes("invalid-root") || frame.includes('id="last"'),
+      ),
+    ).toBe(false);
+  });
+
+  for (const method of ["send", "sendMany"] as const) {
     test.each(["external child", "serialized document"] as const)(
       `§8.1.5: ${method} preserves valid serialized language / %s`,
       async (origin) => {
@@ -157,7 +345,7 @@ describe("RFC 6120 §§4.7.4/8.1.5 — outgoing language tag format", () => {
     );
   }
 
-  test.each(MALFORMED)(
+  test.each(["", ...MALFORMED])(
     "§4.7.4 / RFC 5646 §§2.1–2.2: reject malformed configured stream language %j before wire emission",
     async (lang) => {
       await connectStream(lang);
@@ -175,25 +363,32 @@ describe("RFC 6120 §§4.7.4/8.1.5 — outgoing language tag format", () => {
   );
 
   // Preserve the option preflight contract independently of valid serialized bytes.
-  test("§4.7.4 profile: reject invalid configuration before a serializer can conceal it", async () => {
-    await connectStream("en_US");
-    const source = `<open xmlns="${FRAMING}" to="example.test" version="1.0" xml:lang="en"/>`;
-    let calls = 0;
-    xmpp.header = () => {
-      calls += 1;
-      return source;
-    };
+  test.each(["en_US", ""])(
+    "§4.7.4 profile: reject invalid configuration before a serializer can conceal it / %j",
+    async (lang) => {
+      await connectStream(lang);
+      const source = `<open xmlns="${FRAMING}" to="example.test" version="1.0" xml:lang="en"/>`;
+      let calls = 0;
+      const statuses: string[] = [];
+      xmpp.on("status", (status: string) => statuses.push(status));
+      xmpp.header = () => {
+        calls += 1;
+        return source;
+      };
 
-    await expect(xmpp.open(xmpp.options)).rejects.toBeInstanceOf(TypeError);
-    expect(calls).toBe(0);
-    expect(peer.transcript).toEqual([]);
-    expect(xmpp.status).toBe("connect");
+      await expect(xmpp.open(xmpp.options)).rejects.toBeInstanceOf(TypeError);
+      expect(calls).toBe(0);
+      expect(peer.transcript).toEqual([]);
+      expect(xmpp.status).toBe("connect");
+      expect(xmpp.parser).toBeNull();
+      expect(statuses).toEqual([]);
 
-    await xmpp.open({ domain: "example.test", lang: "en" });
-    expect(await peer.next()).toBe(source);
-    expect(calls).toBe(1);
-    expect(peer.transcript).toEqual([source]);
-  });
+      await xmpp.open({ domain: "example.test", lang: "en" });
+      expect(await peer.next()).toBe(source);
+      expect(calls).toBe(1);
+      expect(peer.transcript).toEqual([source]);
+    },
+  );
 
   for (const location of ["stanza", "child", "descendant"] as const) {
     test.each(MALFORMED)(
@@ -302,8 +497,7 @@ describe("RFC 6120 §§4.7.4/8.1.5 — outgoing language tag format", () => {
     }
   });
 
-  // XML 1.0 §2.12 empty resets are existing behavior. RFC 6120's NMTOKEN
-  // overlap and incoming language policy remain separate audit boundaries.
+  // XML 1.0 §2.12 permits descendant resets; RFC 6120 restricts core roots.
   test("§8.1.5 / XML §2.12: preserve explicit overrides, absent tags and empty resets", async () => {
     await connectStream();
     await xmpp.open({ domain: "example.test" });
@@ -338,13 +532,18 @@ describe("RFC 6120 §§4.7.4/8.1.5 — outgoing language tag format", () => {
       undefined,
       "x-private",
     ]);
-    await xmpp.sendMany([xml("presence"), xml("message", { "xml:lang": "" })]);
+    await xmpp.sendMany([
+      xml("presence"),
+      xml("message", {}, xml("body", { "xml:lang": "" }, "reset")),
+    ]);
     expect(readFrame(await peer.next())).toEqual(
       readFrame('<presence xmlns="jabber:client"/>'),
     );
-    expect(readFrame(await peer.next())[0]).toMatchObject({
-      attributes: { [`{${XML}}lang`]: "" },
-    });
+    expect(readFrame(await peer.next())).toEqual(
+      readFrame(
+        `<message xmlns="${CONTENT}"><body xml:lang="">reset</body></message>`,
+      ),
+    );
   });
 
   test("§8.1.5 audit boundary: incoming language remains raw and document-local", async () => {
@@ -358,10 +557,11 @@ describe("RFC 6120 §§4.7.4/8.1.5 — outgoing language tag format", () => {
     const barrier = once(xmpp, "nonza", {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
+    peer.send('<message xmlns="jabber:client" xml:lang=""/>');
     peer.send('<message xmlns="jabber:client" xml:lang="not a tag"/>');
     peer.send('<message xmlns="jabber:client"/>');
     peer.send(`<barrier xmlns="${EXTENSION}"/>`);
     await barrier;
-    expect(received).toEqual(["not a tag", undefined]);
+    expect(received).toEqual(["", "not a tag", undefined]);
   });
 });

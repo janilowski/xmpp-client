@@ -33,6 +33,7 @@ const DOMAINS = [
 test.each([
   ["leading whitespace", ` ${OPEN}`],
   ["malformed language", OPEN.replace('xml:lang="en"', 'xml:lang="en_US"')],
+  ["empty language", OPEN.replace('xml:lang="en"', 'xml:lang=""')],
   [
     "duplicate attribute",
     OPEN.replace('version="1.0"', 'version="1.0" version="1.0"'),
@@ -79,6 +80,7 @@ test.each([
     });
     xmpp.reconnect.stop();
     const errors: Error[] = [];
+    const statuses: string[] = [];
     xmpp.on("error", (error: Error) => errors.push(error));
     const header = xmpp.header;
     const headerElement = xmpp.headerElement;
@@ -98,12 +100,15 @@ test.each([
     };
     try {
       await xmpp.connect(peer.url);
+      xmpp.on("status", (status: string) => statuses.push(status));
       const result = await xmpp
         .open(xmpp.options)
         .catch((error: Error) => error);
       expect(result).toBeInstanceOf(TypeError);
       expect(peer.transcript).toEqual([]);
       expect(xmpp.status).toBe("connect");
+      expect(xmpp.parser).toBeNull();
+      expect(statuses).toEqual([]);
       xmpp.header = header;
       xmpp.headerElement = headerElement;
       await xmpp.open(xmpp.options);
@@ -123,11 +128,6 @@ test.each([
   ["declaration", `<?xml version="1.0" encoding="UTF-8"?>${OPEN}`],
   ["namespace prefix", OPEN.replace("<open ", `<f:open xmlns:f="${FRAMING}" `)],
   ["omitted language", OPEN.replace(' xml:lang="en"', "")],
-  // #39 is a pending profile decision, not a claim that empty XMPP roots conform.
-  [
-    "existing empty-language policy",
-    OPEN.replace('xml:lang="en"', 'xml:lang=""'),
-  ],
 ] as const)(
   "RFC 6120 §11 / RFC 7395 §3.3.3: opening preserves its validated snapshot / %s",
   async (_name, source) => {

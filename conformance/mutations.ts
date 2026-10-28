@@ -38,6 +38,46 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "allow configured empty stream language",
+    file: "src/connection/index.js",
+    before: "if (lang != null && !isLanguageTag(lang)) {",
+    after: 'if (lang != null && lang !== "" && !isLanguageTag(lang)) {',
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: 'serializer can conceal it / ""$',
+  },
+  {
+    name: "allow empty language in a serialized opening",
+    file: "src/websocket/lib/Connection.js",
+    before: "if (lang !== undefined && !isLanguageTag(lang)) {",
+    after: 'if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {',
+    suite: "conformance/rfc6120-stream-headers.test.ts",
+    test: "serialized opening rejects before writing and recovers / empty language$",
+  },
+  {
+    name: "allow empty language in core stanza roots",
+    file: "src/connection/index.js",
+    before: '(lang !== "" || (isCore && depth === 1))',
+    after: 'lang !== ""',
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: "send rejects an empty core root language.*serialized document / message$",
+  },
+  {
+    name: "prohibit legal empty descendant language resets",
+    file: "src/connection/index.js",
+    before: '(lang !== "" || (isCore && depth === 1))',
+    after: "true",
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: "send preserves empty descendant and foreign-root resets$",
+  },
+  {
+    name: "apply core-root language restrictions to foreign nonzas",
+    file: "src/connection/index.js",
+    before: '(lang !== "" || (isCore && depth === 1))',
+    after: '(lang !== "" || depth === 1)',
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: "sendMany preserves empty descendant and foreign-root resets$",
+  },
+  {
     name: "follow cross-host stream redirects without reference identity validation",
     file: "src/connection/index.js",
     before: "if (jid(redirected.hostname).domain !== targetDomain) {",
@@ -752,7 +792,7 @@ const mutations = [
   {
     name: "accept malformed serialized opening language",
     file: "src/websocket/lib/Connection.js",
-    before: 'lang !== undefined && lang !== "" && !isLanguageTag(lang)',
+    before: "lang !== undefined && !isLanguageTag(lang)",
     after: "false",
     suite: "conformance/rfc6120-stream-headers.test.ts",
     test: "serialized opening rejects before writing and recovers / malformed language$",
@@ -1397,10 +1437,10 @@ const mutations = [
   {
     name: "send malformed configured stream language",
     file: "src/connection/index.js",
-    before: 'if (lang != null && lang !== "" && !isLanguageTag(lang)) {',
+    before: "if (lang != null && !isLanguageTag(lang)) {",
     after: "if (false) {",
     suite: "conformance/rfc6120-language-tags.test.ts",
-    test: "reject invalid configuration before a serializer can conceal it$",
+    test: 'reject invalid configuration before a serializer can conceal it / "en_US"$',
   },
   {
     name: "trust tree language instead of serialized output",

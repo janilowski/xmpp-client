@@ -176,10 +176,10 @@ describe("RFC 7395 — client wire behavior", () => {
     await xmpp.send(xml("message", {}, xml("body", {}, "hello")));
     await xmpp.sendMany([
       xml("message", { "xml:lang": "pl" }),
-      xml("message", { "xml:lang": "" }),
+      xml("message", { "xml:lang": "x-private" }),
       xml("presence"),
     ]);
-    for (const language of ["en", "pl", "", "en"]) {
+    for (const language of ["en", "pl", "x-private", "en"]) {
       const [root] = readFrame(await peer.next());
       expect(
         root &&

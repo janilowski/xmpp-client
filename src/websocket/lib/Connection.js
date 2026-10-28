@@ -47,7 +47,7 @@ class ConnectionWebSocket extends Connection {
             throw new TypeError("An initiating opening must not contain an id");
           }
           const lang = tag.attributes["xml:lang"]?.value;
-          if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {
+          if (lang !== undefined && !isLanguageTag(lang)) {
             throw new TypeError("Invalid language tag");
           }
         },

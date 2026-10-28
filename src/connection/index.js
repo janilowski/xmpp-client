@@ -549,7 +549,7 @@ class Connection extends EventEmitter {
       throw new Error("A stream is already open; use restart instead");
     }
     const { domain, lang } = options;
-    if (lang != null && lang !== "" && !isLanguageTag(lang)) {
+    if (lang != null && !isLanguageTag(lang)) {
       throw new TypeError("Invalid language tag");
     }
     const preparedDomain = resetStream(this, domain);
@@ -829,9 +829,13 @@ class Connection extends EventEmitter {
           ) {
             throw new TypeError("XMPP content elements must not use prefixes");
           }
-          // Language applies to serialized descendants, including extensions.
+          // Core roots require language tags; descendants may reset inheritance.
           const lang = tag.attributes["xml:lang"]?.value;
-          if (lang !== undefined && lang !== "" && !isLanguageTag(lang)) {
+          if (
+            lang !== undefined &&
+            (lang !== "" || (isCore && depth === 1)) &&
+            !isLanguageTag(lang)
+          ) {
             throw new TypeError("Invalid language tag");
           }
         },
