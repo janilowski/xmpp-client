@@ -1,8 +1,9 @@
-import { expect, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { client, xml } from "../src/client/index.js";
 import parse from "../src/xml/lib/parse.js";
-import type { Element } from "../types/index.js";
+import type { ClientOptions, Element } from "../types/index.js";
 import { ScriptedPeer } from "./peer.ts";
+import { readFrame } from "./xml.ts";
 
 const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
@@ -211,6 +212,336 @@ test.each([
     }
   },
 );
+
+describe("RFC 6120 §7.7.1 — requested resource preparation", () => {
+  const MAX_RESOURCE_BYTES = 1023;
+  const CONTENT = "jabber:client";
+  const PROBE = "urn:test:resource-preparation";
+  const encoder = new TextEncoder();
+  const SOURCES = ["option", "callback"] as const;
+  const valid = [
+    ["ASCII", "R".repeat(1023), "R".repeat(1023)],
+    ["lowercase ASCII", "r".repeat(1023), "r".repeat(1023)],
+    ["fullwidth preserved", "Ａ".repeat(341), "Ａ".repeat(341)],
+    ["XML escaping", " &<".repeat(341), " &<".repeat(341)],
+    ["supplementary", `${"🙂".repeat(255)}abc`, `${"🙂".repeat(255)}abc`],
+    ["NFC contraction", `${"e\u0301".repeat(511)}a`, `${"é".repeat(511)}a`],
+    ["non-ASCII spaces", "\u2003".repeat(1023), " ".repeat(1023)],
+    [
+      "NFC expansion",
+      `${"\u0344".repeat(255)}abc`,
+      `${"\u0308\u0301".repeat(255)}abc`,
+    ],
+  ] as const;
+  const invalid = [
+    ["ASCII", "R".repeat(1024), "R".repeat(1024)],
+    ["fullwidth preserved", `${"Ａ".repeat(341)}a`, `${"Ａ".repeat(341)}a`],
+    ["multibyte", "é".repeat(512), "é".repeat(512)],
+    ["supplementary", "🙂".repeat(256), "🙂".repeat(256)],
+    ["non-ASCII spaces", "\u2003".repeat(1024), " ".repeat(1024)],
+    ["NFC expansion", "\u0344".repeat(256), "\u0308\u0301".repeat(256)],
+  ] as const;
+
+  // RFC 7622 §§3.4/4 (client SHOULD) and RFC 8265 §4.2. Our strict policy
+  // prepares or rejects locally; a permissive peer never hides a leaked IQ.
+  function resourceClient(resource: ClientOptions["resource"]) {
+    const peer = bindingPeer((iq, remote) => {
+      remote.send(
+        `<iq xmlns="${CONTENT}" id="${iq.attrs.id}" type="result">${VALID_BIND}</iq>`,
+      );
+    });
+    const xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      username: "user",
+      password: "secret",
+      resource,
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    const initialIdentity = String(xmpp.jid);
+    const errors: Error[] = [];
+    const online: string[] = [];
+    const sent: string[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    xmpp.on("online", (address: { toString(): string }) =>
+      online.push(String(address)),
+    );
+    xmpp.on("send", (element: Element) => {
+      if (element.is("iq", CONTENT) && element.getChild("bind", BIND)) {
+        sent.push(element.attrs.id);
+      }
+    });
+    async function start() {
+      let watchdog: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          xmpp.start().then(
+            (address) => ({
+              kind: "result" as const,
+              address: String(address),
+            }),
+            (error: Error) => ({ kind: "error" as const, error }),
+          ),
+          new Promise<{ kind: "deadline" }>((resolve) => {
+            watchdog = setTimeout(
+              () => resolve({ kind: "deadline" }),
+              TIMEOUT_MS * 3,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(watchdog);
+      }
+    }
+    return { xmpp, peer, initialIdentity, errors, online, sent, start };
+  }
+
+  for (const [name, raw, prepared] of valid) {
+    test.each([...SOURCES])(
+      `RFC 7622 §§3.4/4: submit exactly 1023 prepared octets / ${name} / %s`,
+      async (source) => {
+        let calls = 0;
+        const fixture = resourceClient(
+          source === "option"
+            ? raw
+            : async () => {
+                calls++;
+                return raw;
+              },
+        );
+        const { xmpp, peer, errors, online, sent } = fixture;
+        try {
+          expect(encoder.encode(prepared).byteLength).toBe(MAX_RESOURCE_BYTES);
+          if (name === "NFC contraction" || name === "non-ASCII spaces") {
+            expect(encoder.encode(raw).byteLength).toBeGreaterThan(
+              MAX_RESOURCE_BYTES,
+            );
+          }
+          expect(await fixture.start()).toEqual({
+            kind: "result",
+            address: FULL_JID,
+          });
+          const frames = peer.transcript.filter((frame) =>
+            frame.startsWith("<iq"),
+          );
+          expect(frames).toHaveLength(1);
+          expect(readFrame(frames[0]).slice(1)).toEqual([
+            { open: `{${BIND}}bind`, attributes: {} },
+            { open: `{${BIND}}resource`, attributes: {} },
+            { text: prepared },
+            { close: `{${BIND}}resource` },
+            { close: `{${BIND}}bind` },
+            { close: `{${CONTENT}}iq` },
+          ]);
+          expect(readFrame(frames[0])[0]).toMatchObject({
+            open: `{${CONTENT}}iq`,
+            attributes: { "{}type": "set" },
+          });
+          expect(sent).toHaveLength(1);
+          expect(calls).toBe(source === "callback" ? 1 : 0);
+          // RFC 6120 §7.7.1 permits the server to override our preference.
+          expect(String(xmpp.jid)).toBe(FULL_JID);
+          expect(online).toEqual([FULL_JID]);
+          expect(errors).toEqual([]);
+          expect(peer.errors).toEqual([]);
+        } finally {
+          await xmpp.stop();
+          await peer.stop();
+        }
+      },
+    );
+  }
+
+  for (const [name, raw, prepared] of invalid) {
+    test.each([...SOURCES])(
+      `RFC 7622 §§3.4/4: reject 1024 prepared octets before binding / ${name} / %s`,
+      async (source) => {
+        let selected = raw;
+        let calls = 0;
+        const fixture = resourceClient(
+          source === "option"
+            ? selected
+            : async () => {
+                calls++;
+                return selected;
+              },
+        );
+        const { xmpp, peer, initialIdentity, errors, online, sent } = fixture;
+        let recovery: ReturnType<typeof resourceClient> | undefined;
+        let replacement: ScriptedPeer | undefined;
+        try {
+          expect(encoder.encode(prepared).byteLength).toBe(
+            MAX_RESOURCE_BYTES + 1,
+          );
+          if (name === "NFC expansion") {
+            expect(encoder.encode(raw).byteLength).toBeLessThanOrEqual(
+              MAX_RESOURCE_BYTES,
+            );
+          }
+          const outcome = await fixture.start();
+          expect(outcome.kind).toBe("error");
+          expect(outcome).toMatchObject({ error: expect.any(TypeError) });
+          expect(String(xmpp.jid)).toBe(initialIdentity);
+          expect(xmpp.jid?.getResource()).toBe("");
+          expect(online).toEqual([]);
+          expect(calls).toBe(source === "callback" ? 1 : 0);
+          const routed = await xmpp
+            .send(
+              xml("message", { id: "unauthorized", to: "other@remote.test/r" }),
+            )
+            .catch((error: Error) => error);
+          expect(routed).toBeInstanceOf(Error);
+          // Closing settles pending real writes before inspecting the transcript.
+          await xmpp.stop();
+          await peer.waitForClose();
+          expect(
+            peer.transcript.some(
+              (frame) =>
+                frame.startsWith("<iq") || frame.includes('id="unauthorized"'),
+            ),
+          ).toBe(false);
+          expect(sent).toEqual([]);
+          expect(online).toEqual([]);
+          expect(errors).toHaveLength(1);
+          expect(errors[0]).toBeInstanceOf(TypeError);
+          expect(peer.errors).toEqual([]);
+
+          if (source === "option") {
+            // Fixed options are captured at construction, not hot-reconfigurable.
+            recovery = resourceClient("Re\u0301s");
+          } else {
+            selected = "Re\u0301s";
+            replacement = bindingPeer((iq, remote) =>
+              remote.send(
+                `<iq xmlns="${CONTENT}" id="${iq.attrs.id}" type="result">${VALID_BIND}</iq>`,
+              ),
+            );
+            xmpp.options = { ...xmpp.options, service: replacement.url };
+            recovery = fixture;
+          }
+          expect(await recovery.start()).toEqual({
+            kind: "result",
+            address: FULL_JID,
+          });
+          const recoveredPeer = replacement ?? recovery.peer;
+          const requests = recoveredPeer.transcript.filter((frame) =>
+            frame.startsWith("<iq"),
+          );
+          expect(requests).toHaveLength(1);
+          expect(readFrame(requests[0])).toContainEqual({ text: "Rés" });
+          expect(recovery.online).toEqual([FULL_JID]);
+          expect(String(recovery.xmpp.jid)).toBe(FULL_JID);
+          expect(calls).toBe(source === "callback" ? 2 : 0);
+          expect(recoveredPeer.errors).toEqual([]);
+        } finally {
+          if (recovery && recovery !== fixture) {
+            await recovery.xmpp.stop();
+            await recovery.peer.stop();
+          }
+          await xmpp.stop();
+          await replacement?.stop();
+          await peer.stop();
+        }
+      },
+    );
+  }
+
+  test("RFC 6120 §7.7.1: async resource selection gates binding until it resolves", async () => {
+    const entered = Promise.withResolvers<void>();
+    const selected = Promise.withResolvers<string>();
+    let calls = 0;
+    const fixture = resourceClient(async () => {
+      calls++;
+      entered.resolve();
+      return selected.promise;
+    });
+    const { xmpp, peer, initialIdentity, online, sent, errors } = fixture;
+    const starting = fixture.start();
+    try {
+      expect(
+        await Promise.race([
+          entered.promise.then(() => "callback"),
+          starting.then((outcome) => outcome.kind),
+        ]),
+      ).toBe("callback");
+      await xmpp.send(xml("probe", { xmlns: PROBE }));
+      for (;;) {
+        const root = readFrame(await peer.next())[0];
+        if ("open" in root && root.open === `{${PROBE}}probe`) {
+          break;
+        }
+      }
+      expect(peer.transcript.some((value) => value.startsWith("<iq"))).toBe(
+        false,
+      );
+      expect(sent).toEqual([]);
+      expect(online).toEqual([]);
+      expect(String(xmpp.jid)).toBe(initialIdentity);
+      expect(calls).toBe(1);
+      selected.resolve("Re\u0301s");
+      expect(await starting).toEqual({ kind: "result", address: FULL_JID });
+      const requests = peer.transcript.filter((value) =>
+        value.startsWith("<iq"),
+      );
+      expect(requests).toHaveLength(1);
+      expect(readFrame(requests[0])).toContainEqual({ text: "Rés" });
+      expect(sent).toHaveLength(1);
+      expect(online).toEqual([FULL_JID]);
+      expect(calls).toBe(1);
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      selected.resolve("recovery");
+      await xmpp.stop();
+      await starting;
+      await peer.stop();
+    }
+  });
+
+  test.each([
+    ["omitted option", undefined],
+    ["empty option", ""],
+    ["empty async callback", async () => ""],
+  ] as const)(
+    "RFC 6120 §7.6.1: %s delegates resource allocation to the server",
+    async (_name, resource) => {
+      let calls = 0;
+      const selected =
+        typeof resource === "function"
+          ? async () => {
+              calls++;
+              return resource();
+            }
+          : resource;
+      const fixture = resourceClient(selected);
+      const { xmpp, peer, online, sent, errors } = fixture;
+      try {
+        expect(await fixture.start()).toEqual({
+          kind: "result",
+          address: FULL_JID,
+        });
+        const requests = peer.transcript.filter((frame) =>
+          frame.startsWith("<iq"),
+        );
+        expect(requests).toHaveLength(1);
+        expect(readFrame(requests[0]).slice(1)).toEqual([
+          { open: `{${BIND}}bind`, attributes: {} },
+          { close: `{${BIND}}bind` },
+          { close: `{${CONTENT}}iq` },
+        ]);
+        expect(sent).toHaveLength(1);
+        expect(calls).toBe(typeof resource === "function" ? 1 : 0);
+        expect(online).toEqual([FULL_JID]);
+        expect(errors).toEqual([]);
+        expect(peer.errors).toEqual([]);
+      } finally {
+        await xmpp.stop();
+        await peer.stop();
+      }
+    },
+  );
+});
 
 test("RFC 6120 §§7.1/7.4: premature binding cannot bypass authentication", async () => {
   const peer = new ScriptedPeer((frame, remote) => {

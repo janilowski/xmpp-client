@@ -38,6 +38,66 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "skip requested resource preparation",
+    file: "src/resource-binding/index.js",
+    before: "let selected = requested && prepareResource(requested);",
+    after: "let selected = requested;",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "reject 1024 prepared octets before binding / NFC expansion / callback$",
+  },
+  {
+    name: "lowercase opaque requested resources",
+    file: "src/resource-binding/index.js",
+    before: "let selected = requested && prepareResource(requested);",
+    after:
+      "let selected = requested && prepareResource(requested).toLowerCase();",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "submit exactly 1023 prepared octets / ASCII / option$",
+  },
+  {
+    name: "width-fold opaque requested resources",
+    file: "src/resource-binding/index.js",
+    before: "let selected = requested && prepareResource(requested);",
+    after:
+      'let selected = requested && prepareResource(requested).normalize("NFKC");',
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "submit exactly 1023 prepared octets / fullwidth preserved / callback$",
+  },
+  {
+    name: "reject requested resource bytes before preparation",
+    file: "src/resource-binding/index.js",
+    before: "let selected = requested && prepareResource(requested);",
+    after:
+      'if (requested && new TextEncoder().encode(requested).length > 1023) { throw new TypeError("Raw resource too long"); }\n    let selected = requested && prepareResource(requested);',
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "submit exactly 1023 prepared octets / (NFC contraction|non-ASCII spaces) / option$",
+  },
+  {
+    name: "count requested resource UTF-16 units instead of UTF-8 octets",
+    file: "src/jid/lib/precis.js",
+    before: "encoder.encode(value).length > MAX_PART_BYTES",
+    after: "value.length > MAX_PART_BYTES",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "reject 1024 prepared octets before binding / supplementary / callback$",
+  },
+  {
+    name: "send an empty resource instead of omitting it",
+    file: "src/resource-binding/index.js",
+    before: 'resource && xml("resource", {}, resource),',
+    after: 'xml("resource", {}, resource),',
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "empty option delegates resource allocation to the server$",
+  },
+  {
+    name: "override the server-selected resource with the request",
+    file: "src/resource-binding/index.js",
+    before: "const jid = parseBinding(result);",
+    after:
+      "const jid = parseBinding(result);\n  if (resource) { jid.setResource(resource); }",
+    suite: "conformance/rfc6120-binding.test.ts",
+    test: "submit exactly 1023 prepared octets / ASCII / callback$",
+  },
+  {
     name: "skip outgoing to-slot preparation",
     file: "src/connection/index.js",
     before: 'for (const attribute of ["to", "from"]) {',

@@ -221,6 +221,12 @@ server-selected replacement resources are accepted. Binding errors are surfaced
 as stanza errors, without automatic resource retries or credential replacement.
 RFC 6120 §7.7.3's retry allowance is a server obligation, not a client retry mandate.
 
+The fixed or asynchronous `resource` option is prepared as an OpaqueString before
+the binding IQ is sent. The 1023-octet UTF-8 limit applies after preparation;
+invalid choices fail locally. An omitted or empty choice requests server
+allocation and never sends an empty `<resource/>`. Bind2 `<tag>` is not a
+resourcepart and does not use this option's preparation policy.
+
 SASL2 success requires one same-namespace, text-only account identifier. It is
 bare before binding and full after requested, successful Bind2; it need not match
 the authentication username. Inline resumption validates the retained session
