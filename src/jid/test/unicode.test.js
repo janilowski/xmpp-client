@@ -5,6 +5,8 @@ import * as unicode from "../lib/unicode.js";
 import { prepareLocal, prepareResource } from "../lib/precis.js";
 import jid from "../index.js";
 
+const RUNTIME_PROBE_TIMEOUT_MS = 5000;
+
 test("all Unicode 16 property tables preserve their complete repertoire", () => {
   // Frozen before representation changes, independently of the new encoder.
   const names = [
@@ -46,33 +48,53 @@ test("all Unicode 16 property tables preserve their complete repertoire", () => 
   );
 }, 10000);
 
-test("fails closed when the runtime lacks Unicode 16 case mapping", () => {
-  const result = spawnSync(
-    process.execPath,
-    [
-      "-e",
-      `
+test.each(["case mapping", "normalization"])(
+  "fails closed when the runtime lacks Unicode 16 %s",
+  (probe) => {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "-e",
+        `
     const lower = String.prototype.toLowerCase;
-    String.prototype.toLowerCase = function () {
-      return String(this) === "\\u1c89" ? "\\u1c89" : lower.call(this);
-    };
+    const normalize = String.prototype.normalize;
+    if (${JSON.stringify(probe)} === "case mapping") {
+      String.prototype.toLowerCase = function () {
+        return String(this) === "\\u1c89" ? "\\u1c89" : lower.call(this);
+      };
+    } else {
+      String.prototype.normalize = function (form) {
+        return String(this) === "\\u{1ccf0}" && form === "NFKC"
+          ? "\\u{1ccf0}" : normalize.call(this, form);
+      };
+    }
     const { default: jid } = await import("./src/jid/index.js");
+    // Keep the import-time capability decision, not broken methods during calls.
+    String.prototype.toLowerCase = lower;
+    String.prototype.normalize = normalize;
     let rejected = false;
-    try { jid("\\u1c89@example.com"); } catch { rejected = true; }
+    try { jid("\\u1c89@example.com"); } catch (error) { rejected = error instanceof TypeError; }
     let alabelRejected = false;
-    try { jid("xn--bcher-kva.example"); } catch { alabelRejected = true; }
-    console.log(JSON.stringify({ rejected, alabelRejected, ascii: jid("A@example.com").local }));
+    try { jid("xn--bcher-kva.example"); } catch (error) { alabelRejected = error instanceof TypeError; }
+    let domainRejected = false;
+    try { jid("bücher.example"); } catch (error) { domainRejected = error instanceof TypeError; }
+    let resourceRejected = false;
+    try { jid("example.com/é"); } catch (error) { resourceRejected = error instanceof TypeError; }
+    console.log(JSON.stringify({ rejected, alabelRejected, domainRejected, resourceRejected, ascii: jid("A@example.com/ASCII").toString() }));
   `,
-    ],
-    { encoding: "utf8" },
-  );
-  expect(result.status).toBe(0);
-  expect(JSON.parse(result.stdout)).toEqual({
-    rejected: true,
-    alabelRejected: true,
-    ascii: "a",
-  });
-});
+      ],
+      { encoding: "utf8", timeout: RUNTIME_PROBE_TIMEOUT_MS },
+    );
+    expect(result.status).toBe(0);
+    expect(JSON.parse(result.stdout)).toEqual({
+      rejected: true,
+      alabelRejected: true,
+      domainRejected: true,
+      resourceRejected: true,
+      ascii: "a@example.com/ASCII",
+    });
+  },
+);
 
 test("rejects Unicode 17 letters before runtime case mapping", () => {
   for (const char of ["\uA7D2", "\uA7D4"]) {

@@ -10,6 +10,11 @@ import { ScriptedPeer } from "./conformance/peer.ts";
 import { RawPeer } from "./conformance/raw-peer.ts";
 import { readFrame } from "./conformance/xml.ts";
 import { rolldown } from "rolldown";
+import {
+  CONTEXT_VECTORS,
+  MAPPING_VECTORS,
+  VERSION_VECTORS,
+} from "./conformance/rfc7622/vectors.js";
 
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="browser-peer"/>';
@@ -292,6 +297,106 @@ test("Chromium bundled JIDs enforce RFC 7622 profiles", async () => {
     await page.close();
   }
 });
+
+test("Chromium bundled JIDs preserve shared RFC 5892 contexts and Unicode 16 repertoire", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const vectors = [
+      ...CONTEXT_VECTORS,
+      ...MAPPING_VECTORS,
+      ...VERSION_VECTORS,
+    ];
+    const actual = await page.evaluate(
+      (vectors) => ({
+        caseMapping: "\u1c89".toLowerCase(),
+        normalization: "\u{1ccf0}".normalize("NFKC"),
+        results: vectors.map(({ input }) => {
+          try {
+            return globalThis.XMPP.jid(input).toString();
+          } catch (error) {
+            return error instanceof TypeError ? null : { error: error.name };
+          }
+        }),
+      }),
+      vectors,
+    );
+    expect(actual.caseMapping).toBe("\u1c8a");
+    expect(actual.normalization).toBe("0");
+    for (let index = 0; index < vectors.length; index++) {
+      const { section, slot, input, expected } = vectors[index];
+      expect({ section, slot, input, actual: actual.results[index] }).toEqual({
+        section,
+        slot,
+        input,
+        actual: expected,
+      });
+    }
+  } finally {
+    await page.close();
+  }
+});
+
+test.each(["case mapping", "normalization"])(
+  "Chromium bundled JIDs fail closed with inadequate Unicode 16 %s",
+  async (probe) => {
+    // Each page has a fresh realm and initializes the bundle only after the probe.
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${origin.address().port}`);
+      await page.evaluate((probe) => {
+        const lower = String.prototype.toLowerCase;
+        const normalize = String.prototype.normalize;
+        globalThis.restoreUnicodeMethods = () => {
+          String.prototype.toLowerCase = lower;
+          String.prototype.normalize = normalize;
+        };
+        if (probe === "case mapping") {
+          String.prototype.toLowerCase = function () {
+            return String(this) === "\u1c89" ? "\u1c89" : lower.call(this);
+          };
+        } else {
+          String.prototype.normalize = function (form) {
+            return String(this) === "\u{1ccf0}" && form === "NFKC"
+              ? "\u{1ccf0}"
+              : normalize.call(this, form);
+          };
+        }
+      }, probe);
+      await page.addScriptTag({ path: "dist/xmpp.min.js" });
+      const actual = await page.evaluate(() => {
+        // Only the captured capability decision remains inadequate during calls.
+        globalThis.restoreUnicodeMethods();
+        const { jid } = globalThis.XMPP;
+        const inputs = [
+          "\u1c89@example.com",
+          "bücher.example",
+          "xn--bcher-kva.example",
+          "example.com/é",
+        ];
+        return {
+          rejected: inputs.map((input) => {
+            try {
+              jid(input);
+              return false;
+            } catch (error) {
+              return error instanceof TypeError;
+            }
+          }),
+          ascii: jid("A@example.com/ASCII").toString(),
+        };
+      });
+      expect(actual).toEqual({
+        rejected: [true, true, true, true],
+        ascii: "a@example.com/ASCII",
+      });
+    } finally {
+      await page.evaluate(() => globalThis.restoreUnicodeMethods?.());
+      await page.close();
+    }
+  },
+);
 
 test.each([null, "other"])(
   "Chromium rejects an actual handshake selecting %s",

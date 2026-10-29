@@ -38,6 +38,38 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "ignore inadequate Unicode runtime support",
+    file: "src/jid/lib/precis.js",
+    before: "if (!supportsUnicode16 && /[\\u0080-\\u{10ffff}]/u.test(value)) {",
+    after: "if (false) {",
+    suite: "src/jid/test/unicode.test.js",
+    test: "fails closed when the runtime lacks Unicode 16",
+  },
+  {
+    name: "omit the Unicode case-mapping capability probe",
+    file: "src/jid/lib/precis.js",
+    before: 'String.prototype.toLowerCase.call("\\u1c89") === "\\u1c8a"',
+    after: "true",
+    suite: "src/jid/test/unicode.test.js",
+    test: "fails closed when the runtime lacks Unicode 16 case mapping$",
+  },
+  {
+    name: "omit the Unicode normalization capability probe",
+    file: "src/jid/lib/precis.js",
+    before: 'String.prototype.normalize.call("\\u{1ccf0}", "NFKC") === "0"',
+    after: "true",
+    suite: "src/jid/test/unicode.test.js",
+    test: "fails closed when the runtime lacks Unicode 16 normalization$",
+  },
+  {
+    name: "map future Unicode input before repertoire validation",
+    file: "src/jid/lib/precis.js",
+    before: "if (unicode.unassigned.test(value)) {",
+    after: "if (false) {",
+    suite: "conformance/rfc7622.test.js",
+    test: "Unicode 17 outside selected repertoire",
+  },
+  {
     name: "let anonymous fixed fields hide malformed capability data",
     file: "src/caps/verification.ts",
     before:
@@ -3215,6 +3247,9 @@ for (const mutation of mutations) {
       recursive: true,
     });
     cpSync("conformance/xep0115", join(directory, "conformance/xep0115"), {
+      recursive: true,
+    });
+    cpSync("conformance/rfc7622", join(directory, "conformance/rfc7622"), {
       recursive: true,
     });
     for (const file of [

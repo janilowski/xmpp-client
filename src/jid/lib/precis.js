@@ -3,8 +3,10 @@ import * as unicode from "./unicode.js";
 export const MAX_PART_BYTES = 1023;
 const MAX_PROFILE_PASSES = 4; // RFC 8265 §5: first pass plus three retries.
 const encoder = new TextEncoder();
+// Probe the runtime; minifiers can evaluate methods on string literals at build time.
 const supportsUnicode16 =
-  "\u1c89".toLowerCase() === "\u1c8a" && "\u{1ccf0}".normalize("NFKC") === "0";
+  String.prototype.toLowerCase.call("\u1c89") === "\u1c8a" &&
+  String.prototype.normalize.call("\u{1ccf0}", "NFKC") === "0";
 
 export function checkRepertoire(value) {
   if (!supportsUnicode16 && /[\u0080-\u{10ffff}]/u.test(value)) {

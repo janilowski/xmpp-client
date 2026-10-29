@@ -1,10 +1,31 @@
 import { describe, expect, test } from "bun:test";
 import jid, { JID, escapeLocal } from "../src/jid/index.js";
+import {
+  CONTEXT_VECTORS,
+  MAPPING_VECTORS,
+  VERSION_VECTORS,
+} from "./rfc7622/vectors.js";
 
 // RFC 7622 §§3–4, verified errata 4534/4560, RFC 9844 §3.
 // RFC 8264/8265 replace RFC 7564/7613; Unicode 16 is the selected repertoire.
 // Wire preparation/correlation: rfc7622-wire.test.ts.
 // Protocol-slot octet boundaries and SM ownership: rfc7622-address-lengths.test.ts.
+describe("RFC 7622 — cross-runtime contextual and repertoire vectors", () => {
+  for (const { section, slot, input, expected } of [
+    ...CONTEXT_VECTORS,
+    ...MAPPING_VECTORS,
+    ...VERSION_VECTORS,
+  ]) {
+    test(`${section} / ${slot} / ${JSON.stringify(input)}`, () => {
+      if (expected === null) {
+        expect(() => jid(input)).toThrow(TypeError);
+      } else {
+        expect(jid(input).toString()).toBe(expected);
+      }
+    });
+  }
+});
+
 describe("RFC 7622 §§3.1, 3.5, 4 — address structure and comparison", () => {
   for (const value of [
     "juliet@example.com",
