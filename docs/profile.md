@@ -190,6 +190,13 @@ publishing or capability advertisement is implemented by this module.
   Closing transports reject stream initiation/restart while continuing incoming
   processing until reciprocal closure; a fresh transport permits initiation
   again (RFC 6120 §4.4; RFC 7395 §3.6).
+- Negotiated Stream Management checks idle peers every five minutes by default
+  (RFC 6120 §4.6.4). Outgoing stanzas still request acknowledgement after a
+  250-ms debounce; a pending check allows 60 seconds for incoming traffic.
+  These are local policies: an otherwise silent broken stream can take six
+  minutes to detect. Existing `streamManagement.requestAckInterval` overrides
+  remain available; zero disables periodic probes. WebSocket framing forbids
+  whitespace keepalives (RFC 7395 §3.8).
 - IQ correlation checks sender and ID. Full destinations require the same full
   JID; bare destinations permit a resource. No-`to` requests accept no sender,
   the server domain or the client's bare JID. Own-bare/server destinations also

@@ -26,6 +26,8 @@ const BIND2 = "urn:xmpp:bind:0";
 const COUNTER_MODULUS = 2 ** 32;
 const DEFAULT_MAX_STANZAS = 1024;
 const DEFAULT_MAX_BYTES = 8 * 1024 * 1024;
+// RFC 6120 §4.6.4 recommends no more than one idle check per five minutes.
+const DEFAULT_IDLE_INTERVAL_MS = 300_000;
 const QUEUE_ERRORS = "https://github.com/janilowski/xmpp-client/errors";
 const STREAM = "http://etherx.jabber.org/streams";
 const encoder = new TextEncoder();
@@ -94,7 +96,7 @@ export default function streamManagement({
     inbound: 0,
     max: null,
     timeout: 60_000,
-    requestAckInterval: 30_000,
+    requestAckInterval: DEFAULT_IDLE_INTERVAL_MS,
     requestAckDebounce: 250,
   });
 
