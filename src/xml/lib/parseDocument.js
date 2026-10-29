@@ -3,7 +3,7 @@ import Element from "ltx/lib/Element.js";
 import XMLError from "./XMLError.js";
 
 export const XML_CONTEXT = { DOCUMENT: "document", XMPP: "xmpp" };
-const XML_DIRECTION = { INPUT: "input", OUTPUT: "output" };
+export const XML_DIRECTION = { INPUT: "input", OUTPUT: "output" };
 export const MAX_XML_BYTES = 1024 * 1024;
 const MAX_XML_DEPTH = 64;
 const UNPAIRED_SURROGATE = /[\uD800-\uDFFF]/u;
@@ -65,22 +65,29 @@ export function validateDocument(
 }
 
 /** Validate the complete document before exposing its tree to a consumer. */
-export default function parseDocument(source, context = XML_CONTEXT.DOCUMENT) {
+export default function parseDocument(
+  source,
+  context = XML_CONTEXT.DOCUMENT,
+  direction = XML_DIRECTION.INPUT,
+) {
+  // Generated output has already passed its send policy, not receive-size limits.
+  const incoming = direction !== XML_DIRECTION.OUTPUT;
   if (
-    source.length > MAX_XML_BYTES ||
-    encoder.encode(source).length > MAX_XML_BYTES
+    incoming &&
+    (source.length > MAX_XML_BYTES ||
+      encoder.encode(source).length > MAX_XML_BYTES)
   ) {
     const error = new XMLError("XML document exceeds size limit");
     error.condition = "policy-violation";
     throw error;
   }
-  const parser = createParser(source, context, XML_DIRECTION.INPUT);
+  const parser = createParser(source, context, direction);
   let root;
   let cursor;
   let depth = 0;
   parser.on("opentag", (tag) => {
     depth += 1;
-    if (depth > MAX_XML_DEPTH) {
+    if (incoming && depth > MAX_XML_DEPTH) {
       const error = new XMLError("XML document exceeds depth limit");
       error.condition = "policy-violation";
       throw error;

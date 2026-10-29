@@ -1681,7 +1681,7 @@ const mutations = [
     name: "apply core IQ requirements to foreign nonzas",
     file: "src/connection/index.js",
     before:
-      'this.NS === NS_JABBER_CLIENT && name === "iq" && namespace === this.NS;',
+      'this.NS === NS_JABBER_CLIENT &&\n          name === "iq" &&\n          namespace === this.NS;',
     after: 'name === "iq";',
     suite: "conformance/rfc6120-outgoing-iq.test.ts",
     test: "send leaves foreign IQ-named nonzas outside IQ rules$",
@@ -1793,7 +1793,7 @@ const mutations = [
   {
     name: "apply core error validation to foreign stanza-named nonzas",
     file: "src/connection/index.js",
-    before: 'namespace === this.NS &&\n        (name === "message"',
+    before: 'namespace === this.NS &&\n          (name === "message"',
     after: '(name === "message"',
     suite: "conformance/rfc6120-outgoing-errors.test.ts",
     test: "send preserves foreign stanza-named nonzas$",
@@ -2054,7 +2054,7 @@ const mutations = [
   {
     name: "generate prefixes for XMPP content elements",
     file: "src/connection/index.js",
-    before: "tag.prefix &&\n            tag.uri === this.NS",
+    before: "tag.prefix &&\n              tag.uri === this.NS",
     after: "false",
     suite: "conformance/rfc6120-content-prefixes.test.ts",
     test: "send rejects a prefixed content element.*custom serializer root$",
@@ -2078,7 +2078,7 @@ const mutations = [
   {
     name: "reject foreign prefixes by spelling instead of namespace",
     file: "src/connection/index.js",
-    before: "tag.prefix &&\n            tag.uri === this.NS",
+    before: "tag.prefix &&\n              tag.uri === this.NS",
     after: "tag.prefix",
     suite: "conformance/rfc6120-content-prefixes.test.ts",
     test: "send preserves permitted prefixes.*a foreign prefixed root$",

@@ -13,6 +13,7 @@ import isLanguageTag from "../xml/lib/language.js";
 import createStanzaErrorValidator from "../xml/lib/stanzaError.js";
 import { ConnectionClosedError } from "../events/lib/operation.js";
 import { sendPolicies, takeReplay } from "./lib/sendPolicy.js";
+import { outgoingPresence } from "./lib/outgoingPresence.ts";
 
 import StreamError from "./lib/StreamError.js";
 import hasContentPrefix from "./lib/hasContentPrefix.js";
@@ -745,139 +746,170 @@ class Connection extends EventEmitter {
           ];
         })
       : [];
-    const source = element.toString();
-    try {
-      let isRoot = true;
-      const isIQ =
-        this.NS === NS_JABBER_CLIENT && name === "iq" && namespace === this.NS;
-      const isCore =
-        this.NS === NS_JABBER_CLIENT &&
-        namespace === this.NS &&
-        (name === "message" || name === "presence" || name === "iq");
-      let depth = 0;
-      let iqType;
-      let iqChildren = 0;
-      let stanzaType;
-      let stanzaErrors = 0;
-      let errorValidator;
-      validateDocument(
-        source,
-        XML_CONTEXT.XMPP,
-        (tag) => {
-          depth += 1;
-          if (isRoot) {
-            isRoot = false;
-            if (
-              tag.local !== name ||
-              tag.uri !== namespace ||
-              element.getName() !== name ||
-              (element.getNS()?.toString(10) ?? "") !== namespace ||
-              (namespace === NS_JABBER_CLIENT &&
-                (name === "message" || name === "presence" || name === "iq") &&
-                (elementName !== name || element.name !== name))
-            ) {
-              throw new TypeError("Serialized element does not match its root");
-            }
-            for (const [attribute, expected] of attributes) {
-              const value = element.attrs[attribute];
-              const actual =
-                value == null
-                  ? undefined
-                  : typeof value === "string"
-                    ? value
-                    : value.toString(10);
+    let source = element.toString();
+    const validate = (source) => {
+      try {
+        let isRoot = true;
+        const isIQ =
+          this.NS === NS_JABBER_CLIENT &&
+          name === "iq" &&
+          namespace === this.NS;
+        const isCore =
+          this.NS === NS_JABBER_CLIENT &&
+          namespace === this.NS &&
+          (name === "message" || name === "presence" || name === "iq");
+        let depth = 0;
+        let iqType;
+        let iqChildren = 0;
+        let stanzaType;
+        let stanzaErrors = 0;
+        let errorValidator;
+        validateDocument(
+          source,
+          XML_CONTEXT.XMPP,
+          (tag) => {
+            depth += 1;
+            if (isRoot) {
+              isRoot = false;
               if (
-                tag.attributes[attribute]?.value !== expected ||
-                actual !== expected
+                tag.local !== name ||
+                tag.uri !== namespace ||
+                element.getName() !== name ||
+                (element.getNS()?.toString(10) ?? "") !== namespace ||
+                (namespace === NS_JABBER_CLIENT &&
+                  (name === "message" ||
+                    name === "presence" ||
+                    name === "iq") &&
+                  (elementName !== name || element.name !== name))
               ) {
                 throw new TypeError(
-                  "Serialized stanza does not match its attributes",
+                  "Serialized element does not match its root",
+                );
+              }
+              for (const [attribute, expected] of attributes) {
+                const value = element.attrs[attribute];
+                const actual =
+                  value == null
+                    ? undefined
+                    : typeof value === "string"
+                      ? value
+                      : value.toString(10);
+                if (
+                  tag.attributes[attribute]?.value !== expected ||
+                  actual !== expected
+                ) {
+                  throw new TypeError(
+                    "Serialized stanza does not match its attributes",
+                  );
+                }
+              }
+              if (isIQ) {
+                iqType = tag.attributes.type?.value;
+                if (tag.attributes.id === undefined || !IQ_TYPES.has(iqType)) {
+                  throw new TypeError("IQ requires an id and a valid type");
+                }
+              }
+              stanzaType = tag.attributes.type?.value;
+            } else if (isIQ && depth === 2) {
+              iqChildren += 1;
+              if (
+                (iqType === "get" || iqType === "set") &&
+                RESERVED_NAMESPACES.has(tag.uri)
+              ) {
+                throw new TypeError(
+                  "IQ request payload requires an extension namespace",
                 );
               }
             }
-            if (isIQ) {
-              iqType = tag.attributes.type?.value;
-              if (tag.attributes.id === undefined || !IQ_TYPES.has(iqType)) {
-                throw new TypeError("IQ requires an id and a valid type");
-              }
-            }
-            stanzaType = tag.attributes.type?.value;
-          } else if (isIQ && depth === 2) {
-            iqChildren += 1;
             if (
-              (iqType === "get" || iqType === "set") &&
-              RESERVED_NAMESPACES.has(tag.uri)
+              isCore &&
+              depth === 2 &&
+              tag.local === "error" &&
+              tag.uri === this.NS
+            ) {
+              if (stanzaType !== "error") {
+                throw new TypeError(
+                  "Only error stanzas can contain a core error",
+                );
+              }
+              stanzaErrors += 1;
+              errorValidator = createStanzaErrorValidator(this.NS);
+            }
+            errorValidator?.open(tag);
+            if (
+              this.NS === NS_JABBER_CLIENT &&
+              tag.prefix &&
+              tag.uri === this.NS
             ) {
               throw new TypeError(
-                "IQ request payload requires an extension namespace",
+                "XMPP content elements must not use prefixes",
               );
             }
-          }
-          if (
-            isCore &&
-            depth === 2 &&
-            tag.local === "error" &&
-            tag.uri === this.NS
-          ) {
-            if (stanzaType !== "error") {
-              throw new TypeError(
-                "Only error stanzas can contain a core error",
-              );
+            // Core roots require language tags; descendants may reset inheritance.
+            const lang = tag.attributes["xml:lang"]?.value;
+            if (
+              lang !== undefined &&
+              (lang !== "" || (isCore && depth === 1)) &&
+              !isLanguageTag(lang)
+            ) {
+              throw new TypeError("Invalid language tag");
             }
-            stanzaErrors += 1;
-            errorValidator = createStanzaErrorValidator(this.NS);
-          }
-          errorValidator?.open(tag);
-          if (
-            this.NS === NS_JABBER_CLIENT &&
-            tag.prefix &&
-            tag.uri === this.NS
-          ) {
-            throw new TypeError("XMPP content elements must not use prefixes");
-          }
-          // Core roots require language tags; descendants may reset inheritance.
-          const lang = tag.attributes["xml:lang"]?.value;
-          if (
-            lang !== undefined &&
-            (lang !== "" || (isCore && depth === 1)) &&
-            !isLanguageTag(lang)
-          ) {
-            throw new TypeError("Invalid language tag");
-          }
-        },
-        () => {
-          errorValidator?.close();
-          if (depth === 2) {
-            errorValidator = undefined;
-          }
-          depth -= 1;
-          if (
-            depth === 0 &&
-            isCore &&
-            stanzaType === "error" &&
-            stanzaErrors !== 1
-          ) {
-            throw new TypeError("Error stanza requires one core error");
-          }
-          if (!isIQ || depth !== 0) {
-            return;
-          }
-          // RFC 6120 §8.2.3 counts direct children, not extension descendants.
-          if (
-            ((iqType === "get" || iqType === "set") && iqChildren !== 1) ||
-            (iqType === "result" && iqChildren > 1) ||
-            (iqType === "error" && iqChildren > 2)
-          ) {
-            throw new TypeError("Invalid IQ child structure");
-          }
-        },
-        (text) => errorValidator?.text(text),
-      );
-    } catch (error) {
-      throw new TypeError("Invalid outgoing XML", { cause: error });
-    }
+          },
+          () => {
+            errorValidator?.close();
+            if (depth === 2) {
+              errorValidator = undefined;
+            }
+            depth -= 1;
+            if (
+              depth === 0 &&
+              isCore &&
+              stanzaType === "error" &&
+              stanzaErrors !== 1
+            ) {
+              throw new TypeError("Error stanza requires one core error");
+            }
+            if (!isIQ || depth !== 0) {
+              return;
+            }
+            // RFC 6120 §8.2.3 counts direct children, not extension descendants.
+            if (
+              ((iqType === "get" || iqType === "set") && iqChildren !== 1) ||
+              (iqType === "result" && iqChildren > 1) ||
+              (iqType === "error" && iqChildren > 2)
+            ) {
+              throw new TypeError("Invalid IQ child structure");
+            }
+          },
+          (text) => errorValidator?.text(text),
+        );
+      } catch (error) {
+        throw new TypeError("Invalid outgoing XML", { cause: error });
+      }
+    };
+    validate(source);
     if (this.#generation !== generation || this.socket !== socket) {
       throw new ConnectionClosedError();
+    }
+    const preparePresence = outgoingPresence.get(this);
+    if (
+      !replay &&
+      this.NS === NS_JABBER_CLIENT &&
+      namespace === NS_JABBER_CLIENT &&
+      name === "presence" &&
+      preparePresence
+    ) {
+      // Prepare validated XML, never the caller's mutable serializer or SM replay.
+      element = await preparePresence(source, element);
+      if (this.#generation !== generation || this.socket !== socket) {
+        throw new ConnectionClosedError();
+      }
+      element.parent = this.root;
+      source = element.toString();
+      validate(source);
+      if (this.#generation !== generation || this.socket !== socket) {
+        throw new ConnectionClosedError();
+      }
     }
     const admission = sendPolicies.get(this)?.prepare({
       element,
