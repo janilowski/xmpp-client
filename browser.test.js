@@ -651,6 +651,148 @@ test("Chromium bundled SM rejects overflow before sending and recovers after ACK
   }
 });
 
+// XEP-0115 §§5–8: native browser hashing and routed discovery in the built bundle.
+test("Chromium bundled caps verifies routed presence and feature changes", async () => {
+  const caps = "http://jabber.org/protocol/caps";
+  const info = "http://jabber.org/protocol/disco#info";
+  const items = "http://jabber.org/protocol/disco#items";
+  const ping = "urn:xmpp:ping";
+  const extra = "urn:example:browser-caps";
+  // Literal independent canonical strings; no production verifier generates these.
+  const prefix = `client/web//Browser caps<${caps}<${info}<${items}<`;
+  const hashes = [prefix + `${ping}<`, prefix + `${extra}<${ping}<`].map(
+    (source) => createHash("sha1").update(source, "utf8").digest("base64"),
+  );
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(
+      async ({ caps, info, extra, hashes }) => {
+        const { client, xml } = globalThis.XMPP;
+        const options = {
+          service: "wss://[::1]:5281/xmpp-websocket",
+          domain: "localhost",
+          username: "client",
+          password: "foobar",
+          disco: {
+            identities: [
+              { category: "client", type: "web", name: "Browser caps" },
+            ],
+          },
+          caps: { node: "https://example.test/browser-caps" },
+        };
+        const sender = client({ ...options, resource: "caps-browser-sender" });
+        const receiver = client({
+          ...options,
+          resource: "caps-browser-receiver",
+        });
+        const errors = [];
+        const queries = [];
+        const announcements = [];
+        for (const entity of [sender, receiver]) {
+          entity.reconnect.stop();
+          entity.on("error", (error) => errors.push(error.message));
+        }
+        receiver.on("send", (element) => {
+          const query = element.getChild("query", info);
+          if (element.is("iq") && element.attrs.type === "get" && query) {
+            queries.push({ to: element.attrs.to, node: query.attrs.node });
+          }
+        });
+        sender.on("send", (element) => {
+          if (element.is("presence")) {
+            announcements.push({ ...element.getChild("c", caps)?.attrs });
+          }
+        });
+
+        function verified(jid, ver) {
+          return new Promise((resolve) => {
+            const finish = (value) => {
+              clearTimeout(timer);
+              receiver.off("capabilities", changed);
+              resolve(value);
+            };
+            const changed = (value) => {
+              if (
+                value.jid === jid &&
+                value.ver === ver &&
+                value.status === "verified"
+              ) {
+                finish({
+                  status: value.status,
+                  ver: value.ver,
+                  features: value.info.features,
+                });
+              }
+            };
+            const timer = setTimeout(() => finish({ status: "timeout" }), 2000);
+            receiver.on("capabilities", changed);
+            const cached = receiver.caps.get(jid);
+            if (cached) {
+              changed(cached);
+            }
+          });
+        }
+
+        try {
+          const from = String(await sender.start());
+          const to = String(await receiver.start());
+          const first = verified(from, hashes[0]);
+          await sender.send(xml("presence", { to }));
+          const initial = await first;
+          sender.disco.addFeature(extra);
+          const second = verified(from, hashes[1]);
+          await sender.send(xml("presence", { to }));
+          const changed = await second;
+          return {
+            from,
+            initial,
+            changed,
+            queries: queries.filter((query) => query.to === from),
+            announcements,
+            errors,
+          };
+        } finally {
+          await Promise.all([sender.stop(), receiver.stop()]);
+        }
+      },
+      { caps, info, extra, hashes },
+    );
+    expect(result.initial).toMatchObject({
+      status: "verified",
+      ver: hashes[0],
+    });
+    expect(result.changed).toMatchObject({
+      status: "verified",
+      ver: hashes[1],
+    });
+    expect(result.initial.features.toSorted()).toEqual(
+      [caps, info, items, ping].toSorted(),
+    );
+    expect(result.changed.features.toSorted()).toEqual(
+      [caps, info, items, ping, extra].toSorted(),
+    );
+    expect(result.queries).toEqual(
+      hashes.map((ver) => ({
+        to: result.from,
+        node: `https://example.test/browser-caps#${ver}`,
+      })),
+    );
+    expect(result.announcements).toEqual(
+      hashes.map((ver) => ({
+        xmlns: caps,
+        node: "https://example.test/browser-caps",
+        hash: "sha-1",
+        ver,
+      })),
+    );
+    expect(result.errors).toEqual([]);
+  } finally {
+    await page.close();
+  }
+});
+
 test.each([
   '<message xmlns="jabber:client"><body>unfinished',
   '<message xmlns="jabber:client"/><presence xmlns="jabber:client"/>',

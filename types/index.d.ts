@@ -211,6 +211,27 @@ export interface Disco {
   removeNode(node: string): void;
 }
 
+export interface CapsOptions {
+  /** Application software URI; requires configured discovery identities. */
+  node: string;
+}
+
+export interface CapsResult {
+  readonly jid: string;
+  readonly node: string;
+  readonly ver: string;
+  readonly hash: string;
+  /** Verification of discovery data, never authentication of the peer. */
+  readonly status: "pending" | "verified" | "unverified" | "invalid";
+  /** Copied data; absent while pending, invalid or evicted. */
+  readonly info?: DiscoInfo;
+  readonly error?: Error;
+}
+
+export interface Caps {
+  get(address: string | JID): CapsResult | undefined;
+}
+
 export interface IQContext {
   name: "iq";
   type: "get" | "set";
@@ -263,6 +284,7 @@ export interface ClientOptions {
   userAgent?: Element;
   timeout?: number;
   disco?: DiscoOptions;
+  caps?: CapsOptions;
   /** Local SM admission budgets, captured at construction. */
   streamManagement?: {
     /** Positive integer below 2^32; defaults to 1024 unacknowledged stanzas. */
@@ -297,8 +319,20 @@ export interface XMPPClient extends EventEmitter {
   readonly options: ClientOptions;
   readonly reconnect: ReconnectController;
   readonly disco: Disco;
+  readonly caps: Caps;
   readonly iqCaller: IQCaller;
   readonly iqCallee: IQCallee;
+
+  on(eventName: "capabilities", listener: (result: CapsResult) => void): this;
+  on<Arguments extends unknown[]>(
+    eventName: string | symbol,
+    listener: (...arguments_: Arguments) => void,
+  ): this;
+  once(eventName: "capabilities", listener: (result: CapsResult) => void): this;
+  once<Arguments extends unknown[]>(
+    eventName: string | symbol,
+    listener: (...arguments_: Arguments) => void,
+  ): this;
 
   start(): Promise<JID>;
   stop(): Promise<Element | undefined>;

@@ -34,6 +34,7 @@ try {
           "./test/sasl.test.js",
           "./test/stream-management.test.js",
           "./test/disco.test.ts",
+          "./test/caps.test.ts",
         ];
   const child = spawn(
     process.execPath,

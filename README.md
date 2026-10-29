@@ -90,6 +90,35 @@ Replies contain parsed `identities`/`features` or `items`, plus the original
 for protocols such as capability verification. Neither form authenticates a
 peer's feature claims. Queries do not cache results or walk item trees.
 
+### Entity Capabilities
+
+```ts
+const xmpp = client({
+  service: "wss://example.com/xmpp-websocket",
+  username: "user",
+  password: "secret",
+  disco: { identities: [{ category: "client", type: "web", name: "My app" }] },
+  caps: { node: "https://example.com/my-app" },
+});
+xmpp.on("capabilities", ({ jid, status, info, error }) => {
+  console.log(jid, status, info?.features, error?.message);
+});
+await xmpp.start();
+await xmpp.send(xml("presence")); // Presence remains an application decision.
+const peer = xmpp.caps.get("contact@example.com/device");
+```
+
+Caps is opt-in and requires explicit discovery identities. It annotates outgoing
+presence and discovers received hints through disco; it does not fetch the
+software URI or enumerate contacts. Root identity/feature changes refresh only
+an existing application-owned broadcast. Directed presence alone never starts one.
+
+Results are `pending`, `verified`, `unverified` or `invalid`, with copied discovery
+data when available. `verified` means the data matches the advertised hash, not
+that the peer is authenticated or actually implements those features. Do not use
+caps as authorization. Disabled clients still expose `caps.get`, returning
+`undefined`. See [cache, privacy and interoperability boundaries](docs/profile.md#entity-capabilities).
+
 ## Develop
 
 ```sh
@@ -178,8 +207,8 @@ The current target is a self-assessed **XMPP Core and Web Client Compliance
 | [RFC 6120](https://www.rfc-editor.org/info/rfc6120/)  | XMPP Core                   | [Lifecycle/IQ tests](conformance/rfc6120.test.ts); partial Core support           |
 | [RFC 7590](https://www.rfc-editor.org/info/rfc7590/)  | TLS for XMPP                | [Web profile](docs/profile.md); TLS stack delegated                               |
 | [RFC 7622](https://www.rfc-editor.org/info/rfc7622/)  | XMPP addresses              | [Address tests](conformance/rfc7622.test.js); Unicode 16 profile                  |
-| [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | Service Discovery           | [Wire tests](conformance/xep0030.test.ts); explicit application identity            |
-| [XEP-0115](https://xmpp.org/extensions/xep-0115.html) | Entity Capabilities         | Planned                                                                           |
+| [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | Service Discovery           | [Wire tests](conformance/xep0030.test.ts); explicit application identity          |
+| [XEP-0115](https://xmpp.org/extensions/xep-0115.html) | Entity Capabilities         | [Wire/hash/SM tests](conformance/xep0115.test.ts); opt-in application identity    |
 | [RFC 7395](https://www.rfc-editor.org/info/rfc7395/)  | XMPP over WebSocket         | [Client-binding tests](conformance/rfc7395.test.ts); platform boundaries explicit |
 | [XEP-0156](https://xmpp.org/extensions/xep-0156.html) | Connection Method Discovery | [XRD/WSS tests](conformance/xep0156.test.js); redirects deliberately rejected     |
 

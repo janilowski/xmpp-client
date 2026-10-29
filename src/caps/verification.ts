@@ -7,6 +7,14 @@ const FORM_TYPE = "FORM_TYPE";
 const HASH_ALGORITHMS = { "sha-1": "SHA-1", "sha-256": "SHA-256" } as const;
 const encoder = new TextEncoder();
 
+// Valid data forms can contain anonymous fixed fields, with no defined caps hash.
+export class UnverifiableFormError extends TypeError {
+  constructor() {
+    super("Cannot verify a capability field without var");
+    this.name = "UnverifiableFormError";
+  }
+}
+
 // XEP-0115 §5.1 uses UTF-8 octets, not JavaScript's UTF-16 or locale sorting.
 function compare(left: string, right: string): number {
   const a = encoder.encode(left);
@@ -64,6 +72,7 @@ export function canonicalize(query: Element): string {
   }
 
   const forms = new Map<string, Map<string, string[]>>();
+  let unverifiable = false;
   for (const form of query.getChildren("x", DATA)) {
     const fields = form.getChildren("field", DATA);
     const types = fields.filter((field) => field.attrs.var === FORM_TYPE);
@@ -95,7 +104,12 @@ export function canonicalize(query: Element): string {
       // XEP-0004 permits anonymous fixed fields; XEP-0115 defines no hash for them.
       // Keep such discovery data usable, but do not invent a verification string.
       if (variable === undefined) {
-        throw new TypeError("Cannot verify a capability field without var");
+        if (field.attrs.type !== "fixed") {
+          throw new TypeError("Capability form fields require var");
+        }
+        fieldValues(field);
+        unverifiable = true;
+        continue;
       }
       if (data.has(variable)) {
         throw new TypeError("Duplicate capability form field");
@@ -103,6 +117,10 @@ export function canonicalize(query: Element): string {
       data.set(variable, fieldValues(field));
     }
     forms.set(type, data);
+  }
+  // A valid unhashable field must not hide malformed fields or later forms.
+  if (unverifiable) {
+    throw new UnverifiableFormError();
   }
   for (const type of [...forms.keys()].sort(compare)) {
     parts.push(`${type}<`);

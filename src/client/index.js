@@ -6,6 +6,7 @@ import _streamFeatures from "../stream-features/index.js";
 import _iqCaller from "../iq/caller.js";
 import _iqCallee from "../iq/callee.js";
 import _disco from "../disco/index.ts";
+import _caps from "../caps/index.ts";
 import _resolve from "../resolve/index.js";
 import _sasl2 from "../sasl2/index.js";
 import _sasl from "../sasl/index.js";
@@ -32,6 +33,7 @@ function client(options = {}) {
     password,
     userAgent,
     disco: discoOptions,
+    caps: capsOptions,
     ...params
   } = options;
 
@@ -119,6 +121,7 @@ function client(options = {}) {
     { iqCaller, iqCallee, features: [NS_PING] },
     discoOptions,
   );
+  const caps = _caps({ entity, disco, streamManagement }, capsOptions);
 
   return Object.assign(entity, {
     entity,
@@ -129,6 +132,7 @@ function client(options = {}) {
     iqCaller,
     iqCallee,
     disco,
+    caps,
     resolve,
     saslMechanisms,
     sasl2,

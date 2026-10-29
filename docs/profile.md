@@ -70,10 +70,56 @@ installed root ping features remain advertised; application features are mutable
 Empty node identifiers and conflicting local identity names reject explicitly.
 
 Remote results retain original XML and duplicate evidence. Convenient feature
-lists infer disco-info support when absent; future XEP-0115 verification must
+lists infer disco-info support when absent; XEP-0115 verification must
 hash the original advertised data. Unknown foreign item metadata is ignored,
 not interpreted. No automatic contact enumeration, tree walks, caching, remote
 publishing or capability advertisement is implemented by this module.
+
+## Entity Capabilities
+
+XEP-0115 v1.6.0 is opt-in through `caps.node` and requires explicit discovery
+identities. The software URI is preserved, not fetched. Advertisement uses SHA-1
+for mandatory-algorithm interoperability; receivers also support SHA-256. Hashing uses native
+Web Crypto. Only the original disco XML participates in verification, not inferred
+features. Snapshot nodes retain all identity languages and respect disco
+authorization; eight recent prepared versions are retained. Their data and the
+installed caps feature cannot be changed through application registry methods.
+
+No initial presence is sent. Root identity/feature changes refresh only the last
+successful application-owned undirected available presence, preserving its payload.
+Newer application intent supersedes stale refreshes; unavailable is never reversed.
+Directed presence does not start a broadcast. With caps enabled, send events and
+SM observe a prepared copy, not an annotation on the caller's original tree.
+Original serialization is validated once before preparation; the prepared output
+is checked again. SM replay retains its original annotation and admission charge.
+Receive-size/depth limits do not become limits on valid generated presence.
+
+Queries target the exact declared sender and `node#ver`. Server hints use the
+explicit opening sender after negotiation. Missing later annotations retain hints
+because servers may strip redundant caps. Legacy hashless annotations are ignored.
+Unknown algorithms and valid anonymous fixed fields without `var` remain per-peer
+unverified data, never globally reused. XEP-0004 permits the latter, but XEP-0115
+defines no hash for them. Malformed known-hash results or mismatches are invalid;
+request failures are unverified. Ordinary presence delivery continues.
+
+Only verified data is shared across JIDs and presence sessions. Fresh non-resumed
+sessions clear peer hints; SM resumption retains them and restarts pending work.
+Unavailable clears that sender's hint, not shared verified data. Stale replies and
+digests cannot publish into a replacement session. Returned trees and arrays are
+copies. A matching hash authenticates neither a peer nor its feature claims:
+XEP-0115 §9.3 explicitly acknowledges cache-poisoning limitations.
+
+Local resource policies retain at most 128 peer hints / 64 KiB of serialized
+UTF-8 hint metadata, 128 records / 1 MiB of serialized response XML, and 64 scheduled
+query groups with four active queries/digests. Uncancellable old digests keep
+their active slots until completion. These are serialized-data budgets, not heap
+or native WebSocket-buffer bounds. Oversized hints are ignored; eviction/queue
+pressure yields unverified state without disconnecting XMPP. Queries use positive
+finite `entity.timeout`, falling back to two seconds when disabled. Repeated hints
+can retry transient failures or evicted data. There is no disk persistence.
+
+This modern-client feature does not certify all inherited XEP-0004, XEP-0128,
+RFCs, browser engines or general denial-of-service protection.
 
 ## Library policies
 

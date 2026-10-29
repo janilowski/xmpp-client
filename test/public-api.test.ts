@@ -1,6 +1,7 @@
 import { client, jid, xml } from "@janilowski/xmpp-client";
 import type {
   AbortSignalLike,
+  CapsResult,
   DiscoIdentity,
   DiscoInfo,
   DiscoItems,
@@ -25,9 +26,27 @@ const xmpp = client({
     authorize: ({ type, from, to, node }) =>
       type === "info" || Boolean(from && to && node),
   },
+  caps: { node: "https://example.net/client" },
 });
 
 xmpp.on("stanza", (stanza: typeof presence) => stanza.toString());
+xmpp.on("capabilities", (result) => {
+  const value: CapsResult = result;
+  void [value.status, value.error?.message, value.info?.query.toString()];
+});
+const capabilities: CapsResult | undefined = xmpp.caps.get(address);
+void capabilities?.info?.features;
+void xmpp.caps.get("peer@example.net/device");
+// @ts-expect-error Caps node is an application URI, not a boolean switch.
+client({ caps: true });
+if (capabilities) {
+  // @ts-expect-error Verification status is not caller-owned mutable state.
+  capabilities.status = "verified";
+}
+xmpp.once("capabilities", (result) => {
+  const value: CapsResult = result;
+  void value.status;
+});
 void xmpp.send(presence);
 void xmpp.start().then((onlineAddress) => onlineAddress.bare().toString());
 
