@@ -44,9 +44,15 @@ of encryption. TLS is hop-by-hop, not end-to-end protection.
 The Bun disposable-CA tests exercise root trust, hostname and expiry rejection
 for direct WSS and HTTPS discovery. Intermediate-chain scenarios accept a valid
 chain and reject an untrusted, expired, non-CA or missing intermediate.
-Chromium tests separately reject an untrusted certificate, but positive fixtures
-using an SPKI exception do not prove hostname/expiry validation. No complete
-cipher, revocation or all-browser matrix is claimed. Expected runtime failures
+Separate Linux Chromium tests use a disposable CA in an isolated NSS database,
+browser home, XDG paths and profile, without certificate-error exceptions.
+They verify missing fixture trust for direct WSS and initial HTTPS discovery.
+Trusted-CA controls reject wrong names, expiry and CN-only certificates there
+and at WSS targets selected by valid discovery, with successful controls and
+native certificate-error diagnostics. Protocol interoperability
+fixtures using an SPKI exception remain separate. Public/system roots are not
+removed by the isolated NSS setup. No complete cipher, revocation or all-browser
+matrix is claimed. Expected runtime failures
 remain executable test markers, not evidence of successful validation.
 Bun 1.4.2–1.4.4 accept CN-only certificates without SAN for both WSS and
 HTTPS discovery (#50); version-bounded expected failures retain strict rejection

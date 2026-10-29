@@ -28,7 +28,7 @@ try {
   await server.prepare();
   const files =
     process.argv[2] === "browser"
-      ? ["./browser.test.js"]
+      ? ["./browser.test.js", "./test/browser-tls.test.ts"]
       : [
           "./test/client.test.js",
           "./test/sasl.test.js",
