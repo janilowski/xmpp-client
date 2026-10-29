@@ -719,6 +719,139 @@ test.each([
   },
 );
 
+// XEP-0030 §§3–4/7 and XEP-0199 §5: exercise the shipped registry over Prosody.
+test("Chromium bundled discovery queries Prosody and responds to routed client IQs", async () => {
+  const infoNamespace = "http://jabber.org/protocol/disco#info";
+  const itemsNamespace = "http://jabber.org/protocol/disco#items";
+  const pingNamespace = "urn:xmpp:ping";
+  const node = "commands";
+  const nodeFeature = "urn:test:browser-disco-node";
+  const identity = {
+    category: "client",
+    type: "web",
+    name: "Browser fixture",
+    lang: "en",
+  };
+  const nodeIdentity = { category: "automation", type: "command-list" };
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(
+      async ({
+        infoNamespace,
+        itemsNamespace,
+        pingNamespace,
+        node,
+        nodeFeature,
+        identity,
+        nodeIdentity,
+      }) => {
+        const { client, xml } = globalThis.XMPP;
+        const xmpp = client({
+          service: "wss://[::1]:5281/xmpp-websocket",
+          domain: "localhost",
+          credentials: { username: "client", password: "foobar" },
+          disco: { identities: [identity] },
+        });
+        const errors = [];
+        xmpp.reconnect.stop();
+        xmpp.on("error", (error) => errors.push(error.message));
+        try {
+          const address = String(await xmpp.start());
+          xmpp.disco.setNode(node, {
+            identities: [nodeIdentity],
+            features: [nodeFeature],
+          });
+          xmpp.disco.setItems([{ jid: address, node, name: "Commands" }]);
+          const serverInfo = await xmpp.disco.info("localhost");
+          const serverItems = await xmpp.disco.items("localhost");
+          // Full-JID requests go through Prosody back to this connected client.
+          const ownInfo = await xmpp.disco.info(address);
+          const ownItems = await xmpp.disco.items(address);
+          const nodeInfo = await xmpp.disco.info(address, { node });
+          const nodeItems = await xmpp.disco.items(address, { node });
+          const ping = await xmpp.iqCaller.request(
+            xml(
+              "iq",
+              { type: "get", to: address },
+              xml("ping", { xmlns: pingNamespace }),
+            ),
+          );
+          return {
+            address,
+            server: {
+              identity: serverInfo.identities.some(
+                (value) => value.category === "server",
+              ),
+              info: serverInfo.query.is("query", infoNamespace),
+              items: serverItems.query.is("query", itemsNamespace),
+              features: [infoNamespace, itemsNamespace].every((value) =>
+                serverInfo.features.includes(value),
+              ),
+            },
+            own: {
+              identities: ownInfo.identities,
+              features: ownInfo.features,
+              items: ownItems.items,
+            },
+            node: {
+              value: nodeInfo.node,
+              wire: nodeInfo.query.attrs.node,
+              identities: nodeInfo.identities,
+              feature: nodeInfo.features.includes(nodeFeature),
+              itemsNode: nodeItems.node,
+              itemsWire: nodeItems.query.attrs.node,
+              items: nodeItems.items,
+            },
+            ping: {
+              type: ping.attrs.type,
+              children: ping.getChildElements().length,
+            },
+            errors,
+          };
+        } finally {
+          await xmpp.stop();
+        }
+      },
+      {
+        infoNamespace,
+        itemsNamespace,
+        pingNamespace,
+        node,
+        nodeFeature,
+        identity,
+        nodeIdentity,
+      },
+    );
+    expect(result.address).toStartWith("client@localhost/");
+    expect(result.server).toEqual({
+      identity: true,
+      info: true,
+      items: true,
+      features: true,
+    });
+    expect(result.own).toEqual({
+      identities: [identity],
+      features: [infoNamespace, itemsNamespace, pingNamespace],
+      items: [{ jid: result.address, node, name: "Commands" }],
+    });
+    expect(result.node).toEqual({
+      value: node,
+      wire: node,
+      identities: [nodeIdentity],
+      feature: true,
+      itemsNode: node,
+      itemsWire: node,
+      items: [],
+    });
+    expect(result.ping).toEqual({ type: "result", children: 0 });
+    expect(result.errors).toEqual([]);
+  } finally {
+    await page.close();
+  }
+});
+
 test.each([
   ["xmpp.js", "ws://localhost:5280/xmpp-websocket"],
   ["xmpp.min.js", "ws://localhost:5280/xmpp-websocket"],

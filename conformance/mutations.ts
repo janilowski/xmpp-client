@@ -38,6 +38,86 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "omit inferred discovery support",
+    file: "src/disco/index.ts",
+    before: "if (!features.includes(INFO)) {",
+    after: "if (false) {",
+    suite: "conformance/xep0030.test.ts",
+    test: "infer omitted disco-info support without editing raw query$",
+  },
+  {
+    name: "write inferred discovery features into raw results",
+    file: "src/disco/index.ts",
+    before: "features.push(INFO);",
+    after: 'features.push(INFO);\n      query.c("feature", { var: INFO });',
+    suite: "conformance/xep0030.test.ts",
+    test: "infer omitted disco-info support without editing raw query$",
+  },
+  {
+    name: "accept a result for another discovery node",
+    file: "src/disco/index.ts",
+    before: "query.attrs.node !== node ||",
+    after: "false ||",
+    suite: "conformance/xep0030.test.ts",
+    test: "reject malformed info / different requested node$",
+  },
+  {
+    name: "bypass discovery authorization",
+    file: "src/disco/index.ts",
+    before: "this.#authorize &&",
+    after: "false &&",
+    suite: "conformance/xep0030.test.ts",
+    test: "denied .* is indistinguishable from unavailable service$",
+  },
+  {
+    name: "ignore children of discovery feature elements",
+    file: "src/disco/index.ts",
+    before: "if (element.children.length !== 0) {",
+    after: "if (false) {",
+    suite: "conformance/xep0030.test.ts",
+    test: "reject malformed info / feature children$",
+  },
+  {
+    name: "accept conflicting discovery identity names",
+    file: "src/disco/index.ts",
+    before: 'if (names.has(key) && names.get(key) !== (name ?? "")) {',
+    after: "if (false) {",
+    suite: "conformance/xep0030.test.ts",
+    test: "reject malformed info / conflicting localized name$",
+  },
+  {
+    name: "discard discovery cancellation",
+    file: "src/disco/index.ts",
+    before: "      timeout,\n      signal,\n    );",
+    after: "      timeout,\n      undefined,\n    );",
+    suite: "conformance/xep0030.test.ts",
+    test: "abort after write ignores a late result and permits recovery$",
+  },
+  {
+    name: "reject an empty discovery item list",
+    file: "src/disco/index.ts",
+    before: 'if (type === "items") {',
+    after: 'if (type === "items" && value.items.length !== 0) {',
+    suite: "conformance/xep0030.test.ts",
+    test: "unconfigured root .*disco#items is not a fabricated client$",
+  },
+  {
+    name: "leak root discovery features into nodes",
+    file: "src/disco/index.ts",
+    before: "node === undefined ? this.#rootFeatures : [INFO, ITEMS]",
+    after: "this.#rootFeatures",
+    suite: "conformance/xep0030.test.ts",
+    test: "registry nodes stay separate from root and mirror opaque names$",
+  },
+  {
+    name: "accept malformed discovery identity languages",
+    file: "src/disco/index.ts",
+    before: '(lang !== undefined && lang !== "" && !isLanguageTag(lang)) ||',
+    after: "false ||",
+    suite: "conformance/xep0030.test.ts",
+    test: "malformed identity language",
+  },
+  {
     name: "omit the client transport disconnect notification",
     file: "src/connection/index.js",
     before: 'this._status("disconnect", { clean: !dirty, reason });',
@@ -2771,6 +2851,9 @@ for (const mutation of mutations) {
     cpSync("test/support", join(directory, "test/support"), {
       recursive: true,
     });
+    cpSync("conformance/xep0030", join(directory, "conformance/xep0030"), {
+      recursive: true,
+    });
     for (const file of [
       "package.json",
       "tsconfig.json",
@@ -2814,6 +2897,7 @@ for (const mutation of mutations) {
       "conformance/xep0198-acknowledgements.test.ts",
       "conformance/xep0198-resumption.test.ts",
       "conformance/xep0198-queue.test.ts",
+      "conformance/xep0030.test.ts",
       "conformance/xep0388-features.test.ts",
       "conformance/xep0388-authorization-identifier.test.ts",
       "conformance/xep0388-resumption-identity.test.ts",

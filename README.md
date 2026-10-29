@@ -34,6 +34,7 @@ const xmpp = client({
   domain: "example.com",
   username: "romeo",
   password: "secret",
+  disco: { identities: [{ category: "client", type: "web", name: "Example" }] },
 });
 
 xmpp.on("error", console.error);
@@ -47,6 +48,47 @@ await xmpp.start();
 
 For a classic browser script, use `dist/xmpp.js` or the minified
 `dist/xmpp.min.js`; both expose the `XMPP` global.
+
+### Service Discovery
+
+```ts
+const info = await xmpp.disco.info("example.com");
+console.log(info.identities, info.features);
+const items = await xmpp.disco.items("example.com");
+
+xmpp.disco.addFeature("urn:example:implemented-feature");
+xmpp.disco.setNode("commands", {
+  identities: [{ category: "automation", type: "command-list" }],
+});
+xmpp.disco.setItems([{ jid: String(xmpp.jid), node: "commands" }]);
+const commands = await xmpp.disco.info("peer@example.com/device", {
+  node: "commands",
+  timeout: 5000,
+  signal: new AbortController().signal,
+});
+```
+
+The application supplies its identity; there is no guessed default. Without
+`disco.identities`, queries still work, but incoming info requests receive
+`service-unavailable`. Root items start empty. Configured responders advertise
+disco info/items and the installed ping handler automatically.
+
+Use `setIdentities`, `setItems`, `setNode` and `removeNode` to replace public
+metadata; `addFeature` / `removeFeature` manage extension features. Registered
+values are copied, local duplicates collapse, and invalid replacements leave
+existing data intact. Built-in features cannot be removed. Register only
+implemented features and items your application owns or can vouch for.
+
+Optional `disco.authorize(request)` is a synchronous predicate over
+`{ from, to, node, type }`; returning `false` answers `service-unavailable`.
+All registered metadata is public by default. Node names are opaque, nonempty
+strings; registration never adds them to an items list automatically.
+
+Replies contain parsed `identities`/`features` or `items`, plus the original
+`query` XML. Parsed info infers disco-info support when omitted by a peer;
+`query` preserves the advertised data, including duplicates and extensions,
+for protocols such as capability verification. Neither form authenticates a
+peer's feature claims. Queries do not cache results or walk item trees.
 
 ## Develop
 
@@ -107,8 +149,8 @@ identity defect remains an executable expected failure; see the
 
 The four Prosody module versions are pinned in `server/setup.js`. The native
 Prosody package is supplied by your distribution, not lockfile-pinned; this run
-used 13.0.6. JavaScript implementation-wide type checking and protocol compliance
-remain separate work; `typecheck` currently checks the typed public boundary.
+used 13.0.6. New TypeScript modules and published types are checked;
+implementation-wide checking of inherited JavaScript remains separate work.
 
 [Client profile](docs/profile.md) documents policy and platform limits.
 Project progress, priorities and outstanding findings live in
@@ -136,7 +178,7 @@ The current target is a self-assessed **XMPP Core and Web Client Compliance
 | [RFC 6120](https://www.rfc-editor.org/info/rfc6120/)  | XMPP Core                   | [Lifecycle/IQ tests](conformance/rfc6120.test.ts); partial Core support           |
 | [RFC 7590](https://www.rfc-editor.org/info/rfc7590/)  | TLS for XMPP                | [Web profile](docs/profile.md); TLS stack delegated                               |
 | [RFC 7622](https://www.rfc-editor.org/info/rfc7622/)  | XMPP addresses              | [Address tests](conformance/rfc7622.test.js); Unicode 16 profile                  |
-| [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | Service Discovery           | Planned                                                                           |
+| [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | Service Discovery           | [Wire tests](conformance/xep0030.test.ts); explicit application identity            |
 | [XEP-0115](https://xmpp.org/extensions/xep-0115.html) | Entity Capabilities         | Planned                                                                           |
 | [RFC 7395](https://www.rfc-editor.org/info/rfc7395/)  | XMPP over WebSocket         | [Client-binding tests](conformance/rfc7395.test.ts); platform boundaries explicit |
 | [XEP-0156](https://xmpp.org/extensions/xep-0156.html) | Connection Method Discovery | [XRD/WSS tests](conformance/xep0156.test.js); redirects deliberately rejected     |

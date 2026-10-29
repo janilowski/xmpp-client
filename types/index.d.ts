@@ -139,6 +139,119 @@ export type CredentialsProvider = (
   client: XMPPClient,
 ) => Awaitable<void>;
 
+/** Structural cancellation contract; does not require DOM or Node declarations. */
+export interface AbortSignalLike {
+  readonly aborted: boolean;
+  readonly reason: unknown;
+  addEventListener(
+    type: "abort",
+    listener: () => void,
+    options?: { once?: boolean },
+  ): void;
+  removeEventListener(type: "abort", listener: () => void): void;
+}
+
+export interface DiscoIdentity {
+  category: string;
+  type: string;
+  name?: string;
+  lang?: string;
+}
+
+export interface DiscoItem {
+  jid: string;
+  node?: string;
+  name?: string;
+}
+
+export interface DiscoInfo {
+  identities: DiscoIdentity[];
+  features: string[];
+  node?: string;
+  query: Element;
+}
+
+export interface DiscoItems {
+  items: DiscoItem[];
+  node?: string;
+  query: Element;
+}
+
+export interface DiscoNode {
+  identities: readonly DiscoIdentity[];
+  features?: readonly string[];
+  items?: readonly DiscoItem[];
+}
+
+export interface DiscoRequest {
+  from?: string;
+  to?: string;
+  node?: string;
+  type: "info" | "items";
+}
+
+export interface DiscoOptions extends DiscoNode {
+  authorize?: (request: DiscoRequest) => boolean;
+}
+
+export interface DiscoQueryOptions {
+  node?: string;
+  timeout?: number;
+  signal?: AbortSignalLike;
+}
+
+export interface Disco {
+  info(to?: string | JID, options?: DiscoQueryOptions): Promise<DiscoInfo>;
+  items(to?: string | JID, options?: DiscoQueryOptions): Promise<DiscoItems>;
+  setIdentities(identities: readonly DiscoIdentity[], node?: string): void;
+  addFeature(feature: string, node?: string): void;
+  removeFeature(feature: string, node?: string): void;
+  setItems(items: readonly DiscoItem[], node?: string): void;
+  setNode(node: string, value: DiscoNode): void;
+  removeNode(node: string): void;
+}
+
+export interface IQContext {
+  name: "iq";
+  type: "get" | "set";
+  id: string;
+  stanza: Element;
+  element: Element;
+  entity: XMPPClient;
+  from: JID | null;
+  to: JID | null;
+}
+
+export type IQHandler = (
+  context: IQContext,
+  next: () => Promise<unknown>,
+) => unknown;
+
+export interface IQCaller {
+  request(
+    stanza: Element,
+    timeout?: number,
+    signal?: AbortSignalLike,
+  ): Promise<Element>;
+  get(
+    element: Element,
+    to?: string | JID,
+    timeout?: number,
+    signal?: AbortSignalLike,
+  ): Promise<Element | undefined>;
+  set(
+    element: Element,
+    to?: string | JID,
+    timeout?: number,
+    signal?: AbortSignalLike,
+  ): Promise<Element | undefined>;
+}
+
+export interface IQCallee {
+  get(namespace: string, name: string, handler: IQHandler): void;
+  set(namespace: string, name: string, handler: IQHandler): void;
+}
+
 export interface ClientOptions {
   service?: string;
   domain?: string;
@@ -149,6 +262,7 @@ export interface ClientOptions {
   credentials?: Credentials | CredentialsProvider;
   userAgent?: Element;
   timeout?: number;
+  disco?: DiscoOptions;
   /** Local SM admission budgets, captured at construction. */
   streamManagement?: {
     /** Positive integer below 2^32; defaults to 1024 unacknowledged stanzas. */
@@ -182,6 +296,9 @@ export interface XMPPClient extends EventEmitter {
   status: ConnectionStatus;
   readonly options: ClientOptions;
   readonly reconnect: ReconnectController;
+  readonly disco: Disco;
+  readonly iqCaller: IQCaller;
+  readonly iqCallee: IQCallee;
 
   start(): Promise<JID>;
   stop(): Promise<Element | undefined>;

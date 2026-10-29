@@ -5,6 +5,7 @@ import _middleware from "../middleware/index.js";
 import _streamFeatures from "../stream-features/index.js";
 import _iqCaller from "../iq/caller.js";
 import _iqCallee from "../iq/callee.js";
+import _disco from "../disco/index.ts";
 import _resolve from "../resolve/index.js";
 import _sasl2 from "../sasl2/index.js";
 import _sasl from "../sasl/index.js";
@@ -21,9 +22,18 @@ import htsha256none from "../sasl-ht-sha-256-none/index.js";
 import createOnAuthenticate from "./lib/createOnAuthenticate.js";
 import getDomain from "./lib/getDomain.js";
 
+const NS_PING = "urn:xmpp:ping";
+
 function client(options = {}) {
-  let { resource, credentials, username, password, userAgent, ...params } =
-    options;
+  let {
+    resource,
+    credentials,
+    username,
+    password,
+    userAgent,
+    disco: discoOptions,
+    ...params
+  } = options;
 
   const { domain, service } = params;
   if (!domain && service) {
@@ -102,9 +112,13 @@ function client(options = {}) {
     resource,
   );
 
-  iqCallee?.get("urn:xmpp:ping", "ping", () => {
+  iqCallee?.get(NS_PING, "ping", () => {
     return {};
   });
+  const disco = _disco(
+    { iqCaller, iqCallee, features: [NS_PING] },
+    discoOptions,
+  );
 
   return Object.assign(entity, {
     entity,
@@ -114,6 +128,7 @@ function client(options = {}) {
     streamFeatures,
     iqCaller,
     iqCallee,
+    disco,
     resolve,
     saslMechanisms,
     sasl2,

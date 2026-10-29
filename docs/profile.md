@@ -53,6 +53,28 @@ HTTPS discovery (#50); version-bounded expected failures retain strict rejection
 assertions. Restricted trust-anchor provisioning (RFC 6120 §13.6) and long-lived
 certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
 
+## Service Discovery
+
+XEP-0030 v2.5.0 uses the existing IQ services. Applications supply identities
+and register only supported features and associated public items. Ownership,
+authorization and contextual hierarchy classification belong to the application;
+the library does not invent a roster, bare-account responder or client type.
+An unconfigured client can query discovery but returns `service-unavailable`
+for incoming info instead of a successful response without identity. This is
+not evidence of a configured Core-compliant discovery responder.
+
+The optional synchronous authorization callback can deny requests without
+revealing whether a node exists. Registered nodes are independent snapshots,
+not path hierarchies or automatically advertised items. Core info/items and
+installed root ping features remain advertised; application features are mutable.
+Empty node identifiers and conflicting local identity names reject explicitly.
+
+Remote results retain original XML and duplicate evidence. Convenient feature
+lists infer disco-info support when absent; future XEP-0115 verification must
+hash the original advertised data. Unknown foreign item metadata is ignored,
+not interpreted. No automatic contact enumeration, tree walks, caching, remote
+publishing or capability advertisement is implemented by this module.
+
 ## Library policies
 
 - Reconnect uses exponential backoff with equal jitter and a 60-second cap;
