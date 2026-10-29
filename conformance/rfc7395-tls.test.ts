@@ -12,7 +12,7 @@ import { generate } from "selfsigned";
 // PKIX belongs to the runtime; these are integration scenarios.
 const HTTP_BAD_REQUEST = 400;
 const DAY_MS = 86_400_000;
-const KNOWN_CN_ONLY_BUN_VERSIONS = new Set(["1.4.2", "1.4.3"]);
+const KNOWN_CN_ONLY_BUN_VERSIONS = new Set(["1.4.2", "1.4.3", "1.4.4"]);
 let directory: string;
 let authority: Awaited<ReturnType<typeof generate>>;
 let untrustedAuthority: Awaited<ReturnType<typeof generate>>;

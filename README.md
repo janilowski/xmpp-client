@@ -62,9 +62,13 @@ predominantly JavaScript and is being migrated incrementally.
 
 ### Native integration environment (Fedora)
 
-No VM or container is required. Use Bun 1.4.3 (also pinned in CI),
+No VM or container is required. Use Bun 1.4.4 (also pinned in CI),
 Prosody 13 with Lua 5.4, and Playwright's Chromium. Development tools additionally
 require Node 22.22.1+ and Git 2.32+; the library's runtime floor is unchanged.
+
+Bun 1.4.4 fixes the bundled [Brotli decoder vulnerability](https://github.com/oven-sh/bun/security/advisories/GHSA-663w-cv8g-jj2p)
+and [compromised CA trust](https://github.com/oven-sh/bun/security/advisories/GHSA-26q8-h657-pf84)
+affecting earlier releases. Upgrade with `bun upgrade` before installing dependencies.
 
 ```sh
 sudo dnf install prosody lua lua-devel luarocks
