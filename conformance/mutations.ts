@@ -38,6 +38,88 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "sort capability strings as UTF-16 instead of UTF-8",
+    file: "src/caps/verification.ts",
+    before: "  const a = encoder.encode(left);\n  const b = encoder.encode(right);",
+    after:
+      '  const a = left.split("").map((character) => character.charCodeAt(0));\n  const b = right.split("").map((character) => character.charCodeAt(0));',
+    suite: "conformance/xep0115.test.ts",
+    test: "UTF-8 octet ordering is not UTF-16 or locale order$",
+  },
+  {
+    name: "accept duplicate capability identities",
+    file: "src/caps/verification.ts",
+    before: "!category || !type || seenIdentities.has(key)",
+    after: "!category || !type",
+    suite: "conformance/xep0115.test.ts",
+    test: "reject the entire ill-formed response / identical identities$",
+  },
+  {
+    name: "silently deduplicate capability features",
+    file: "src/caps/verification.ts",
+    before: "!value || feature.children.length !== 0 || seenFeatures.has(value)",
+    after: "!value || feature.children.length !== 0",
+    suite: "conformance/xep0115.test.ts",
+    test: "reject the entire ill-formed response / identical features$",
+  },
+  {
+    name: "accept duplicate capability form types",
+    file: "src/caps/verification.ts",
+    before: "forms.has(type)",
+    after: "false",
+    suite: "conformance/xep0115.test.ts",
+    test: "reject the entire ill-formed response / same FORM_TYPE in two forms$",
+  },
+  {
+    name: "accept conflicting capability FORM_TYPE values",
+    file: "src/caps/verification.ts",
+    before: "values.some((value) => value !== type)",
+    after: "false",
+    suite: "conformance/xep0115.test.ts",
+    test: "reject the entire ill-formed response / different FORM_TYPE values$",
+  },
+  {
+    name: "decode capability XML entities a second time",
+    file: "src/caps/verification.ts",
+    before: 'return parts.join("");',
+    after: 'return parts.join("").replaceAll("&lt;", "<");',
+    suite: "conformance/xep0115.test.ts",
+    test: "XML entities are decoded once, never twice$",
+  },
+  {
+    name: "hash capability forms with a nonhidden FORM_TYPE",
+    file: "src/caps/verification.ts",
+    before: 'types.every((field) => field.attrs.type !== "hidden")',
+    after: "false",
+    suite: "conformance/xep0115.test.ts",
+    test: "ignore a form without a hidden FORM_TYPE and continue$",
+  },
+  {
+    name: "infer discovery support into the capability hash",
+    file: "src/caps/verification.ts",
+    before: "for (const feature of [...seenFeatures].sort(compare)) {",
+    after:
+      "seenFeatures.add(INFO);\n  for (const feature of [...seenFeatures].sort(compare)) {",
+    suite: "conformance/xep0115.test.ts",
+    test: "raw discovery data is neither inferred nor changed$",
+  },
+  {
+    name: "discard nested elements from capability form values",
+    file: "src/caps/verification.ts",
+    before: "if (value.getChildElements().length !== 0) {",
+    after: "if (false) {",
+    suite: "conformance/xep0115.test.ts",
+    test: "reject malformed input / nested (FORM_TYPE|field) value$",
+  },
+  {
+    name: "ignore the selected capability hash algorithm",
+    file: "src/caps/verification.ts",
+    before: "HASH_ALGORITHMS[algorithm],",
+    after: 'HASH_ALGORITHMS["sha-1"],',
+    suite: "conformance/xep0115.test.ts",
+    test: "optional SHA-256 uses binary UTF-8 digest$",
+  },
+  {
     name: "omit inferred discovery support",
     file: "src/disco/index.ts",
     before: "if (!features.includes(INFO)) {",
@@ -2854,6 +2936,9 @@ for (const mutation of mutations) {
     cpSync("conformance/xep0030", join(directory, "conformance/xep0030"), {
       recursive: true,
     });
+    cpSync("conformance/xep0115", join(directory, "conformance/xep0115"), {
+      recursive: true,
+    });
     for (const file of [
       "package.json",
       "tsconfig.json",
@@ -2898,6 +2983,7 @@ for (const mutation of mutations) {
       "conformance/xep0198-resumption.test.ts",
       "conformance/xep0198-queue.test.ts",
       "conformance/xep0030.test.ts",
+      "conformance/xep0115.test.ts",
       "conformance/xep0388-features.test.ts",
       "conformance/xep0388-authorization-identifier.test.ts",
       "conformance/xep0388-resumption-identity.test.ts",
