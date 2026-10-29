@@ -3,6 +3,33 @@ import { serve, type ServerWebSocket } from "bun";
 const HTTP_BAD_REQUEST = 400;
 const PEER_TIMEOUT = 2000;
 
+// A server-side close callback is not a barrier for the client's close callback.
+// Observe only: a missing disconnect becomes an assertion failure, not a repair.
+export function waitForDisconnect(
+  client: {
+    readonly status: string;
+    on(event: "disconnect", listener: () => void): unknown;
+    off(event: "disconnect", listener: () => void): unknown;
+  },
+  timeout = PEER_TIMEOUT,
+): Promise<boolean> {
+  if (client.status === "disconnect") {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    const onDisconnect = () => {
+      clearTimeout(timer);
+      client.off("disconnect", onDisconnect);
+      resolve(true);
+    };
+    const timer = setTimeout(() => {
+      client.off("disconnect", onDisconnect);
+      resolve(false);
+    }, timeout);
+    client.on("disconnect", onDisconnect);
+  });
+}
+
 /** A wire peer, not an XMPP implementation: scripts supply literal responses. */
 export class ScriptedPeer {
   readonly transcript: string[] = [];

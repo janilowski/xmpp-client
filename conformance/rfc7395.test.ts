@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 import { client, xml } from "../src/client/index.js";
-import { ScriptedPeer } from "./peer.ts";
+import { ScriptedPeer, waitForDisconnect } from "./peer.ts";
 import { readFrame } from "./xml.ts";
 import { once } from "node:events";
 
@@ -362,6 +362,7 @@ describe("RFC 7395 — client wire behavior", () => {
     peer.send(CLOSE);
     expect(readFrame(await peer.next())).toEqual(readFrame(CLOSE));
     await peer.waitForClose();
+    expect(await waitForDisconnect(xmpp)).toBe(true);
     expect(xmpp.status).toBe("disconnect");
   });
 

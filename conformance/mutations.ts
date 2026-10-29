@@ -38,6 +38,14 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "omit the client transport disconnect notification",
+    file: "src/connection/index.js",
+    before: 'this._status("disconnect", { clean: !dirty, reason });',
+    after: "/* terminal client notification omitted */",
+    suite: "conformance/rfc7395.test.ts",
+    test: "responds to peer close and completes the transport handshake$",
+  },
+  {
     name: "accept 1024-octet SASL2 identity parts",
     file: "src/jid/lib/precis.js",
     before: "export const MAX_PART_BYTES = 1023;",

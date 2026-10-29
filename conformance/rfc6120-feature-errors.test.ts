@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
 import { setImmediate, setTimeout as delay } from "node:timers/promises";
 import { client } from "../src/client/index.js";
-import { ScriptedPeer } from "./peer.ts";
+import { ScriptedPeer, waitForDisconnect } from "./peer.ts";
 import { readFrame } from "./xml.ts";
 
 const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
@@ -190,6 +190,7 @@ for (const stage of ["initial classic", "classic restart"] as const) {
             expect(errors).toEqual([result]);
           }
           await transportClosed;
+          expect(await waitForDisconnect(xmpp)).toBe(true);
           expect(xmpp.status).toBe("disconnect");
           expect(disconnected).toBe(1);
           expect(errors).toEqual([result]);
@@ -250,6 +251,7 @@ test("RFC 6120 §§4.3/4.9.1.1: a fresh transport can negotiate after fatal feat
       message: "Invalid stream feature namespace",
     });
     await failedPeer.waitForClose();
+    expect(await waitForDisconnect(xmpp)).toBe(true);
     expect(online).toEqual([]);
     expect(xmpp.status).toBe("disconnect");
     await xmpp.stop();
@@ -393,6 +395,7 @@ for (const stage of [
           message: "Invalid stream feature namespace",
         });
         await peer.waitForClose();
+        expect(await waitForDisconnect(xmpp)).toBe(true);
         expect(online).toEqual(ready ? [FULL_JID] : []);
         expect(errors).toHaveLength(1);
         expect(errors[0]).toBe(result);
