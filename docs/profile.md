@@ -111,8 +111,9 @@ publishing or capability advertisement is implemented by this module.
   Applications choosing to follow stanza redirects own user approval, peer
   authentication and successive-redirect limits (RFC 6120 §8.3.3.14).
 - Error conditions and types drive protocol behavior; diagnostic `text` does not.
-  Applications MUST NOT interpret that text programmatically and SHOULD NOT use
-  it as the primary user-facing error message (RFC 6120 §8.3.2).
+  Applications MUST NOT interpret that text programmatically. It SHOULD NOT be
+  the primary user-facing message for stanza errors (RFC 6120 §8.3.2), and MUST
+  NOT be the primary message for stream errors (§4.9.2).
 - Applications generating stanza errors own authorization-sensitive selection.
   Use `service-unavailable` rather than `item-not-found` or
   `recipient-unavailable` if those conditions would disclose availability to

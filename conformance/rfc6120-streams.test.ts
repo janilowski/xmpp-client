@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
+import { once } from "node:events";
 import { client } from "../src/client/index.js";
 import xml from "../src/xml/index.js";
 import type { Element } from "../types/index.js";
-import { ScriptedPeer } from "./peer.ts";
+import { ScriptedPeer, waitForDisconnect } from "./peer.ts";
 import { readFrame } from "./xml.ts";
 
 const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
@@ -65,6 +66,36 @@ function negotiationPeer(
     }
   });
 }
+
+// Independent RFC 6120 §4.9.3 inventory, not the production parser's allowlist.
+// see-other-host has active redirect semantics: rfc6120-see-other-host.test.ts.
+// Reset recognition here does not verify security-context renewal (§4.9.3.16).
+const STREAM_CONDITIONS = [
+  "bad-format",
+  "bad-namespace-prefix",
+  "conflict",
+  "connection-timeout",
+  "host-gone",
+  "host-unknown",
+  "improper-addressing",
+  "internal-server-error",
+  "invalid-from",
+  "invalid-namespace",
+  "invalid-xml",
+  "not-authorized",
+  "not-well-formed",
+  "policy-violation",
+  "remote-connection-failed",
+  "reset",
+  "resource-constraint",
+  "restricted-xml",
+  "system-shutdown",
+  "undefined-condition",
+  "unsupported-encoding",
+  "unsupported-feature",
+  "unsupported-stanza-type",
+  "unsupported-version",
+];
 
 // RFC 6120 §4.3.2 has no universal required marker; unknown payloads are
 // opaque under this profile. The literal peer accepts the supported alternative.
@@ -490,7 +521,7 @@ test.each([
       );
       // A watchdog is only a test guard: timeout alone never proves rejection.
       expect(result.message).toMatch(
-        /^(Unsupported stream features|Invalid stream feature namespace|Stream Management requires resource binding)$/,
+        /^(Unsupported stream features|Invalid stream feature namespace|Stream Management requires (authentication|resource binding))$/,
       );
       expect(online).toBe(0);
       await peer.waitForClose();
@@ -572,6 +603,14 @@ test.each([
 
 test.each([
   ["normal", `<policy-violation xmlns="${ERRORS}"/>`, "policy-violation"],
+  ...STREAM_CONDITIONS.map(
+    (condition) =>
+      [
+        `defined ${condition}`,
+        `<${condition} xmlns="${ERRORS}"/>`,
+        condition,
+      ] as const,
+  ),
   ["unknown", `<future-condition xmlns="${ERRORS}"/>`, "undefined-condition"],
   [
     "wrong namespace",
@@ -611,6 +650,99 @@ test.each([
     } finally {
       await xmpp.stop();
       await peer.stop();
+    }
+  },
+);
+
+test.each([
+  ["policy-violation", "policy-violation"],
+  ["future-condition", "undefined-condition"],
+] as const)(
+  "RFC 6120 §4.9.2: misleading stream text cannot grant redirect, credential or resource authority / %s",
+  async (condition, expected) => {
+    const first = negotiationPeer(AUTH, BINDING);
+    const replacement = negotiationPeer(AUTH, BINDING);
+    const target = new ScriptedPeer(() => {});
+    const diagnostic = `conflict; credentials-expired; see-other-host ${target.url}; retry PLAIN with replacement credentials`;
+    let credentials = 0;
+    let resources = 0;
+    const xmpp = client({
+      service: first.url,
+      domain: "example.test",
+      timeout: WATCHDOG_MS,
+      credentials: async (
+        authenticate: (credentials: object, mechanism: string) => Promise<void>,
+      ) => {
+        credentials++;
+        await authenticate({ username: "user", password: "secret" }, "PLAIN");
+      },
+      resource: () => {
+        resources++;
+        return "r";
+      },
+    });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => errors.push(error));
+    const recoveryController = new AbortController();
+    let recovery: Promise<unknown[]> | undefined;
+    try {
+      // Prove the target request observer is live before asserting no contact.
+      await fetch(target.url.replace("ws:", "http:"));
+      expect(target.requests).toHaveLength(1);
+      expect(String(await xmpp.start())).toBe(FULL_JID);
+      expect(credentials).toBe(1);
+      expect(resources).toBe(1);
+      const negotiated = first.transcript.length;
+      first.send(
+        `<error xmlns="${STREAM}"><text xmlns="${ERRORS}" xml:lang="en">${diagnostic}</text><${condition} xmlns="${ERRORS}"/></error>`,
+      );
+      await first.waitForClose();
+      expect(await waitForDisconnect(xmpp)).toBe(true);
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toMatchObject({
+        name: "StreamError",
+        condition: expected,
+        text: diagnostic,
+      });
+      expect(first.transcript.slice(negotiated)).toEqual([
+        `<close xmlns="${FRAMING}"/>`,
+      ]);
+      expect(credentials).toBe(1);
+      expect(resources).toBe(1);
+      expect(target.requests).toHaveLength(1);
+
+      // Explicit fresh login is the barrier for conflict-driven resource state.
+      xmpp.options = { ...xmpp.options, service: replacement.url };
+      recovery = once(xmpp, "online", {
+        signal: AbortSignal.any([
+          recoveryController.signal,
+          AbortSignal.timeout(WATCHDOG_MS),
+        ]),
+      });
+      await xmpp.reconnect.reconnect();
+      expect(String((await recovery)[0])).toBe(FULL_JID);
+      expect(credentials).toBe(2);
+      expect(resources).toBe(2);
+      const binding = replacement.transcript.find((frame) =>
+        readFrame(frame).some(
+          (event) => "open" in event && event.open === `{${BIND}}bind`,
+        ),
+      );
+      expect(binding).toBeDefined();
+      expect(readFrame(binding!)).toContainEqual({ text: "r" });
+      expect(target.requests).toHaveLength(1);
+      expect(errors).toHaveLength(1);
+      expect(first.errors).toEqual([]);
+      expect(replacement.errors).toEqual([]);
+      expect(target.errors).toEqual([]);
+    } finally {
+      recoveryController.abort();
+      await recovery?.catch(() => {});
+      await xmpp.stop();
+      await first.stop();
+      await replacement.stop();
+      await target.stop();
     }
   },
 );

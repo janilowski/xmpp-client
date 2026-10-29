@@ -38,6 +38,33 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "forget a defined stream error condition",
+    file: "src/connection/lib/StreamError.js",
+    before: '  "reset",\n',
+    after: "",
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "stream error closes without a loop / defined reset$",
+  },
+  {
+    name: "change resource selection using stream diagnostic text",
+    file: "src/resource-binding/index.js",
+    before: 'error instanceof StreamError && error.condition === "conflict"',
+    after:
+      'error instanceof StreamError && (error.condition === "conflict" || error.text.includes("conflict"))',
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "misleading stream text cannot grant redirect, credential or resource authority",
+  },
+  {
+    name: "infer a stream error condition from diagnostic text",
+    file: "src/error/index.js",
+    before:
+      'condition && (!known || known.has(condition))\n        ? condition\n        : "undefined-condition",',
+    after:
+      'element.getChildText("text", namespace)?.includes("conflict")\n        ? "conflict"\n        : condition,',
+    suite: "conformance/rfc6120-streams.test.ts",
+    test: "misleading stream text cannot grant redirect, credential or resource authority",
+  },
+  {
     name: "sort capability strings as UTF-16 instead of UTF-8",
     file: "src/caps/verification.ts",
     before: "  const a = encoder.encode(left);\n  const b = encoder.encode(right);",
