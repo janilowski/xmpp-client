@@ -2,6 +2,7 @@ import xmlFactory from "../xml/index.js";
 import jid from "../jid/index.js";
 import isLanguageTag from "../xml/lib/language.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
+import { discoState } from "./state.ts";
 import type {
   Disco,
   DiscoIdentity,
@@ -155,7 +156,9 @@ class ServiceDiscovery implements Disco {
   readonly #caller: IQCaller;
   readonly #authorize: DiscoOptions["authorize"];
   readonly #nodes = new Map<string | undefined, NodeData>();
+  readonly #installedNodes = new Map<string, NodeData>();
   readonly #rootFeatures: Set<string>;
+  readonly #listeners = new Set<() => void>();
 
   constructor(
     {
@@ -184,6 +187,32 @@ class ServiceDiscovery implements Disco {
         ? { identities: [], features: new Set(), items: [] }
         : prepareNode(options),
     );
+    discoState.set(this, {
+      snapshot: () => this.#information(undefined, this.#getNode()),
+      onChange: (listener) => {
+        this.#listeners.add(listener);
+        return () => {
+          this.#listeners.delete(listener);
+        };
+      },
+      installFeature: (feature) => {
+        validateIdentifier(feature);
+        this.#change(undefined, () => {
+          this.#rootFeatures.add(feature);
+        });
+      },
+      setNode: (node, value) => {
+        validateIdentifier(node);
+        if (this.#nodes.has(node)) {
+          throw new TypeError("Discovery node belongs to the application");
+        }
+        this.#installedNodes.set(node, prepareNode(value));
+      },
+      removeNode: (node) => {
+        validateIdentifier(node);
+        this.#installedNodes.delete(node);
+      },
+    });
     iqCallee.get(INFO, "query", (context) => this.#respond("info", context));
     iqCallee.get(ITEMS, "query", (context) => this.#respond("items", context));
   }
@@ -191,6 +220,9 @@ class ServiceDiscovery implements Disco {
   #getNode(node?: string): NodeData {
     if (node !== undefined) {
       validateIdentifier(node);
+      if (this.#installedNodes.has(node)) {
+        throw new TypeError("Cannot modify an installed discovery node");
+      }
     }
     const value = this.#nodes.get(node);
     if (!value) {
@@ -201,12 +233,18 @@ class ServiceDiscovery implements Disco {
 
   setIdentities(identities: readonly DiscoIdentity[], node?: string): void {
     const current = this.#getNode(node);
-    current.identities = prepareNode({ identities }).identities;
+    const prepared = prepareNode({ identities }).identities;
+    this.#change(node, () => {
+      current.identities = prepared;
+    });
   }
 
   addFeature(feature: string, node?: string): void {
     validateIdentifier(feature);
-    this.#getNode(node).features.add(feature);
+    const current = this.#getNode(node);
+    this.#change(node, () => {
+      current.features.add(feature);
+    });
   }
 
   removeFeature(feature: string, node?: string): void {
@@ -219,7 +257,25 @@ class ServiceDiscovery implements Disco {
     ) {
       throw new TypeError("Cannot remove an installed discovery feature");
     }
-    current.features.delete(feature);
+    this.#change(node, () => {
+      current.features.delete(feature);
+    });
+  }
+
+  // Only root info affects advertised caps; items and named nodes are separate.
+  #change(node: string | undefined, apply: () => void): void {
+    if (node !== undefined || this.#listeners.size === 0) {
+      apply();
+      return;
+    }
+    const before = this.#information(undefined, this.#getNode()).toString();
+    apply();
+    if (before === this.#information(undefined, this.#getNode()).toString()) {
+      return;
+    }
+    for (const listener of this.#listeners) {
+      listener();
+    }
   }
 
   setItems(items: readonly DiscoItem[], node?: string): void {
@@ -234,11 +290,17 @@ class ServiceDiscovery implements Disco {
 
   setNode(node: string, value: DiscoNode): void {
     validateIdentifier(node);
+    if (this.#installedNodes.has(node)) {
+      throw new TypeError("Cannot modify an installed discovery node");
+    }
     this.#nodes.set(node, prepareNode(value));
   }
 
   removeNode(node: string): void {
     validateIdentifier(node);
+    if (this.#installedNodes.has(node)) {
+      throw new TypeError("Cannot modify an installed discovery node");
+    }
     this.#nodes.delete(node);
   }
 
@@ -261,7 +323,7 @@ class ServiceDiscovery implements Disco {
     ) {
       return error("service-unavailable");
     }
-    const value = this.#nodes.get(node);
+    const value = this.#nodes.get(node) ?? this.#installedNodes.get(node);
     if (!value) {
       return error("item-not-found");
     }
@@ -275,6 +337,10 @@ class ServiceDiscovery implements Disco {
     if (value.identities.length === 0) {
       return error("service-unavailable");
     }
+    return this.#information(node, value);
+  }
+
+  #information(node: string | undefined, value: NodeData): Element {
     const features = new Set(
       node === undefined ? this.#rootFeatures : [INFO, ITEMS],
     );
