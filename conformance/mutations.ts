@@ -38,6 +38,58 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept 1024-octet SASL2 identity parts",
+    file: "src/jid/lib/precis.js",
+    before: "export const MAX_PART_BYTES = 1023;",
+    after: "export const MAX_PART_BYTES = 1024;",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject prepared 1024 octets before effects / (ASCII local|IPvFuture domain|ASCII resource) / (bare|Bind2)$",
+  },
+  {
+    name: "undercount UTF-8 in a SASL2 identity",
+    file: "src/jid/lib/precis.js",
+    before: "encoder.encode(value).length > MAX_PART_BYTES",
+    after: "value.length > MAX_PART_BYTES",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject prepared 1024 octets before effects / supplementary resource / Bind2$",
+  },
+  {
+    name: "reject a SASL2 JID before full-address preparation",
+    file: "src/jid/lib/parse.js",
+    before: "export default function parse(s) {",
+    after:
+      'export default function parse(s) {\n  if (new TextEncoder().encode(s).length > 3071) { throw new TypeError("Raw JID too long"); }',
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "accept prepared identifier boundary / NFC-contracted 3071-octet full JID / Bind2$",
+  },
+  {
+    name: "reject a SASL2 localpart before NFC contraction",
+    file: "src/jid/lib/precis.js",
+    before: '    value = value.toLowerCase().normalize("NFC");',
+    after:
+      '    checkLength(value);\n    value = value.toLowerCase().normalize("NFC");',
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "accept prepared identifier boundary / NFC-contracted local / bare$",
+  },
+  {
+    name: "reject a SASL2 resource before space mapping",
+    file: "src/jid/lib/precis.js",
+    before: '  value = value.replace(/\\p{Zs}/gu, " ").normalize("NFC");',
+    after:
+      '  checkLength(value);\n  value = value.replace(/\\p{Zs}/gu, " ").normalize("NFC");',
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "accept prepared identifier boundary / space-mapped resource / Bind2$",
+  },
+  {
+    name: "dispatch SASL2 effects before validating identity",
+    file: "src/sasl2/index.js",
+    before: "const address = jid(identifiers[0].text());",
+    after:
+      "for (const child of element.getChildElements()) {\n        await features.get(child.getNS())?.[1]?.(child, signal);\n      }\n      const address = jid(identifiers[0].text());",
+    suite: "conformance/xep0388-authorization-identifier.test.ts",
+    test: "reject prepared 1024 octets before effects / ASCII local / (bare|Bind2)$",
+  },
+  {
     name: "accept 1024-octet binding identity parts",
     file: "src/jid/lib/precis.js",
     before: "export const MAX_PART_BYTES = 1023;",
