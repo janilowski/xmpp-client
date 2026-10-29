@@ -28,6 +28,7 @@ import { readFrame } from "./xml.ts";
 // Opening attributes, identity and target validation: rfc6120-stream-headers.test.ts.
 // Serialized envelope and replay metadata: rfc6120-serialized-stanzas.test.ts.
 // Feature negotiation and stream errors: rfc6120-streams.test.ts.
+// Stream errors and fresh authentication before SM resumption: rfc6120-reset.test.ts.
 // Malformed feature namespaces and error-before-close: rfc6120-feature-errors.test.ts.
 // Fatal XML errors and reciprocal close on usable transport: rfc6120-parser-errors.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).

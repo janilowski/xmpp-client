@@ -44,6 +44,7 @@ test.each([SM, SASL2])(
     // Replay begins only for a retained, previously bound session.
     entity._jid("foo@bar/test");
     entity.status = "online";
+    entity.streamFeatures.authenticated = true;
     const enabling = entity.catchOutgoing();
     entity.mockInput(
       xml("features", { xmlns: STREAMS }, xml("sm", { xmlns: SM })),
@@ -54,6 +55,10 @@ test.each([SM, SASL2])(
     );
     await tick();
     entity.emit("disconnect");
+    if (ns === SM) {
+      // The replacement classic stream has completed SASL before resumption.
+      entity.streamFeatures.authenticated = true;
+    }
 
     const errors = [];
     entity.on("error", (error) => errors.push(error));
@@ -250,7 +255,7 @@ test.each([SASL, SASL2, BIND, SM])(
       password: "bar",
     });
     const errors = [];
-    entity.streamFeatures.authenticated = ns === BIND;
+    entity.streamFeatures.authenticated = ns === BIND || ns === SM;
     if (ns === SM) {
       entity.status = "online"; // This test waits for enable after binding.
     }
@@ -342,6 +347,7 @@ test("binding abandons its pending IQ on disconnect", async () => {
 test("SM does not fall back to enabling after disconnected resumption", async () => {
   const entity = mockClient();
   entity.on("error", () => {});
+  entity.streamFeatures.authenticated = true;
   entity.streamManagement.id = "old-session";
   entity.mockInput(
     xml("features", { xmlns: STREAMS }, xml("sm", { xmlns: SM })),

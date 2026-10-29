@@ -29,6 +29,7 @@ for (const mode of ["features", "sasl2"]) {
       // Both adapters resume a retained, previously bound session.
       xmpp._jid("foo@bar/test");
       xmpp.status = "online";
+      xmpp.streamFeatures.authenticated = true;
       const enabling = xmpp.catchOutgoing();
       xmpp.mockInput(
         <features xmlns="http://etherx.jabber.org/streams">
@@ -39,6 +40,10 @@ for (const mode of ["features", "sasl2"]) {
       xmpp.mockInput(<enabled xmlns={NS} id="old-session" resume="true" />);
       await tick();
       xmpp.emit("disconnect");
+      if (mode === "features") {
+        // Classic resumption follows SASL on the replacement connection.
+        xmpp.streamFeatures.authenticated = true;
+      }
 
       sm.outbound = MAX_H;
       sm.outbound_q = ["a", "b"].map((id) => ({

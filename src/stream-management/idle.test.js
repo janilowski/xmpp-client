@@ -25,6 +25,7 @@ describe("RFC 6120 §4.6.4 / XEP-0198 §4 — idle checks", () => {
     const { entity } = mockClient();
     entity.reconnect.stop();
     entity.status = "online";
+    entity.streamFeatures.authenticated = true;
     const sm = entity.streamManagement;
     if (interval !== undefined) {
       sm.requestAckInterval = interval;

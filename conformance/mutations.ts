@@ -38,6 +38,14 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "resume SM without current-transport authentication",
+    file: "src/stream-management/stream-feature.js",
+    before: "if (!streamFeatures.authenticated) {",
+    after: "if (false) {",
+    suite: "conformance/rfc6120-reset.test.ts",
+    test: "unauthenticated SM cannot bypass fresh SASL$",
+  },
+  {
     name: "forget a defined stream error condition",
     file: "src/connection/lib/StreamError.js",
     before: '  "reset",\n',
@@ -2992,6 +3000,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-outgoing-errors.test.ts",
       "conformance/rfc6120-namespaces.test.ts",
       "conformance/rfc6120-streams.test.ts",
+      "conformance/rfc6120-reset.test.ts",
       "conformance/rfc6120-feature-errors.test.ts",
       "conformance/rfc6120-parser-errors.test.ts",
       "conformance/rfc6120-binding.test.ts",

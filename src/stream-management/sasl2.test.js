@@ -37,6 +37,7 @@ test("resume", async () => {
   });
 
   // A resumable session already owns a bound resource and its opaque ID.
+  entity.streamFeatures.authenticated = true;
   entity._jid("foo@bar/test");
   entity.status = "online";
   const enabling = entity.catchOutgoing();

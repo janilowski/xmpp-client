@@ -8,6 +8,7 @@ import { tick } from "../events/index.js";
 
 test("enable - enabled", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
   entity.status = "online"; // Resource binding has completed.
 
   entity.mockInput(
@@ -61,6 +62,7 @@ test("enable - send rejects", async () => {
 
 test("enable - message - enabled", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
   entity.status = "online";
 
   entity.mockInput(
@@ -102,6 +104,7 @@ test("enable - message - enabled", async () => {
 
 test("enable - failed", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
   entity.status = "online";
 
   entity.mockInput(
@@ -133,6 +136,7 @@ test("enable - failed", async () => {
 
 test("resume - resumed", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
 
   // Retain the bound identity through a completed SM enable exchange.
   entity._jid("foo@bar/test");
@@ -148,6 +152,7 @@ test("resume - resumed", async () => {
   await tick();
   entity.emit("disconnect");
   entity.status = "offline";
+  entity.streamFeatures.authenticated = true; // The replacement stream completed SASL.
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -197,6 +202,7 @@ test("resume - resumed", async () => {
 
 test("resumed event", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
 
   // Retain the bound identity through a completed SM enable exchange.
   entity._jid("foo@bar/test");
@@ -212,6 +218,7 @@ test("resumed event", async () => {
   await tick();
   entity.emit("disconnect");
   entity.status = "offline";
+  entity.streamFeatures.authenticated = true; // The replacement stream completed SASL.
 
   entity.mockInput(
     <features xmlns="http://etherx.jabber.org/streams">
@@ -267,6 +274,7 @@ test("resumed event", async () => {
 
 test("resume - failed", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
 
   entity.status = "open";
   const errors = [];
@@ -305,6 +313,7 @@ test("resume - failed", async () => {
 
 test("resume - failed with something in queue", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
 
   entity.status = "open";
   const errors = [];
@@ -398,6 +407,7 @@ test("sends an <a/> element before closing", async () => {
 
 test("enable - outbound stanza - enabled", async () => {
   const { entity } = mockClient();
+  entity.streamFeatures.authenticated = true;
   entity.status = "online";
 
   entity.mockInput(

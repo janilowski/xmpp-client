@@ -19,6 +19,11 @@ export function setupStreamFeature({
     // SASL2 can deliver features while its proof/inline binding is still pending.
     await streamFeatures.authentication;
     signal.throwIfAborted();
+    // XEP-0198 §§3/5/10: retained delivery state is not authentication.
+    if (!streamFeatures.authenticated) {
+      entity.disconnect().catch(() => {});
+      throw new Error("Stream Management requires authentication");
+    }
     // XEP-0198 §3: inline success or refusal also spends this stream's attempt.
     if (sm.enabled || enableState.attempted) {
       return next();
