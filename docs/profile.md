@@ -414,6 +414,11 @@ domains serialize as U-labels and resource case remains significant. Migrate
 stored keys with collision checks. This is not SASLprep, account provisioning
 or authorization.
 
+Without an explicit `domain`, the factory extracts the raw service host before
+JID preparation. Bracketed IP literals stay intact; ports, paths and queries do
+not become domain text. Endpoint validation remains separate: a valid JID domain
+need not be a supported WebSocket URL host.
+
 Core stanza `to`/`from` values are prepared before serialization and SM admission.
 Length checks use prepared UTF-8, so longer input can normalize to a valid JID.
 Strict local rejection implements RFC 7622 §4's client SHOULD; generic foreign

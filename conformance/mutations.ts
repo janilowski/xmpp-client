@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "split literal host colons as a service port",
+    file: "src/client/lib/getDomain.js",
+    before: "return authority.slice(0, end + 1);",
+    after: 'return authority.split(":")[0];',
+    suite: "conformance/rfc7622-service-domain.test.ts",
+    test: "public factory accepts ws://\\[::1\\]$",
+  },
+  {
+    name: "discard malformed service authority suffixes",
+    file: "src/client/lib/getDomain.js",
+    before: "end === -1 || !/^(?::\\d*)?$/.test(authority.slice(end + 1))",
+    after: "end === -1",
+    suite: "conformance/rfc7622-service-domain.test.ts",
+    test: "malformed bracket authority.*suffix",
+  },
+  {
+    name: "absorb endpoint queries into inferred XMPP domains",
+    file: "src/client/lib/getDomain.js",
+    before: ".split(/[/?#]/, 1)[0];",
+    after: '.split("/", 1)[0];',
+    suite: "conformance/rfc7622-service-domain.test.ts",
+    test: "public factory accepts wss://EXAMPLE.TEST\\?ticket=a:b$",
+  },
+  {
     name: "let a delayed owned error write into a replacement transport",
     file: "src/connection/index.js",
     before:
@@ -3460,6 +3484,7 @@ for (const mutation of mutations) {
       "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",
       "conformance/rfc7622-address-lengths.test.ts",
+      "conformance/rfc7622-service-domain.test.ts",
       "conformance/peer.ts",
       "conformance/xml.ts",
     ]) {
