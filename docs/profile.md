@@ -44,6 +44,10 @@ of encryption. TLS is hop-by-hop, not end-to-end protection.
 The Bun disposable-CA tests exercise root trust, hostname and expiry rejection
 for direct WSS and HTTPS discovery. Intermediate-chain scenarios accept a valid
 chain and reject an untrusted, expired, non-CA or missing intermediate.
+Version tests reject TLS 1.0/1.1, accept TLS 1.2/1.3 and prefer TLS 1.3 for both
+paths. Native Node peers and authenticated capability probes independently
+confirm the offered protocols; only the legacy test peer/probe permits obsolete
+crypto. These are Bun integration checks, not browser-version or cipher audits.
 Separate Linux Chromium tests use a disposable CA in an isolated NSS database,
 browser home, XDG paths and profile, without certificate-error exceptions.
 They verify missing fixture trust for direct WSS and initial HTTPS discovery.

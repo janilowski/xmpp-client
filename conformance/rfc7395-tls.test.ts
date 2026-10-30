@@ -10,6 +10,7 @@ import { generate } from "selfsigned";
 // XEP-0156 1.4.0 §2.2: authenticate the complete HTTPS discovery and WSS
 // certificate paths and endpoint identities independently of the XMPP domain.
 // PKIX belongs to the runtime; these are integration scenarios.
+// Protocol versions and TLS 1.3 preference: rfc7590-versions.test.ts.
 const HTTP_BAD_REQUEST = 400;
 const DAY_MS = 86_400_000;
 const KNOWN_CN_ONLY_BUN_VERSIONS = new Set(["1.4.2", "1.4.3", "1.4.4"]);

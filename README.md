@@ -142,7 +142,7 @@ and [compromised CA trust](https://github.com/oven-sh/bun/security/advisories/GH
 affecting earlier releases. Upgrade with `bun upgrade` before installing dependencies.
 
 ```sh
-sudo dnf install prosody lua lua-devel luarocks nss-tools
+sudo dnf install nodejs prosody lua lua-devel luarocks nss-tools
 bun install --frozen-lockfile
 bun run prosody:setup
 bunx playwright install chromium
@@ -175,6 +175,9 @@ and verify trust, hostname and expiry for WSS and HTTPS discovery without except
 They isolate the browser home, XDG paths and profile; public/system roots remain.
 `certutil` is required (`nss-tools` on Fedora, `libnss3-tools` on Ubuntu).
 Set `XMPP_CERTUTIL` only when that executable is outside `PATH`.
+TLS version tests use native Node for their controlled peer and independent
+capability probe. If `node` resolves to Bun's shim, set
+`XMPP_TEST_NODE=/usr/bin/node` when running conformance or `test:all`.
 IPv6 WSS is tested without an expected-failure marker:
 Bun 1.4.3 fixes the earlier identity-verification defect. The separate CN-only
 identity defect remains an executable expected failure; see the
