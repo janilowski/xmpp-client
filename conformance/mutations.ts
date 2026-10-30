@@ -38,6 +38,38 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "retain stanza authority during reset callbacks",
+    file: "src/connection/index.js",
+    before: "refuseReconnect(this, error);\n      resetConnection(this);",
+    after: "refuseReconnect(this, error);",
+    suite: "conformance/rfc6120-reset.test.ts",
+    test: "after reset, authentication cannot bypass fresh SASL$",
+  },
+  {
+    name: "schedule automatic retries after terminal reset",
+    file: "src/reconnect/index.js",
+    before: "assertCanConnect(this.entity);",
+    after: "void this.entity;",
+    suite: "./src/reconnect/test.js",
+    test: "reset cancels pending automatic retries$",
+  },
+  {
+    name: "forget terminal reset refusal",
+    file: "src/connection/lib/reset.ts",
+    before: "failures.set(entity, error);",
+    after: "void entity; void error;",
+    suite: "conformance/rfc6120-reset.test.ts",
+    test: "after reset, authentication cannot bypass fresh SASL$",
+  },
+  {
+    name: "contact discovery after terminal reset",
+    file: "src/resolve/index.js",
+    before: "    assertCanConnect(this);",
+    after: "",
+    suite: "conformance/rfc6120-reset.test.ts",
+    test: "after reset, authentication cannot bypass fresh SASL$",
+  },
+  {
     name: "ignore inadequate Unicode runtime support",
     file: "src/jid/lib/precis.js",
     before: "if (!supportsUnicode16 && /[\\u0080-\\u{10ffff}]/u.test(value)) {",
@@ -1243,16 +1275,16 @@ const mutations = [
     name: "allow opening a failed feature stream",
     file: "src/connection/index.js",
     before:
-      "  async open(options) {\n    if (this.#closing || this.#streamFailed)",
-    after: "  async open(options) {\n    if (this.#closing)",
+      "  async open(options) {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed)",
+    after: "  async open(options) {\n    assertCanConnect(this);\n    if (this.#closing)",
     suite: "src/connection/test/close-race.test.js",
     test: "fatal feature errors reject synchronous open before another opening$",
   },
   {
     name: "allow restarting a failed feature stream",
     file: "src/connection/index.js",
-    before: "  async restart() {\n    if (this.#closing || this.#streamFailed)",
-    after: "  async restart() {\n    if (this.#closing)",
+    before: "  async restart() {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed)",
+    after: "  async restart() {\n    assertCanConnect(this);\n    if (this.#closing)",
     suite: "src/connection/test/close-race.test.js",
     test: "fatal feature errors reject synchronous restart before another opening$",
   },
@@ -1542,8 +1574,8 @@ const mutations = [
     name: "reopen a closed stream from its close callback",
     file: "src/connection/index.js",
     before:
-      "async open(options) {\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
-    after: "async open(options) {",
+      "async open(options) {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
+    after: "async open(options) {\n    assertCanConnect(this);",
     suite: "conformance/rfc7395.test.ts",
     test: "open cannot reopen from the close callback / peer$",
   },
@@ -1551,9 +1583,9 @@ const mutations = [
     name: "detach the closing parser before rejecting restart",
     file: "src/connection/index.js",
     before:
-      "async restart() {\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }\n    this._detachParser();",
+      "async restart() {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }\n    this._detachParser();",
     after:
-      "async restart() {\n    this._detachParser();\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
+      "async restart() {\n    assertCanConnect(this);\n    this._detachParser();\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
     suite: "conformance/rfc7395.test.ts",
     test: "restart cannot reopen while awaiting reciprocal close$",
   },
@@ -2403,9 +2435,9 @@ const mutations = [
     name: "restore stale routing authority before stream opening",
     file: "src/connection/index.js",
     before:
-      "async connect(service) {\n    this.#redirectCount = 0;\n    resetConnection(this);",
+      "async connect(service) {\n    assertCanConnect(this);\n    this.#redirectCount = 0;\n    resetConnection(this);",
     after:
-      "async connect(service) {\n    this.#redirectCount = 0;\n    resetConnection(this);\n    if (this.jid) { confirmIdentity(this, this.jid); completeNegotiation(this); }",
+      "async connect(service) {\n    assertCanConnect(this);\n    this.#redirectCount = 0;\n    resetConnection(this);\n    if (this.jid) { confirmIdentity(this, this.jid); completeNegotiation(this); }",
     suite: "conformance/rfc6120-stanza-routing.test.ts",
     test: "ordinary remote replay.* / valid$",
   },

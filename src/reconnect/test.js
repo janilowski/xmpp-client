@@ -1,4 +1,5 @@
 import Connection from "../connection/index.js";
+import xml from "../xml/index.js";
 
 import _reconnect from "./index.js";
 import { afterEach, describe, expect, jest, spyOn, test } from "bun:test";
@@ -70,6 +71,31 @@ describe("RFC 6120 §3.3 reconnect policy", () => {
     const { entity, reconnect, timers } = fixture(random);
     entity.emit("disconnect");
     expect(timers[0].delay).toBe(500 + 500 * random);
+    reconnect.stop();
+  });
+
+  test("RFC 6120 §4.9.3.16: reset cancels pending automatic retries", async () => {
+    const { entity, reconnect, timers, connect } = fixture();
+    entity.emit("disconnect");
+    const pending = timers[0];
+    entity._onStreamError(
+      xml(
+        "error",
+        { xmlns: "http://etherx.jabber.org/streams" },
+        xml("reset", { xmlns: "urn:ietf:params:xml:ns:xmpp-streams" }),
+      ),
+    );
+    expect(pending.cancelled).toBe(true);
+    expect(reconnect._timeout).toBeNull();
+    entity.emit("disconnect");
+    expect(timers).toHaveLength(1);
+    // Even a callback already queued before cancellation must do nothing.
+    await pending.callback();
+    expect(connect).not.toHaveBeenCalled();
+    reconnect.start();
+    entity.emit("disconnect");
+    expect(timers).toHaveLength(1);
+    expect(reconnect._timeout).toBeNull();
     reconnect.stop();
   });
 

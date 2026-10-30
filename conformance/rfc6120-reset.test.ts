@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { setImmediate } from "node:timers/promises";
 import { client, xml } from "../src/client/index.js";
 import type { Element } from "../types/index.js";
@@ -61,8 +61,8 @@ function sessionPeer(
   });
 }
 
-// This checks XMPP authentication, not TLS session resumption:
-// browser WebSocket APIs do not expose control over the underlying TLS cache.
+// WebSocket cannot force fresh TLS: reset is terminal for this instance.
+// Other recoverable errors still require fresh SASL before SM resumption.
 test.each([
   ["reset", "authentication"],
   ["system-shutdown", "authentication"],
@@ -87,6 +87,7 @@ test.each([
     const failures: string[] = [];
     const acks: string[] = [];
     const online: string[] = [];
+    const reentrant: Promise<unknown>[] = [];
     const initialEnabled = Promise.withResolvers<boolean>();
     const replacement = Promise.withResolvers<
       "enabled" | "resumed" | "closed" | "error" | "timeout"
@@ -105,6 +106,22 @@ test.each([
     });
     xmpp.on("error", (error: Error) => {
       errors.push(error);
+      if (
+        error instanceof Error &&
+        "condition" in error &&
+        error.condition === "reset"
+      ) {
+        // Error listeners run before disconnect: they must not restart old TLS.
+        const connection = xmpp as typeof xmpp & { restart(): Promise<void> };
+        // eslint-disable-next-line promise/no-promise-in-callback -- Deliberate synchronous reentry.
+        reentrant.push(connection.restart().catch((failure: Error) => failure));
+        reentrant.push(
+          // eslint-disable-next-line promise/no-promise-in-callback -- Deliberate synchronous reentry.
+          xmpp
+            .send(xml("message", { id: "forbidden", to: "peer@remote.test/r" }))
+            .catch((failure: Error) => failure),
+        );
+      }
       if (replacing) {
         replacement.resolve("error");
       }
@@ -174,6 +191,50 @@ test.each([
       const outcome = await replacement.promise;
       clearTimeout(watchdog);
       await setImmediate();
+      if (condition === "reset") {
+        const [restart, send] = await Promise.all(reentrant);
+        expect(restart).toMatchObject({
+          name: "StreamError",
+          condition: "reset",
+        });
+        expect(send).toBeInstanceOf(Error);
+        expect(
+          sm.outbound_q.some(
+            ({ stanza }: { stanza: Element }) =>
+              stanza.attrs.id === "forbidden",
+          ),
+        ).toBe(false);
+        expect(outcome).toBe("error");
+        expect(second.transcript).toEqual([]);
+        expect(second.requests).toEqual([]);
+        expect(resumed).toBe(0);
+        await expect(xmpp.reconnect.reconnect()).rejects.toMatchObject({
+          name: "StreamError",
+          condition: "reset",
+        });
+        await xmpp.stop();
+        await expect(xmpp.start()).rejects.toMatchObject({
+          name: "StreamError",
+          condition: "reset",
+        });
+        // Discovery must not contact HTTPS before the transport guard runs.
+        Object.assign(xmpp.options, { service: "unreachable.invalid" });
+        const fetch = spyOn(globalThis, "fetch").mockRejectedValue(
+          new Error("Discovery must not run"),
+        );
+        try {
+          await expect(xmpp.start()).rejects.toMatchObject({
+            name: "StreamError",
+            condition: "reset",
+          });
+          expect(fetch).not.toHaveBeenCalled();
+        } finally {
+          fetch.mockRestore();
+        }
+        expect(second.transcript).toEqual([]);
+        expect(second.requests).toEqual([]);
+        return;
+      }
       if (offer === "unauthenticated SM") {
         // If the hostile resumed response grants authority, this fails immediately.
         // Rejecting or ignoring its offer are both allowed; no error text is prescribed.

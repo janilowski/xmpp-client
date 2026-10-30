@@ -18,6 +18,9 @@ const TOOL_TIMEOUT_MS = 5000;
 const TEST_TIMEOUT_MS = 20000;
 const XRD = "http://docs.oasis-open.org/ns/xri/xrd-1.0";
 const RELATION = "urn:xmpp:alt-connections:websocket";
+const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
+const STREAM = "http://etherx.jabber.org/streams";
+const ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const CA_NICKNAME = "Disposable XMPP browser CA";
 type Mode = "direct WSS" | "HTTPS discovery";
 type Scenario = "valid" | "wrong-name" | "expired" | "CN-only";
@@ -38,6 +41,7 @@ function certutil(args: string[]) {
 function endpoint(certificate: Certificate) {
   const counts = { discoveries: 0, upgrades: 0 };
   let target: string | undefined;
+  let reset = false;
   const server = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -66,7 +70,23 @@ function endpoint(certificate: Certificate) {
       }
       return new Response(null, { status: HTTP_BAD_REQUEST });
     },
-    websocket: { message() {} },
+    websocket: {
+      message(socket, frame) {
+        if (!reset || typeof frame !== "string") {
+          return;
+        }
+        if (frame.startsWith("<open")) {
+          socket.send(
+            `<open xmlns="${FRAMING}" from="distinct-xmpp-service.test" id="reset" version="1.0"/>`,
+          );
+          socket.send(
+            `<error xmlns="${STREAM}"><reset xmlns="${ERRORS}"/></error>`,
+          );
+        } else if (frame.startsWith("<close")) {
+          socket.send(`<close xmlns="${FRAMING}"/>`);
+        }
+      },
+    },
   });
   return {
     server,
@@ -76,7 +96,77 @@ function endpoint(certificate: Certificate) {
     discover(address: string) {
       target = address;
     },
+    resetOnOpen() {
+      reset = true;
+      target = undefined;
+    },
   };
+}
+
+// RFC 6120 §4.9.3.16: refuse before contacting either HTTPS or WSS again.
+async function verifyResetRefusal(
+  context: BrowserContext,
+  origin: string,
+  service: string,
+) {
+  const page = await context.newPage();
+  try {
+    await page.goto(origin);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(async (service) => {
+      const bundle = globalThis as typeof globalThis & {
+        XMPP: typeof import("../src/index.ts");
+      };
+      const xmpp = bundle.XMPP.client({
+        service,
+        domain: "distinct-xmpp-service.test",
+        timeout: 2000,
+      }) as ReturnType<typeof bundle.XMPP.client> & {
+        connect(service: string): Promise<void>;
+      };
+      const errors: string[] = [];
+      const conditions: string[] = [];
+      xmpp.on("error", (error) => {
+        errors.push(
+          error instanceof Error && "condition" in error
+            ? String(error.condition)
+            : "unexpected error",
+        );
+      });
+      const disconnected = new Promise<void>((resolve) =>
+        xmpp.once("disconnect", resolve),
+      );
+      // The peer sends reset during setup, before SASL; this is also fatal.
+      await xmpp.start().catch(() => {});
+      await disconnected;
+      for (const attempt of [
+        () => xmpp.connect(service),
+        () => xmpp.reconnect.reconnect(),
+      ]) {
+        conditions.push(
+          await attempt().then(
+            () => "accepted",
+            (error) => error.condition,
+          ),
+        );
+      }
+      await xmpp.stop();
+      conditions.push(
+        await xmpp.start().then(
+          () => "accepted",
+          (error) => error.condition,
+        ),
+      );
+      await xmpp.stop();
+      return { errors, conditions };
+    }, service);
+    expect(result).toEqual({
+      errors: ["reset"],
+      conditions: ["reset", "reset", "reset"],
+    });
+  } finally {
+    await page.close();
+  }
 }
 
 async function connect(
@@ -345,6 +435,17 @@ test.each(["direct WSS", "HTTPS discovery"] as const)(
           expect(remote.counts).toEqual({ discoveries: 0, upgrades: 0 });
         }
       }
+      const before = { ...valid.counts };
+      valid.resetOnOpen();
+      await verifyResetRefusal(
+        context,
+        `http://127.0.0.1:${origin.port}`,
+        mode === "direct WSS" ? valid.wss : valid.service,
+      );
+      expect(valid.counts).toEqual({
+        discoveries: before.discoveries + (mode === "HTTPS discovery" ? 1 : 0),
+        upgrades: before.upgrades + 1,
+      });
     } finally {
       await context?.close();
       await Promise.all(endpoints.map((remote) => remote.server.stop(true)));

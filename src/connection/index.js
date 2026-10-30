@@ -16,6 +16,7 @@ import { sendPolicies, takeReplay } from "./lib/sendPolicy.js";
 import { outgoingPresence } from "./lib/outgoingPresence.ts";
 
 import StreamError from "./lib/StreamError.js";
+import { assertCanConnect, refuseReconnect } from "./lib/reset.ts";
 import hasContentPrefix from "./lib/hasContentPrefix.js";
 import {
   INVALID_REDIRECT_TARGET,
@@ -258,6 +259,11 @@ class Connection extends EventEmitter {
   _onStreamError(element) {
     const error = StreamError.fromElement(element);
 
+    if (error.condition === "reset") {
+      refuseReconnect(this, error);
+      resetConnection(this);
+    }
+
     if (error.condition === "see-other-host") {
       return this._onSeeOtherHost(error);
     }
@@ -474,6 +480,7 @@ class Connection extends EventEmitter {
    * Connects the socket
    */
   async connect(service) {
+    assertCanConnect(this);
     this.#redirectCount = 0;
     resetConnection(this);
     this._status("connecting", service);
@@ -546,6 +553,7 @@ class Connection extends EventEmitter {
    * Opens the stream
    */
   async open(options) {
+    assertCanConnect(this);
     if (this.#closing || this.#streamFailed) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
@@ -686,6 +694,7 @@ class Connection extends EventEmitter {
    * https://xmpp.org/rfcs/rfc6120.html#streams-negotiation-restart
    */
   async restart() {
+    assertCanConnect(this);
     if (this.#closing || this.#streamFailed) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }

@@ -59,6 +59,15 @@ HTTPS discovery (#50); version-bounded expected failures retain strict rejection
 assertions. Restricted trust-anchor provisioning (RFC 6120 §13.6) and long-lived
 certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
 
+After a received XMPP `reset` (RFC 6120 §4.9.3.16), that client instance
+refuses further connections, including discovery, manual reconnect and
+stop/start. Automatic retries stop. The original `StreamError` is returned.
+This fail-closed policy avoids reusing TLS when WebSocket cannot require a
+fresh security context. Other stream errors retain ordinary reconnect behavior.
+Creating another client or page does not guarantee fresh TLS: browser caches
+can be shared. Applications/deployments must establish a fresh TLS context
+before reconnecting outside the refused instance; no cache-reset API is exposed.
+
 ## Service Discovery
 
 XEP-0030 v2.5.0 uses the existing IQ services. Applications supply identities

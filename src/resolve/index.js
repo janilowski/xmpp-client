@@ -1,4 +1,5 @@
 import _resolve from "./resolve.js";
+import { assertCanConnect } from "../connection/lib/reset.ts";
 
 async function fetchURIs(domain) {
   const result = await _resolve(domain, {
@@ -31,6 +32,7 @@ function filterSupportedURIs(entity, uris) {
 export default function resolve({ entity }) {
   const _connect = entity.connect;
   entity.connect = async function connect(service) {
+    assertCanConnect(this);
     if (!service || /:\/\//.test(service)) {
       return _connect.call(this, service);
     }

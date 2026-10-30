@@ -1,4 +1,5 @@
 import { EventEmitter } from "../events/index.js";
+import { assertCanConnect } from "../connection/lib/reset.ts";
 
 const MAX_DELAY = 60_000;
 
@@ -19,6 +20,12 @@ class Reconnect extends EventEmitter {
     this.scheduleReconnect();
   };
 
+  #onError = (error) => {
+    if (error.name === "StreamError" && error.condition === "reset") {
+      this.stop();
+    }
+  };
+
   #onStatus = (status) => {
     if (status === "online") {
       this.#attempt = 0;
@@ -34,6 +41,12 @@ class Reconnect extends EventEmitter {
   };
 
   scheduleReconnect() {
+    try {
+      assertCanConnect(this.entity);
+    } catch {
+      this.stop();
+      return;
+    }
     if (!this.#active || this._timeout !== null || this.#running !== null) {
       return;
     }
@@ -74,6 +87,7 @@ class Reconnect extends EventEmitter {
 
   async reconnect() {
     const { entity } = this;
+    assertCanConnect(entity);
     const generation = this.#generation;
     this.emit("reconnecting");
     if (generation !== this.#generation) {
@@ -100,6 +114,7 @@ class Reconnect extends EventEmitter {
     entity.on("disconnect", this.#onDisconnect);
     entity.on("status", this.#onStatus);
     entity.on("offline", this.#cancel);
+    entity.on("error", this.#onError);
   }
 
   stop() {
@@ -108,6 +123,7 @@ class Reconnect extends EventEmitter {
     entity.removeListener("disconnect", this.#onDisconnect);
     entity.removeListener("status", this.#onStatus);
     entity.removeListener("offline", this.#cancel);
+    entity.removeListener("error", this.#onError);
     this.#cancel();
   }
 }

@@ -202,7 +202,7 @@ interface ManagedSession {
 
 async function session(
   exercise: (session: ManagedSession) => Promise<void>,
-  expectedError?: "reset",
+  expectedError?: "system-shutdown",
 ) {
   const first = new ManagedPeer("initial");
   const peers = [first];
@@ -424,14 +424,14 @@ describe("XEP-0115 — stream-management lifecycle", () => {
     });
   });
 
-  test("local fresh-session isolation: reset plus refused SM resume clears aliases but retains verified shared data", async () => {
+  test("local fresh-session isolation: shutdown plus refused SM resume clears aliases but retains verified shared data", async () => {
     await session(async ({ xmpp, first, online, replace }) => {
       first.advertise();
       first.answer(await first.nextQuery());
       await result(xmpp, TARGET, "verified");
       await first.barrier();
       first.peer.send(
-        `<error xmlns="${STREAM}"><reset xmlns="${ERRORS}"/></error>`,
+        `<error xmlns="${STREAM}"><system-shutdown xmlns="${ERRORS}"/></error>`,
       );
       expect(await waitForDisconnect(xmpp)).toBe(true);
       const next = await replace("fresh", first.stanzas);
@@ -445,6 +445,6 @@ describe("XEP-0115 — stream-management lifecycle", () => {
       expect(
         next.peer.transcript.some((frame) => frame.startsWith("<presence")),
       ).toBe(false);
-    }, "reset");
+    }, "system-shutdown");
   });
 });
