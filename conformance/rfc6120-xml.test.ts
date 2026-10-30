@@ -172,11 +172,43 @@ const invalid = [
     "unsupported-encoding",
   ],
   [
+    "§11.6 declared UTF-16",
+    `<?xml version="1.0" encoding="UTF-16"?><message xmlns="${CONTENT}"/>`,
+    "unsupported-encoding",
+  ],
+  [
     "§11.8 XML 1.1",
     `<?xml version="1.1"?><message xmlns="${CONTENT}"/>`,
     "invalid-xml",
   ],
 ] as const;
+
+// Selected diagnostic policy implements the recommendations in §§4.9.3.1/11.6.
+// The general conformance cases below still permit the bad-format alternative.
+test.each(invalid.filter(([, , condition]) => condition !== "invalid-xml"))(
+  "RFC 6120 §§4.9.3.1/11.6 preferred diagnostic policy / %s",
+  async (_name, source, specific) => {
+    const { xmpp, peer, errors } = await session();
+    const stanzas: Element[] = [];
+    xmpp.on("stanza", (stanza: Element) => stanzas.push(stanza));
+    try {
+      peer.send(source);
+      const events = readFrame(await peer.next());
+      expect(events[0]).toMatchObject({ open: `{${STREAM}}error` });
+      expect(directChildNames(events, `{${STREAM}}error`)).toEqual([
+        `{${STREAM_ERRORS}}${specific === "namespace" ? "not-well-formed" : specific}`,
+      ]);
+      expect(readFrame(await peer.next())).toEqual(readFrame(CLOSE));
+      await peer.waitForClose();
+      expect(errors).toHaveLength(1);
+      expect(stanzas).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
 
 // §4.9.3.1 permits bad-format instead of the more specific XML conditions.
 // §11.3 rule 4 also permits a not-acceptable stanza error for namespace violations.
@@ -235,6 +267,29 @@ test.each(invalid)(
         expect(errors).toHaveLength(1);
       }
       expect(stanzas).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
+test.each(["UTF-8", "utf-8", "UtF-8"])(
+  "RFC 6120 §11.6 / XML §4.3.3: accept case-insensitive %s declarations",
+  async (encoding) => {
+    const { xmpp, peer, errors } = await session();
+    const received = once(xmpp, "stanza", {
+      signal: AbortSignal.timeout(EVENT_TIMEOUT_MS),
+    });
+    try {
+      peer.send(
+        `<?xml version="1.0" encoding="${encoding}"?><message xmlns="${CONTENT}"><body>Zażółć 汉 🐦</body></message>`,
+      );
+      const [stanza] = await received;
+      expect(stanza.getChildText("body")).toBe("Zażółć 汉 🐦");
+      expect(errors).toEqual([]);
+      expect(peer.transcript).toHaveLength(1);
       expect(peer.errors).toEqual([]);
     } finally {
       await xmpp.stop();

@@ -226,6 +226,12 @@ RFCs, browser engines or general denial-of-service protection.
   attachment; serialization runs once and the validated snapshot is written.
   Browser messages are buffered before delivery; these checks cannot bound
   native allocation before the library receives them.
+- XML diagnostic policy follows RFC 6120 §§4.9.3.1/11.6 recommendations:
+  malformed XML/namespace syntax reports `not-well-formed`, a non-UTF-8
+  declaration reports `unsupported-encoding`, and prohibited constructs report
+  `restricted-xml`. Other unprocessable frames may still report `bad-format`.
+  XML 1.1 rejection does not imply schema validation or a stream-version error;
+  whole-extension schema validation remains optional and caller-owned.
 - Stream version 1.x is supported, including numeric leading zeros and higher
   minor versions. Missing version is unsupported pre-1.0 behavior. Legacy missing
   server `from`/`to` is tolerated; server ID/language is not fabricated.

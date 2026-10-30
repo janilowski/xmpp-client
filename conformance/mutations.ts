@@ -38,6 +38,24 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "report generic encoding errors instead of preferred diagnostics",
+    file: "src/xml/lib/parseDocument.js",
+    before: 'error.condition = "unsupported-encoding";',
+    after: 'error.condition = "bad-format";',
+    suite: "conformance/rfc6120-xml.test.ts",
+    test: "preferred diagnostic policy / .*declared non-UTF-8$",
+  },
+  {
+    name: "report generic parser errors instead of preferred diagnostics",
+    file: "src/xml/lib/parseDocument.js",
+    before:
+      'const error = new XMLError(cause.message, { cause });\n    error.condition = "not-well-formed";',
+    after:
+      'const error = new XMLError(cause.message, { cause });\n    error.condition = "bad-format";',
+    suite: "conformance/rfc6120-xml.test.ts",
+    test: "preferred diagnostic policy / .*mismatched tags$",
+  },
+  {
     name: "retain stanza authority during reset callbacks",
     file: "src/connection/index.js",
     before: "refuseReconnect(this, error);\n      resetConnection(this);",
@@ -1276,15 +1294,18 @@ const mutations = [
     file: "src/connection/index.js",
     before:
       "  async open(options) {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed)",
-    after: "  async open(options) {\n    assertCanConnect(this);\n    if (this.#closing)",
+    after:
+      "  async open(options) {\n    assertCanConnect(this);\n    if (this.#closing)",
     suite: "src/connection/test/close-race.test.js",
     test: "fatal feature errors reject synchronous open before another opening$",
   },
   {
     name: "allow restarting a failed feature stream",
     file: "src/connection/index.js",
-    before: "  async restart() {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed)",
-    after: "  async restart() {\n    assertCanConnect(this);\n    if (this.#closing)",
+    before:
+      "  async restart() {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed)",
+    after:
+      "  async restart() {\n    assertCanConnect(this);\n    if (this.#closing)",
     suite: "src/connection/test/close-race.test.js",
     test: "fatal feature errors reject synchronous restart before another opening$",
   },
@@ -3211,9 +3232,8 @@ const mutations = [
   {
     name: "generate XML 1.1 declarations",
     file: "src/xml/lib/parseDocument.js",
-    before:
-      'version !== "1.0" || (encoding && encoding.toLowerCase() !== "utf-8")',
-    after: 'encoding && encoding.toLowerCase() !== "utf-8"',
+    before: 'version !== "1.0"',
+    after: "false",
     suite: "conformance/rfc6120-xml.test.ts",
     test: "§11.8 XML 1.1: send rejects generated serialized XML before writing$",
   },

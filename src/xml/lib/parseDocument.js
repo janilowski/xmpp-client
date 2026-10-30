@@ -12,9 +12,17 @@ const encoder = new TextEncoder();
 function createParser(source, context, direction) {
   // XML 1.0 excludes lone surrogates; saxes assumes every high surrogate is paired.
   if (UNPAIRED_SURROGATE.test(source)) {
-    throw new XMLError("XML contains an unpaired UTF-16 surrogate");
+    const error = new XMLError("XML contains an unpaired UTF-16 surrogate");
+    error.condition = "not-well-formed";
+    throw error;
   }
   const parser = new SaxesParser({ xmlns: true });
+  // Classify parser failures by their event, never by dependency error wording.
+  parser.on("error", (cause) => {
+    const error = new XMLError(cause.message, { cause });
+    error.condition = "not-well-formed";
+    throw error;
+  });
   const prohibited =
     context === XML_CONTEXT.XMPP
       ? ["doctype", "processinginstruction", "comment"]
@@ -27,8 +35,13 @@ function createParser(source, context, direction) {
     });
   }
   parser.on("xmldecl", ({ version, encoding, standalone }) => {
-    if (version !== "1.0" || (encoding && encoding.toLowerCase() !== "utf-8")) {
-      throw new XMLError("Expected XML 1.0 encoded as UTF-8");
+    if (version !== "1.0") {
+      throw new XMLError("Expected XML 1.0");
+    }
+    if (encoding && encoding.toLowerCase() !== "utf-8") {
+      const error = new XMLError("Expected UTF-8 encoding");
+      error.condition = "unsupported-encoding";
+      throw error;
     }
     // RFC 6120 §11.5 forbids outbound SDDecl; incoming declarations may be ignored.
     if (
