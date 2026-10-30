@@ -241,6 +241,30 @@ describe("RFC 7622 §§3.3–3.4 — PRECIS profiles", () => {
 });
 
 describe("RFC 7622 §3.2 — IDNA2008 domains", () => {
+  test.each(["ſ", "K", "é", "Ｓ", "🐦", "\uD800"])(
+    "RFC 9844 §3 / RFC 3986 §3.2.2: reject non-ASCII IPvFuture %j",
+    (character) => {
+      expect(() => jid("", `[v1.${character}]`)).toThrow(TypeError);
+      expect(() => jid("", `[v1.a${character}z]`)).toThrow(TypeError);
+    },
+  );
+
+  test("RFC 3986 §§2.2–2.3/3.2.2: exact ASCII IPvFuture grammar", () => {
+    const ASCII_LIMIT = 0x80;
+    const allowed = new Set(
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~!$&'()*+,;=:",
+    );
+    for (let code = 0; code < ASCII_LIMIT; code++) {
+      const character = String.fromCharCode(code);
+      const input = `[vA.${character}]`;
+      if (allowed.has(character)) {
+        expect(jid("", input).domain).toBe(`[va.${character.toLowerCase()}]`);
+      } else {
+        expect(() => jid("", input)).toThrow(TypeError);
+      }
+    }
+  });
+
   // RFC 7622 §3.2.1 requires A-label conversion, not opaque ACE acceptance.
   // RFC 5891 §§5.3–5.5 require decoded validation and exact A-label round trips.
   // Literal Punycode checked independently with Python's codec and idna 3.18;

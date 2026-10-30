@@ -38,6 +38,14 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "admit Unicode folds in ASCII IPvFuture literals",
+    file: "src/jid/lib/domain.js",
+    before: "\\]$/i.test(value)",
+    after: "\\]$/iu.test(value)",
+    suite: "conformance/rfc7622.test.js",
+    test: "reject non-ASCII IPvFuture",
+  },
+  {
     name: "skip contextual validation of decoded A-labels",
     file: "src/jid/lib/domain.js",
     before: '    validateClass(label, "identifier");',

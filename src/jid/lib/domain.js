@@ -19,7 +19,8 @@ export default function prepareDomain(value) {
   // RFC 7622 §3.2 requires removing the final DNS dot before canonicalization.
   value = value.replace(/[.\u3002\uff0e\uff61]$/u, "");
   if (value.startsWith("[")) {
-    if (/^\[v[0-9a-f]+\.[a-z0-9._~!$&'()*+,;=:-]+\]$/iu.test(value)) {
+    // RFC 3986 IPvFuture is ASCII; Unicode case folding would admit ſ and K.
+    if (/^\[v[0-9a-f]+\.[a-z0-9._~!$&'()*+,;=:-]+\]$/i.test(value)) {
       return checkLength(value.toLowerCase());
     }
     // RFC 9844 removes zone identifiers from RFC 7622's wire grammar.
