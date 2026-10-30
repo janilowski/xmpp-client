@@ -100,6 +100,129 @@ afterEach(async () => {
   expect(peer.errors).toEqual([]);
 });
 
+describe("RFC 6120 §8.1.5 / XML §2.12 — incoming application boundary", () => {
+  test("open/stanza events preserve input defaults, descendant overrides and fresh-stream context", async () => {
+    const defaults = ["pl", "fr", undefined, "cs"];
+    let openings = 0;
+    const reply = (frame: string, remote: ScriptedPeer) => {
+      const root = readFrame(frame)[0];
+      if (!("open" in root)) {
+        throw new Error("Expected a client element");
+      }
+      if (root.open === `{${FRAMING}}open`) {
+        const lang = defaults[openings++];
+        remote.send(
+          `<open xmlns="${FRAMING}" from="example.test" version="1.0" id="incoming-language"${lang === undefined ? "" : ` xml:lang="${lang}"`}/>`,
+        );
+      } else if (root.open === `{${FRAMING}}close`) {
+        remote.send(`<close xmlns="${FRAMING}"/>`);
+      }
+    };
+    peer = new ScriptedPeer(reply);
+    errors = [];
+    xmpp = client({
+      service: peer.url,
+      domain: "example.test",
+      lang: "de",
+      timeout: TIMEOUT_MS,
+    });
+    xmpp.reconnect.stop();
+    xmpp.on("error", (error: Error) => errors.push(error));
+    let inputLanguage: string | undefined;
+    const headers: Array<string | undefined> = [];
+    const received: Array<{
+      id: string;
+      effective: Array<string | undefined>;
+      declared: Array<string | undefined>;
+    }> = [];
+    xmpp.on("open", (header: Element) => {
+      inputLanguage = header.attrs["xml:lang"];
+      headers.push(inputLanguage);
+    });
+
+    // Selection belongs to this consuming application, not a hidden parser API.
+    // The library must preserve the source tree and the ordered input headers.
+    function language(element: Element): string | undefined {
+      for (
+        let current: Element | null = element;
+        current;
+        current = current.parent
+      ) {
+        if (Object.hasOwn(current.attrs, "xml:lang")) {
+          return current.attrs["xml:lang"];
+        }
+      }
+      return inputLanguage;
+    }
+    xmpp.on("stanza", (stanza: Element) => {
+      const targets = [
+        ...stanza.getChildren("body", CONTENT),
+        ...(stanza
+          .getChild("extra", EXTENSION)
+          ?.getChildren("label", EXTENSION) ?? []),
+      ];
+      received.push({
+        id: stanza.attrs.id,
+        effective: targets.map(language),
+        declared: targets.map((element) => element.attrs["xml:lang"]),
+      });
+    });
+
+    const stages = [
+      [
+        `<message xmlns="${CONTENT}" id="default"><body>Polski</body></message>`,
+        `<message xmlns="${CONTENT}" id="root-override" xml:lang="en"><body>English</body></message>`,
+        `<message xmlns="${CONTENT}" id="overrides" xml:lang="en"><body xml:lang="de-CH">Deutsch</body><extra xmlns="${EXTENSION}" xml:lang=""><label>No language</label><label xml:lang="x-private">Private</label></extra></message>`,
+      ],
+      [
+        `<message xmlns="${CONTENT}" id="restarted"><body>Français</body></message>`,
+      ],
+      [
+        `<message xmlns="${CONTENT}" id="absent"><body>Unknown</body></message>`,
+      ],
+      [
+        `<message xmlns="${CONTENT}" id="new-transport"><body>Čeština</body></message>`,
+      ],
+    ];
+    await xmpp.connect(peer.url);
+    for (const [stage, frames] of stages.entries()) {
+      if (stage === 0) {
+        await xmpp.open(xmpp.options);
+      } else if (stage === stages.length - 1) {
+        await xmpp.stop();
+        await peer.stop();
+        peer = new ScriptedPeer(reply);
+        await xmpp.connect(peer.url);
+        await xmpp.open(xmpp.options);
+      } else {
+        await xmpp.restart();
+      }
+      await peer.next();
+      const barrier = once(xmpp, "nonza", {
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      for (const frame of frames) {
+        peer.send(frame);
+      }
+      peer.send(`<barrier xmlns="${EXTENSION}"/>`);
+      await barrier;
+    }
+    expect(headers).toEqual(["pl", "fr", undefined, "cs"]);
+    expect(received).toEqual([
+      { id: "default", effective: ["pl"], declared: [undefined] },
+      { id: "root-override", effective: ["en"], declared: [undefined] },
+      {
+        id: "overrides",
+        effective: ["de-CH", "", "x-private"],
+        declared: ["de-CH", undefined, "x-private"],
+      },
+      { id: "restarted", effective: ["fr"], declared: [undefined] },
+      { id: "absent", effective: [undefined], declared: [undefined] },
+      { id: "new-transport", effective: ["cs"], declared: [undefined] },
+    ]);
+  });
+});
+
 // These are independent literal vectors, not output from the implementation.
 const MALFORMED = [
   "not a tag",

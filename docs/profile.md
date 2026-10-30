@@ -242,8 +242,13 @@ RFCs, browser engines or general denial-of-service protection.
   extension-specific validity (RFC 5646 §§2.1–2.2).
   Empty XML inheritance resets remain supported on descendants and foreign
   nonza roots, not stream/core-stanza roots (RFC 6120 §§4.7.4/8.1.5).
-  Incoming documents inherit no context; receiving-language policy remains a
-  separate audit boundary.
+  Incoming trees retain declared attributes without inserting inherited ones.
+  Applications presenting text track the latest input `open` header (including
+  an absent replacement default) and resolve the nearest ancestor `xml:lang`;
+  an empty value cancels inheritance. Configured `lang` is an output preference,
+  not the input default. `disco.info()` exposes declared identity languages and
+  retains the raw query ancestry for interpretation. Caps verification uses the
+  original declared fields, not materialized language defaults.
 - Negotiation uses `entity.timeout` (default 2000 ms), including binding and
   waiting for features after each opening, SASL restart or reconnect, and after
   SASL2 success except successful inline SM resumption. These are

@@ -38,6 +38,14 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "discard the input stream language before application delivery",
+    file: "src/websocket/lib/FramedParser.js",
+    before: 'this.emit("start", element);',
+    after: 'delete element.attrs["xml:lang"]; this.emit("start", element);',
+    suite: "conformance/rfc6120-language-tags.test.ts",
+    test: "open/stanza events preserve input defaults",
+  },
+  {
     name: "admit Unicode folds in ASCII IPvFuture literals",
     file: "src/jid/lib/domain.js",
     before: "\\]$/i.test(value)",
