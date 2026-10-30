@@ -899,6 +899,8 @@ test("Chromium bundled caps verifies routed presence and feature changes", async
 });
 
 test.each([
+  // RFC 7395 §3.3.3: FEFF cannot replace the initial '<' or be stripped as a BOM.
+  '\uFEFF<message xmlns="jabber:client"/>',
   '<message xmlns="jabber:client"><body>unfinished',
   '<message xmlns="jabber:client"/><presence xmlns="jabber:client"/>',
   '<close xmlns="urn:wrong"/>',

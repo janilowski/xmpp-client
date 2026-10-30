@@ -217,6 +217,7 @@ const open = framingDocument("open", basicOptions, [["version", "1.0"]]);
 const close = framingDocument("close", basicOptions);
 const stanza = stanzaDocument(basicOptions, "valid", "message");
 const invalidKinds = [
+  "leading-bom",
   "truncated",
   "extra-root",
   "trailing-data",
@@ -232,6 +233,10 @@ function invalidDocument(kind: (typeof invalidKinds)[number], body: string) {
   const message = stanzaDocument(basicOptions, "invalid", body);
 
   switch (kind) {
+    case "leading-bom": {
+      // RFC 7395 §3.3.3: U+FEFF is not the required first '<' character.
+      return `\uFEFF${message}`;
+    }
     case "truncated": {
       return message.slice(0, -1);
     }

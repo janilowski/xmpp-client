@@ -47,6 +47,7 @@ test.each(["open", "close"])(
 );
 
 test.each([
+  '\uFEFF<message xmlns="jabber:client"/>',
   '<message xmlns="jabber:client">',
   '<message xmlns="jabber:client"/><presence xmlns="jabber:client"/>',
   '<message xmlns="jabber:client"/>garbage',
