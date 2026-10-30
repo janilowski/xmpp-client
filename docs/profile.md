@@ -63,6 +63,15 @@ HTTPS discovery (#50); version-bounded expected failures retain strict rejection
 assertions. Restricted trust-anchor provisioning (RFC 6120 §13.6) and long-lived
 certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
 
+RFC 10015 §4 strengthens BCP 195 to prohibit offering static-RSA suites.
+Bun 1.4.4 and Chromium 156.0.8078.4 offer them for direct WSS and initial
+HTTPS discovery (#86). ClientHello tests observe actual bundle traffic before
+ServerHello, with independent fragmentation and OpenSSL controls. Exact-version
+expected failures retain the strict prohibition; they are not conformance passes.
+Web APIs expose no cipher-selection control. A server refusing RSA negotiation
+does not repair the client offer. These tests do not certify other cipher,
+key-exchange or certificate requirements; this mandatory runtime gap remains open.
+
 After a received XMPP `reset` (RFC 6120 §4.9.3.16), that client instance
 refuses further connections, including discovery, manual reconnect and
 stop/start. Automatic retries stop. The original `StreamError` is returned.
