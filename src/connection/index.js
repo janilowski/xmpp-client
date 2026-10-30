@@ -800,7 +800,7 @@ class Connection extends EventEmitter {
       throw new ConnectionClosedError();
     }
     const streamError = errorGeneration !== undefined;
-    if (this.#streamFailed && !streamError) {
+    if (this.#closing || (this.#streamFailed && !streamError)) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
     if (this.#streamOpening) {
@@ -1052,7 +1052,7 @@ class Connection extends EventEmitter {
         throw new ConnectionClosedError();
       }
     }
-    if (this.#streamFailed && !streamError) {
+    if (this.#closing || (this.#streamFailed && !streamError)) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
     const admission = sendPolicies.get(this)?.prepare({
@@ -1071,7 +1071,7 @@ class Connection extends EventEmitter {
     this.#onWriteError = admission?.rollback;
     let written;
     try {
-      if (this.#streamFailed && !streamError) {
+      if (this.#closing || (this.#streamFailed && !streamError)) {
         throw new Error(CONNECTION_CLOSING_MESSAGE);
       }
       written = this.write(source);

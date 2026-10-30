@@ -38,6 +38,25 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "let public status restore output after a graceful footer",
+    file: "src/connection/index.js",
+    before:
+      "this.#closing = true;\n    const fragment = this.footer(this.footerElement());",
+    after:
+      "this.#closing = false;\n    const fragment = this.footer(this.footerElement());",
+    suite: "conformance/rfc6120-closing-output.test.ts",
+    test: "status mutation cannot authorize send nonza after the footer$",
+  },
+  {
+    name: "restore graceful output after delayed presence preparation",
+    file: "src/connection/index.js",
+    before: "element = await preparePresence(source, element);",
+    after:
+      "element = await preparePresence(source, element);\n      this.#closing = false;",
+    suite: "conformance/rfc6120-closing-output.test.ts",
+    test: "pending sendMany presence cannot enter SM after the footer$",
+  },
+  {
     name: "omit normalization of captured stanza error by",
     file: "src/connection/index.js",
     before: "const by = jid(errorBy).toString();",
@@ -3495,6 +3514,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-feature-errors.test.ts",
       "conformance/rfc6120-parser-errors.test.ts",
       "conformance/rfc6120-fatal-output.test.ts",
+      "conformance/rfc6120-closing-output.test.ts",
       "conformance/rfc6120-binding.test.ts",
       "conformance/rfc6120-binding-senders.test.ts",
       "conformance/rfc6120-sasl.test.ts",
