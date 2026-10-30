@@ -193,6 +193,12 @@ RFCs, browser engines or general denial-of-service protection.
   Validation checks serialized output before writes or SM admission; it does
   not infer extension schemas. Empty opaque IDs and namespace aliases remain
   allowed, and foreign IQ-named nonzas remain outside these rules.
+- Installed modules interpret their supported namespaces; applications own
+  custom extension semantics, validation and authorization. Unknown extension
+  XML remains available without overriding standard error processing (§8.3.4).
+  Extension attributes are permitted, but callers SHOULD NOT generate them on
+  core stanza/content elements for interoperability (§8.4). Full schema
+  validation is optional (§11.4), not implied by core syntax checks.
 - `send` and `sendMany` accept application-built stanzas, so the caller owns
   recipient intent under RFC 6120 §8.1.1.1: a specific recipient requires a
   `to` address, while direct server processing requires its omission. Explicit
