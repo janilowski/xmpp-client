@@ -38,6 +38,46 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "decode UTF-16 discovery as UTF-8",
+    file: "src/resolve/lib/readXML.ts",
+    before: "new TextDecoder(encoding ?? UTF8, { fatal: true })",
+    after: "new TextDecoder(UTF8, { fatal: true })",
+    suite: "conformance/xep0156-encoding.test.ts",
+    test: "UTF-16LE BOM without declaration$",
+  },
+  {
+    name: "apply the XMPP declaration restriction to decoded HTTP XML",
+    file: "src/resolve/lib/readXML.ts",
+    before: "context = XML_CONTEXT.HTTP;",
+    after: "context = XML_CONTEXT.DOCUMENT;",
+    suite: "conformance/xep0156-encoding.test.ts",
+    test: "UTF-16BE BOM with UTF-16 declaration$",
+  },
+  {
+    name: "replace malformed discovery bytes with Unicode replacement characters",
+    file: "src/resolve/lib/readXML.ts",
+    before: "new TextDecoder(encoding ?? UTF8, { fatal: true })",
+    after: "new TextDecoder(encoding ?? UTF8, { fatal: false })",
+    suite: "conformance/xep0156-encoding.test.ts",
+    test: "malformed UTF-8 in link$",
+  },
+  {
+    name: "ignore discovery MIME charset without a BOM",
+    file: "src/resolve/lib/readXML.ts",
+    before: 'charset(response.headers.get("Content-Type"))',
+    after: "undefined",
+    suite: "conformance/xep0156-encoding.test.ts",
+    test: "UTF-16BE explicit MIME without BOM$",
+  },
+  {
+    name: "omit the discovery raw-byte budget",
+    file: "src/resolve/lib/readXML.ts",
+    before: "if (bytes > MAX_XML_BYTES) {",
+    after: "if (false) {",
+    suite: "conformance/xep0156-encoding.test.ts",
+    test: "retains raw-byte limit and cancels oversized UTF-16 before EOF$",
+  },
+  {
     name: "accept later code points after the first valid context",
     file: "src/jid/lib/precis.js",
     before:
@@ -3546,6 +3586,7 @@ for (const mutation of mutations) {
       "conformance/xep0388-authorization-identifier.test.ts",
       "conformance/xep0388-resumption-identity.test.ts",
       "conformance/xep0156.test.js",
+      "conformance/xep0156-encoding.test.ts",
       "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",
       "conformance/rfc7622-contexts.test.ts",

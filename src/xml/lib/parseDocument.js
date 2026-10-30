@@ -2,7 +2,7 @@ import { SaxesParser } from "saxes";
 import Element from "ltx/lib/Element.js";
 import XMLError from "./XMLError.js";
 
-export const XML_CONTEXT = { DOCUMENT: "document", XMPP: "xmpp" };
+export const XML_CONTEXT = { DOCUMENT: "document", HTTP: "http", XMPP: "xmpp" };
 export const XML_DIRECTION = { INPUT: "input", OUTPUT: "output" };
 export const MAX_XML_BYTES = 1024 * 1024;
 const MAX_XML_DEPTH = 64;
@@ -38,7 +38,11 @@ function createParser(source, context, direction) {
     if (version !== "1.0") {
       throw new XMLError("Expected XML 1.0");
     }
-    if (encoding && encoding.toLowerCase() !== "utf-8") {
+    if (
+      encoding &&
+      context !== XML_CONTEXT.HTTP &&
+      encoding.toLowerCase() !== "utf-8"
+    ) {
       const error = new XMLError("Expected UTF-8 encoding");
       error.condition = "unsupported-encoding";
       throw error;

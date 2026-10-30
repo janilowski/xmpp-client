@@ -21,6 +21,7 @@ const OPEN =
 const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';
 const HTTP_OK = 200;
 const HTTP_FOUND = 302;
+const HTTP_BAD_REQUEST = 400;
 const STREAM = "http://etherx.jabber.org/streams";
 const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const OBSERVATION_TIMEOUT_MS = 2000;
@@ -216,6 +217,100 @@ test("Chromium discovery rejects redirects whose target the Fetch API conceals",
     await target.stop(true);
   }
 });
+
+// Existing fixture SPKI trust isolates encoding interoperability, not PKIX proof.
+// XEP-0156 §2.2; XML 1.0 §4.3.3; RFC 7303 §§3.2–3.3.
+test.each(["LE", "BE"])(
+  "Chromium bundle discovers UTF-16%s XRD and upgrades the exact Unicode WSS path",
+  async (endian) => {
+    const requests = [];
+    const upgrades = [];
+    const endpoint = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      tls: {
+        cert: await readFile(
+          path.join(process.env.XMPP_TEST_DIR, "certs/localhost.crt"),
+        ),
+        key: await readFile(
+          path.join(process.env.XMPP_TEST_DIR, "certs/localhost.key"),
+        ),
+      },
+      fetch(request, server) {
+        const uri = new URL(request.url);
+        if (uri.pathname === "/.well-known/host-meta") {
+          requests.push(uri.pathname);
+          const content = Buffer.concat([
+            Buffer.from(
+              `<?xml version="1.0" encoding="UTF-16"?><XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link rel="urn:xmpp:alt-connections:websocket" href="wss://localhost:${server.port}/`,
+              "utf16le",
+            ),
+            Buffer.from([0x7c, 0x01, 0xf3, 0x00, 0x42, 0x01, 0x07, 0x01]),
+            Buffer.from('"/></XRD>', "utf16le"),
+          ]);
+          if (endian === "BE") {
+            content.swap16();
+          }
+          return new Response(
+            Buffer.concat([
+              Buffer.from(endian === "LE" ? [0xff, 0xfe] : [0xfe, 0xff]),
+              content,
+            ]),
+            {
+              headers: {
+                "Content-Type": "application/xrd+xml",
+                "Access-Control-Allow-Origin": "*",
+              },
+            },
+          );
+        }
+        upgrades.push({
+          path: uri.pathname,
+          protocol: request.headers.get("Sec-WebSocket-Protocol"),
+        });
+        if (
+          server.upgrade(request, {
+            headers: { "Sec-WebSocket-Protocol": "xmpp" },
+          })
+        ) {
+          return;
+        }
+        return new Response(null, { status: HTTP_BAD_REQUEST });
+      },
+      websocket: { message() {} },
+    });
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${origin.address().port}`);
+      await page.addScriptTag({ path: "dist/xmpp.min.js" });
+      const result = await page.evaluate(async (port) => {
+        const entity = globalThis.XMPP.client({
+          service: `localhost:${port}`,
+          domain: "example.test",
+        });
+        entity.reconnect.stop();
+        const errors = [];
+        entity.on("error", (error) => errors.push(error.message));
+        try {
+          await entity.connect(entity.options.service);
+          return { connected: true, errors };
+        } catch (error) {
+          return { connected: false, errors, message: error.message };
+        } finally {
+          await entity.stop();
+        }
+      }, endpoint.port);
+      expect(result).toEqual({ connected: true, errors: [] });
+      expect(requests).toEqual(["/.well-known/host-meta"]);
+      expect(upgrades).toEqual([
+        { path: "/%C5%BC%C3%B3%C5%82%C4%87", protocol: "xmpp" },
+      ]);
+    } finally {
+      await page.close();
+      await endpoint.stop(true);
+    }
+  },
+);
 
 test("Chromium decodes every Unicode property without changing its repertoire", async () => {
   const build = await rolldown({ input: "src/jid/lib/unicode.js" });

@@ -19,6 +19,13 @@ parser can retain other recognized connection methods; this does not enable
 those transports. JRD publication, CORS configuration and server routing are
 server/deployment responsibilities.
 
+Discovery accepts UTF-8 and BOM-marked UTF-16 XRD. Explicit UTF-16LE/BE is
+also supported through MIME `charset`, not declaration-only autodetection.
+BOM takes precedence over MIME charset; either overrides the XML declaration.
+Without either, only UTF-8 is supported. Unsupported encodings and malformed
+bytes yield no endpoints; replacement characters cannot repair invalid input.
+The read-time byte limit and XML limits remain separate local resource policies.
+
 HTTP redirects are rejected: a deliberate departure from RFC 6415 §2's SHOULD
 follow redirects. Browser Fetch hides manual redirect destinations and offers no
 per-hop approval for automatic following. Rejecting redirects avoids a hidden

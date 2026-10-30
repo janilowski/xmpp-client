@@ -178,6 +178,51 @@ test.each([HTTP.OK, HTTP.NOT_FOUND, HTTP.GONE, HTTP.SERVICE_UNAVAILABLE])(
   },
 );
 
+// HTTP XRD keeps XML's UTF-16 support; RFC 6120's UTF-8 restriction is stream-only.
+// XML 1.0 §4.3.3 / RFC 7303 §§3.2–3.3.
+test.each(["LE", "BE"] as const)(
+  "XEP-0156 HTTPS decodes BOM-marked UTF-16%s without corrupting endpoint identity",
+  async (endian) => {
+    const content = Buffer.concat([
+      Buffer.from(
+        '<?xml version="1.0" encoding="UTF-16"?><XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link rel="urn:xmpp:alt-connections:websocket" href="wss://endpoint.example.test/',
+        "utf16le",
+      ),
+      Buffer.from([0x7c, 0x01, 0xf3, 0x00, 0x42, 0x01, 0x07, 0x01]),
+      Buffer.from('"/></XRD>', "utf16le"),
+    ]);
+    if (endian === "BE") {
+      content.swap16();
+    }
+    const bytes = Buffer.concat([
+      Buffer.from(endian === "LE" ? [0xff, 0xfe] : [0xfe, 0xff]),
+      content,
+    ]);
+    const requests: string[] = [];
+    const server = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      tls: { cert: certificate.cert, key: certificate.private },
+      fetch(request) {
+        requests.push(new URL(request.url).pathname);
+        return new Response(bytes, {
+          headers: { "Content-Type": "application/xrd+xml" },
+        });
+      },
+    });
+    try {
+      const result = await discover(server.port!);
+      expect(requests).toEqual(["/.well-known/host-meta"]);
+      expect(result.state).toBe("settled");
+      expect(result.endpoints?.map(({ uri }) => uri)).toEqual([
+        "wss://endpoint.example.test/%C5%BC%C3%B3%C5%82%C4%87",
+      ]);
+    } finally {
+      await server.stop(true);
+    }
+  },
+);
+
 for (const protocol of ["http", "https"]) {
   test.each([
     HTTP.MOVED_PERMANENTLY,
