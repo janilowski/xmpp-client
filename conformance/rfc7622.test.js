@@ -12,6 +12,7 @@ import {
 // Protocol-slot octet boundaries and SM ownership: rfc7622-address-lengths.test.ts.
 // Raw service-host inference before preparation: rfc7622-service-domain.test.ts.
 // Optional core stanza-error JIDs and snapshot preparation: rfc7622-error-by.test.ts.
+// Per-occurrence contexts (RFC 8753 §6): rfc7622-contexts.test.ts.
 describe("RFC 7622 — cross-runtime contextual and repertoire vectors", () => {
   for (const { section, slot, input, expected } of [
     ...CONTEXT_VECTORS,

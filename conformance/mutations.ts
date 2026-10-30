@@ -38,6 +38,16 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept later code points after the first valid context",
+    file: "src/jid/lib/precis.js",
+    before:
+      '    if (!valid) {\n      throw new TypeError("Invalid JID code point or context.");\n    }',
+    after:
+      '    if (!valid) {\n      throw new TypeError("Invalid JID code point or context.");\n    }\n    return;',
+    suite: "conformance/rfc7622-contexts.test.ts",
+    test: "every occurrence.*last invalid",
+  },
+  {
     name: "let public status restore output after a graceful footer",
     file: "src/connection/index.js",
     before:
@@ -3538,6 +3548,7 @@ for (const mutation of mutations) {
       "conformance/xep0156.test.js",
       "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",
+      "conformance/rfc7622-contexts.test.ts",
       "conformance/rfc7622-address-lengths.test.ts",
       "conformance/rfc7622-service-domain.test.ts",
       "conformance/rfc7622-error-by.test.ts",

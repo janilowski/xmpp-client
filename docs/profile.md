@@ -402,7 +402,8 @@ sent or completing a replacement session. No password/key cache is retained.
 ## Address preparation
 
 JIDs use RFC 7622 with verified errata 4534/4560, RFC 8264/8265 PRECIS,
-IDNA2008 (RFC 5890–5893), RFC 5895 mapping and RFC 9844's wire-grammar update.
+IDNA2008 (RFC 5890–5893, updated by RFC 8753), RFC 5895 mapping and RFC 9844's
+wire-grammar update. Every contextual code point must satisfy its own context.
 No transitional UTS #46 mapping. Unicode 16 is the selected repertoire;
 unassigned input is rejected before mapping. Older normalization engines reject
 non-ASCII preparation rather than silently returning partially prepared names.
