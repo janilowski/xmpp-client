@@ -249,6 +249,12 @@ RFCs, browser engines or general denial-of-service protection.
   not the input default. `disco.info()` exposes declared identity languages and
   retains the raw query ancestry for interpretation. Caps verification uses the
   original declared fields, not materialized language defaults.
+- Application `send`/`sendMany` rejects until the opening write completes;
+  mutable root/status fields and peer replies cannot grant that permission.
+  Framing `open`/`close` documents belong to lifecycle methods,
+  not generic sends. Opening writes have their own negotiation deadline;
+  failed or cancelled initialization grants no output authority. A shutdown
+  joins the owned write outcome before deciding whether XML closure is owed.
 - Negotiation uses `entity.timeout` (default 2000 ms), including binding and
   waiting for features after each opening, SASL restart or reconnect, and after
   SASL2 success except successful inline SM resumption. These are

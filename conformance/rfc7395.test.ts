@@ -5,6 +5,7 @@ import { readFrame } from "./xml.ts";
 import { once } from "node:events";
 
 // Outgoing boundaries, raw writes and SM rejection: rfc7395-outgoing-framing.test.ts.
+// Opening dispatch failure, cancellation and races: rfc7395-opening.test.ts.
 
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="peer-1"/>';
@@ -27,6 +28,8 @@ async function openStream({
   establishment = "open",
   onFrame = undefined as
     ((frame: string, remote: ScriptedPeer) => void) | undefined,
+  beforeConnect = undefined as
+    ((entity: ReturnType<typeof client>) => void) | undefined,
   credentials = undefined as { username: string; password: string } | undefined,
 } = {}) {
   peer = new ScriptedPeer((frame, remote) => {
@@ -61,6 +64,7 @@ async function openStream({
   });
   xmpp.reconnect.stop();
   xmpp.on("error", (error: Error) => errors.push(error));
+  beforeConnect?.(xmpp);
   if (establishment === "online") {
     await xmpp.start();
   } else {
@@ -88,6 +92,231 @@ afterEach(async () => {
 });
 
 describe("RFC 7395 — client wire behavior", () => {
+  test.each([
+    ["restart", "send"],
+    ["restart", "sendMany"],
+    ["transport", "send"],
+    ["transport", "sendMany"],
+  ] as const)(
+    "§§3.4/3.7: replacement %s does not retain %s permission from the former stream",
+    async (replacement, method) => {
+      await openStream();
+      await peer.next();
+      if (replacement === "transport") {
+        await xmpp.stop();
+        await peer.stop();
+        expect(peer.errors).toEqual([]);
+        peer = new ScriptedPeer((frame, remote) => {
+          if (frame.startsWith("<open")) {
+            remote.send(OPEN);
+          } else if (frame === CLOSE) {
+            remote.send(CLOSE);
+          }
+        });
+      }
+      let sent: Promise<unknown> | undefined;
+      xmpp.once(replacement === "restart" ? "opening" : "connect", () => {
+        // Mutable presentation fields cannot grant stream-initiation authority.
+        xmpp.root = xml("pretend", { xmlns: "urn:test:lifecycle" });
+        xmpp.status = "online";
+        const message = xml("message", { id: "too-early" });
+        sent = (
+          method === "send" ? xmpp.send(message) : xmpp.sendMany([message])
+        ).catch((error: Error) => error);
+      });
+      if (replacement === "restart") {
+        await xmpp.restart();
+      } else {
+        await xmpp.connect(peer.url);
+        await xmpp.open(CLIENT_OPTIONS);
+      }
+      expect(await sent).toBeInstanceOf(Error);
+      await xmpp.send(
+        xml("notice", { xmlns: "urn:test:lifecycle", id: "barrier" }),
+      );
+      while (!peer.transcript.some((frame) => frame.includes('id="barrier"'))) {
+        await peer.next();
+      }
+      expect(
+        peer.transcript.some((frame) => frame.includes('id="too-early"')),
+      ).toBe(false);
+      expect(readFrame(peer.transcript[0])).toEqual(readFrame(CLIENT_OPEN));
+      expect(xmpp.streamManagement.outbound_q).toEqual([]);
+    },
+  );
+
+  test.each(["open", "close"] as const)(
+    "§§3.4/3.6: normalized scalar namespaces cannot smuggle framing %s",
+    async (name) => {
+      await openStream();
+      await peer.next();
+      const header = xml(name, {
+        xmlns: { toString: () => "urn:ietf:params:xml:ns:xmpp-framing" },
+      });
+      await expect(xmpp.send(header)).rejects.toBeInstanceOf(TypeError);
+      expect(peer.transcript).toHaveLength(1);
+      expect(xmpp.status).toBe("open");
+    },
+  );
+
+  test.each(["send", "sendMany"] as const)(
+    "§§3.4/3.7: %s cannot open another stream without a matching lifecycle transition",
+    async (method) => {
+      let openings = 0;
+      await openStream({
+        onFrame(frame, remote) {
+          if (frame.startsWith("<open") && ++openings === 2) {
+            remote.send(
+              '<barrier xmlns="urn:test:lifecycle" id="replacement"/>',
+            );
+          }
+        },
+      });
+      await peer.next();
+      const replacement = Promise.withResolvers<string>();
+      xmpp.on("nonza", (element) => {
+        if (element.is("barrier", "urn:test:lifecycle")) {
+          replacement.resolve("replacement");
+        }
+      });
+      xmpp.once("error", () => replacement.resolve("error"));
+      const element = xml("open", {
+        xmlns: "urn:ietf:params:xml:ns:xmpp-framing",
+        version: "1.0",
+        to: "example.test",
+      });
+      const result = await (
+        method === "send" ? xmpp.send(element) : xmpp.sendMany([element])
+      ).catch((error: Error) => error);
+      if (result instanceof Error) {
+        expect(openings).toBe(1);
+        expect(xmpp.status).toBe("open");
+        return;
+      }
+      // If accepted, the replacement server opening must be parsed as a new
+      // stream, not as an unexpected second open on the old parser.
+      const timer = setTimeout(
+        () => replacement.resolve("timeout"),
+        EVENT_TIMEOUT_MS,
+      );
+      try {
+        expect(await replacement.promise).toBe("replacement");
+        expect(xmpp.status).toBe("open");
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  );
+
+  test.each(["send", "sendMany"] as const)(
+    "§3.6: %s cannot write a close while leaving ordinary output enabled",
+    async (method) => {
+      await openStream();
+      await peer.next();
+      const element = xml("close", {
+        xmlns: "urn:ietf:params:xml:ns:xmpp-framing",
+      });
+      const closed = (
+        method === "send" ? xmpp.send(element) : xmpp.sendMany([element])
+      ).catch((error: Error) => error);
+      // Both writes are requested in one stack: peer timing cannot repair a
+      // missing local transition to closing.
+      const notice = xmpp
+        .send(xml("notice", { xmlns: "urn:test:lifecycle", id: "after-close" }))
+        .catch((error: Error) => error);
+      const [result, later] = await Promise.all([closed, notice]);
+      if (result instanceof Error) {
+        expect(later).not.toBeInstanceOf(Error);
+        while (
+          !peer.transcript.some((frame) => frame.includes("after-close"))
+        ) {
+          await peer.next();
+        }
+        expect(
+          peer.transcript.some((frame) => frame.startsWith("<close")),
+        ).toBe(false);
+        expect(xmpp.status).toBe("open");
+        return;
+      }
+      // Rejection or managed closure are allowed; accepting a close and then
+      // writing another document over that stream is not.
+      expect(later).toBeInstanceOf(Error);
+      await peer.waitForClose();
+      expect(
+        peer.transcript.some((frame) => frame.includes("after-close")),
+      ).toBe(false);
+      expect(
+        peer.transcript.filter((frame) => frame.startsWith("<close")),
+      ).toHaveLength(1);
+      expect(await waitForDisconnect(xmpp)).toBe(true);
+    },
+  );
+
+  test.each(["open", "close"] as const)(
+    "§3.3.3: a foreign serializer cannot smuggle a framing %s",
+    async (name) => {
+      await openStream();
+      await peer.next();
+      const element = xml("notice", { xmlns: "urn:test:lifecycle" });
+      element.toString = () =>
+        `<${name} xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>`;
+      await expect(xmpp.send(element)).rejects.toBeInstanceOf(TypeError);
+      expect(peer.transcript).toHaveLength(1);
+      expect(xmpp.status).toBe("open");
+    },
+  );
+
+  test.each([
+    ["connect", "send"],
+    ["connect", "sendMany"],
+    ["opening", "send"],
+    ["opening", "sendMany"],
+  ] as const)(
+    "§3.4: %s callback cannot put %s output before the initiating open",
+    async (event, method) => {
+      let called = 0;
+      let sent: Promise<unknown> | undefined;
+      await openStream({
+        beforeConnect(entity) {
+          entity.once(event, () => {
+            called++;
+            const element = xml("notice", {
+              xmlns: "urn:test:early-send",
+              id: "before-initiation",
+            });
+            sent = (
+              method === "send"
+                ? entity.send(element)
+                : entity.sendMany([element])
+            ).catch((error: Error) => error);
+          });
+        },
+      });
+      expect(called).toBe(1);
+      const result = await sent;
+      // Rejection or deferral until after the opening are both conforming.
+      expect(readFrame(peer.transcript[0])).toEqual(readFrame(CLIENT_OPEN));
+      if (!(result instanceof Error)) {
+        expect(
+          peer.transcript.findIndex((frame) =>
+            frame.includes("before-initiation"),
+          ),
+        ).toBeGreaterThan(0);
+      }
+      await xmpp.send(
+        xml("notice", { xmlns: "urn:test:early-send", id: "after-initiation" }),
+      );
+      while (
+        !peer.transcript.some((frame) => frame.includes("after-initiation"))
+      ) {
+        await peer.next();
+      }
+      expect(
+        peer.transcript.filter((frame) => frame.startsWith("<open")),
+      ).toHaveLength(1);
+    },
+  );
+
   test("§3.4/3.6 stopping before stream initiation sends no XML close", async () => {
     await openStream({ establishment: "connect" });
     await xmpp.stop();

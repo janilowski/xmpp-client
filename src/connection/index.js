@@ -11,7 +11,7 @@ import xml from "../xml/index.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
 import isLanguageTag from "../xml/lib/language.js";
 import createStanzaErrorValidator from "../xml/lib/stanzaError.js";
-import { ConnectionClosedError } from "../events/lib/operation.js";
+import operation, { ConnectionClosedError } from "../events/lib/operation.js";
 import { sendPolicies, takeReplay } from "./lib/sendPolicy.js";
 import { outgoingPresence } from "./lib/outgoingPresence.ts";
 
@@ -34,7 +34,9 @@ const NS_STREAM = "urn:ietf:params:xml:ns:xmpp-streams";
 const NS_JABBER_STREAM = "http://etherx.jabber.org/streams";
 const NS_JABBER_CLIENT = "jabber:client";
 const NS_JABBER_SERVER = "jabber:server";
+const NS_FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const CONNECTION_CLOSING_MESSAGE = "Connection is closing";
+const STREAM_NOT_READY_MESSAGE = "Stream negotiation is not complete";
 const CROSS_HOST_REDIRECT_MESSAGE = "Cross-host stream redirects are not supported";
 const MAX_REDIRECTS = 5;
 const IQ_TYPES = new Set(["get", "set", "result", "error"]);
@@ -50,6 +52,8 @@ class Connection extends EventEmitter {
   #parserListeners = null;
   #closing = false;
   #streamFailed = false;
+  #streamOpening = false;
+  #openingWrite = null;
   #disconnecting = null;
   #generation = 0;
   #redirectCount = 0;
@@ -408,12 +412,12 @@ class Connection extends EventEmitter {
     // Own the exchange before hooks can reenter; replacements get a new one.
     this.#disconnecting = pending;
     this.#closeConnection()
-      .then(resolveShutdown, rejectShutdown)
       .finally(() => {
         if (this.#disconnecting === pending) {
           this.#disconnecting = null;
         }
       })
+      .then(resolveShutdown, rejectShutdown)
       .catch(() => {});
     return promise;
   }
@@ -481,10 +485,26 @@ class Connection extends EventEmitter {
    */
   async connect(service) {
     assertCanConnect(this);
+    // Claim replacement ownership before public callbacks can cancel it.
+    const generation = ++this.#generation;
+    this.#streamOpening = true;
+    this.#openingWrite = null;
     this.#redirectCount = 0;
     resetConnection(this);
     this._status("connecting", service);
+    if (
+      this.#generation !== generation ||
+      this.#disconnecting?.generation === generation
+    ) {
+      throw new ConnectionClosedError();
+    }
     const socket = new this.Socket();
+    if (
+      this.#generation !== generation ||
+      this.#disconnecting?.generation === generation
+    ) {
+      throw new ConnectionClosedError();
+    }
     this._attachSocket(socket);
     // The 'connect' status is set by the socket 'connect' listener
     const connected = this.#waitForStream("connect", this.timeout, socket);
@@ -554,6 +574,8 @@ class Connection extends EventEmitter {
    */
   async open(options) {
     assertCanConnect(this);
+    const generation = this.#generation;
+    const socket = this.socket;
     if (this.#closing || this.#streamFailed) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
@@ -572,15 +594,55 @@ class Connection extends EventEmitter {
     // Validate the captured transport header before taking ownership of a stream.
     const source = this.header(headerElement);
     this._validateHeader(source, expectedHeader);
+    if (this.#generation !== generation || this.socket !== socket) {
+      throw new ConnectionClosedError();
+    }
 
+    // Public callbacks cannot send until the lifecycle dispatches this header.
+    this.#streamOpening = true;
     this._status("opening");
+    if (
+      this.#generation !== generation ||
+      this.socket !== socket ||
+      this.#disconnecting?.generation === generation
+    ) {
+      throw new ConnectionClosedError();
+    }
+    const parser = new this.Parser();
+    if (
+      this.#generation !== generation ||
+      this.socket !== socket ||
+      this.#disconnecting?.generation === generation
+    ) {
+      throw new ConnectionClosedError();
+    }
     this.root = headerElement;
-
-    this._attachParser(new this.Parser());
+    this._attachParser(parser);
+    const streamGeneration = this.#generation;
 
     const opened = this.#waitForStream("open", this.timeout);
     try {
-      const [element] = await Promise.all([opened.result, this.write(source)]);
+      // Dispatch completion, not a mutable status or a peer reply, grants output.
+      const written = Promise.resolve().then(() =>
+        operation(this, async (signal) => {
+          if (this.#generation !== streamGeneration || this.socket !== socket) {
+            throw new ConnectionClosedError();
+          }
+          await this.write(source);
+          signal.throwIfAborted();
+          if (this.#generation !== streamGeneration || this.socket !== socket) {
+            throw new ConnectionClosedError();
+          }
+          this.#streamOpening = false;
+        }),
+      );
+      // Install ownership before invoking a reentrant writer. Rejections settle
+      // shutdown too; the initiation latch stays closed after failed dispatch.
+      this.#openingWrite = written.catch(() => {});
+      const [element] = await Promise.all([opened.result, written]);
+      if (this.#generation !== streamGeneration || this.socket !== socket) {
+        throw new ConnectionClosedError();
+      }
       return element;
     } finally {
       opened.cancel();
@@ -656,11 +718,18 @@ class Connection extends EventEmitter {
    * https://tools.ietf.org/html/rfc7395#section-3.6
    */
   async _closeStream(timeout = this.timeout) {
+    const generation = this.#generation;
+    // A same-stack stop must first learn whether the opening was dispatched.
+    if (this.#openingWrite) {
+      await this.#openingWrite;
+    }
+    if (this.#generation !== generation || this.#streamOpening) {
+      return;
+    }
     // An established transport does not imply an initiated XML stream.
     if (this.status === "connect" || this.status === "connecting") {
       return;
     }
-    const generation = this.#generation;
     await this.#runHooks("close");
     if (this.#generation !== generation) {
       return;
@@ -698,12 +767,17 @@ class Connection extends EventEmitter {
     if (this.#closing || this.#streamFailed) {
       throw new Error(CONNECTION_CLOSING_MESSAGE);
     }
+    this.#streamOpening = true;
+    this.#openingWrite = null;
     this._detachParser();
     const { domain, lang } = this.options;
     return this.open({ domain, lang });
   }
 
   async send(element, token) {
+    if (this.#streamOpening) {
+      throw new Error(STREAM_NOT_READY_MESSAGE);
+    }
     const replay = takeReplay(this, token);
     const generation = this.#generation;
     const socket = this.socket;
@@ -734,13 +808,16 @@ class Connection extends EventEmitter {
         }
       }
       if (this.NS === NS_JABBER_CLIENT && !canSendStanza(this, destination)) {
-        throw new Error("Stream negotiation is not complete");
+        throw new Error(STREAM_NOT_READY_MESSAGE);
       }
     }
     element.parent = this.root;
     // Preserve the preflight envelope across a caller-defined serializer.
     const name = element.getName();
     const namespace = element.getNS()?.toString(10) ?? "";
+    if (namespace === NS_FRAMING && ["open", "close"].includes(name)) {
+      throw new TypeError("Framing headers require stream lifecycle methods");
+    }
     const elementName = element.name;
     const attributes = this.isStanza(element)
       ? ["id", "type", "to", "from"].map((attribute) => {

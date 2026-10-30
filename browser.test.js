@@ -968,6 +968,86 @@ test.each([
   },
 );
 
+// RFC 7395 §§3.4/3.6/3.7: lifecycle headers belong to open/restart/close.
+test.each([
+  ["connect", "send"],
+  ["connect", "sendMany"],
+  ["opening", "send"],
+  ["opening", "sendMany"],
+])("Chromium RFC 7395 lifecycle / %s callback / %s", async (event, method) => {
+  const peer = new ScriptedPeer((frame, remote) => {
+    if (frame.startsWith("<open ")) {
+      remote.send(OPEN);
+    } else if (frame === CLOSE) {
+      remote.send(CLOSE);
+    }
+  });
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(
+      async ({ service, event, method }) => {
+        const { client, xml } = globalThis.XMPP;
+        const xmpp = client({ service, domain: "example.test" });
+        xmpp.reconnect.stop();
+        const errors = [];
+        xmpp.on("error", (error) => errors.push(error.name));
+        let early;
+        xmpp.once(event, () => {
+          const notice = xml("notice", { xmlns: "urn:test:lifecycle" });
+          early = (
+            method === "send" ? xmpp.send(notice) : xmpp.sendMany([notice])
+          ).then(
+            () => "sent",
+            (error) => error.name,
+          );
+        });
+        const framing = "urn:ietf:params:xml:ns:xmpp-framing";
+        const framingErrors = [];
+        try {
+          await xmpp.connect(service);
+          await xmpp.open({ domain: "example.test" });
+          const earlyResult = await early;
+          for (const name of ["open", "close"]) {
+            for (const method of ["send", "sendMany"]) {
+              const header = xml(name, { xmlns: framing });
+              framingErrors.push(
+                await (
+                  method === "send"
+                    ? xmpp.send(header)
+                    : xmpp.sendMany([header])
+                ).then(
+                  () => "sent",
+                  (error) => error.name,
+                ),
+              );
+            }
+          }
+          await xmpp.send(xml("notice", { xmlns: "urn:test:lifecycle" }));
+          return { earlyResult, framingErrors, errors };
+        } finally {
+          await xmpp.stop();
+        }
+      },
+      { service: peer.url, event, method },
+    );
+    expect(result).toEqual({
+      earlyResult: "Error",
+      framingErrors: ["TypeError", "TypeError", "TypeError", "TypeError"],
+      errors: [],
+    });
+    await peer.waitForClose();
+    const frames = await page.evaluate(inspectFrames, peer.transcript);
+    expect(frames.map(({ name }) => name)).toEqual(["open", "notice", "close"]);
+    expect(frames.every(({ valid }) => valid)).toBe(true);
+    expect(peer.errors).toEqual([]);
+  } finally {
+    await page.close();
+    await peer.stop();
+  }
+});
+
 // XEP-0030 §§3–4/7 and XEP-0199 §5: exercise the shipped registry over Prosody.
 test("Chromium bundled discovery queries Prosody and responds to routed client IQs", async () => {
   const infoNamespace = "http://jabber.org/protocol/disco#info";

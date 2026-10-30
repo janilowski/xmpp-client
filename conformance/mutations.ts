@@ -38,6 +38,39 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "let a stale opening callback replace the new transport parser",
+    file: "src/connection/index.js",
+    before:
+      'this._status("opening");\n    if (\n      this.#generation !== generation ||\n      this.socket !== socket ||\n      this.#disconnecting?.generation === generation\n    ) {\n      throw new ConnectionClosedError();\n    }\n    const parser = new this.Parser();\n    if (\n      this.#generation !== generation ||\n      this.socket !== socket ||\n      this.#disconnecting?.generation === generation\n    ) {\n      throw new ConnectionClosedError();\n    }',
+    after: 'this._status("opening");\n    const parser = new this.Parser();',
+    suite: "conformance/rfc7395-opening.test.ts",
+    test: "stale opening callbacks cannot authorize replacement output$",
+  },
+  {
+    name: "omit the opening write deadline",
+    file: "src/connection/index.js",
+    before: "        }),\n      );\n      // Install ownership",
+    after: "        }, 0),\n      );\n      // Install ownership",
+    suite: "conformance/rfc7395-opening.test.ts",
+    test: "a peer opening cannot remove the write-completion deadline$",
+  },
+  {
+    name: "allow application output before the initiating open",
+    file: "src/connection/index.js",
+    before: "if (this.#streamOpening) {",
+    after: "if (false) {",
+    suite: "conformance/rfc7395.test.ts",
+    test: "connect callback cannot put send output before the initiating open$",
+  },
+  {
+    name: "allow generic sends to bypass framing lifecycle",
+    file: "src/connection/index.js",
+    before: 'namespace === NS_FRAMING && ["open", "close"].includes(name)',
+    after: "false",
+    suite: "conformance/rfc7395.test.ts",
+    test: "send cannot write a close while leaving ordinary output enabled$",
+  },
+  {
     name: "discard the input stream language before application delivery",
     file: "src/websocket/lib/FramedParser.js",
     before: 'this.emit("start", element);',
@@ -1317,9 +1350,9 @@ const mutations = [
     name: "allow opening a failed feature stream",
     file: "src/connection/index.js",
     before:
-      "  async open(options) {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed)",
+      "  async open(options) {\n    assertCanConnect(this);\n    const generation = this.#generation;\n    const socket = this.socket;\n    if (this.#closing || this.#streamFailed)",
     after:
-      "  async open(options) {\n    assertCanConnect(this);\n    if (this.#closing)",
+      "  async open(options) {\n    assertCanConnect(this);\n    const generation = this.#generation;\n    const socket = this.socket;\n    if (this.#closing)",
     suite: "src/connection/test/close-race.test.js",
     test: "fatal feature errors reject synchronous open before another opening$",
   },
@@ -1619,8 +1652,9 @@ const mutations = [
     name: "reopen a closed stream from its close callback",
     file: "src/connection/index.js",
     before:
-      "async open(options) {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
-    after: "async open(options) {\n    assertCanConnect(this);",
+      "async open(options) {\n    assertCanConnect(this);\n    const generation = this.#generation;\n    const socket = this.socket;\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
+    after:
+      "async open(options) {\n    assertCanConnect(this);\n    const generation = this.#generation;\n    const socket = this.socket;",
     suite: "conformance/rfc7395.test.ts",
     test: "open cannot reopen from the close callback / peer$",
   },
@@ -1628,7 +1662,7 @@ const mutations = [
     name: "detach the closing parser before rejecting restart",
     file: "src/connection/index.js",
     before:
-      "async restart() {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }\n    this._detachParser();",
+      "async restart() {\n    assertCanConnect(this);\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
     after:
       "async restart() {\n    assertCanConnect(this);\n    this._detachParser();\n    if (this.#closing || this.#streamFailed) {\n      throw new Error(CONNECTION_CLOSING_MESSAGE);\n    }",
     suite: "conformance/rfc7395.test.ts",
@@ -1643,10 +1677,10 @@ const mutations = [
     test: "open cannot reopen from the close callback / peer$",
   },
   {
-    name: "open during uninitiated transport shutdown",
+    name: "discard both uninitiated transport shutdown barriers",
     file: "src/connection/index.js",
     before: 'this.#closing = true;\n    this._status("disconnecting");',
-    after: 'this._status("disconnecting");',
+    after: 'this.#disconnecting = null;\n    this._status("disconnecting");',
     suite: "conformance/rfc7395.test.ts",
     test: "open cannot initiate a stream while its transport is shutting down$",
   },
@@ -1703,10 +1737,8 @@ const mutations = [
   {
     name: "serialize the opening again after validation",
     file: "src/connection/index.js",
-    before:
-      "const [element] = await Promise.all([opened.result, this.write(source)]);",
-    after:
-      "const [element] = await Promise.all([opened.result, this.write(this.header(headerElement))]);",
+    before: "await this.write(source);",
+    after: "await this.write(this.header(headerElement));",
     suite: "conformance/rfc6120-stream-headers.test.ts",
     test: "opening preserves its validated snapshot / ordinary$",
   },
@@ -2479,12 +2511,11 @@ const mutations = [
   {
     name: "restore stale routing authority before stream opening",
     file: "src/connection/index.js",
-    before:
-      "async connect(service) {\n    assertCanConnect(this);\n    this.#redirectCount = 0;\n    resetConnection(this);",
+    before: 'resetConnection(this);\n    this._status("connecting", service);',
     after:
-      "async connect(service) {\n    assertCanConnect(this);\n    this.#redirectCount = 0;\n    resetConnection(this);\n    if (this.jid) { confirmIdentity(this, this.jid); completeNegotiation(this); }",
+      'resetConnection(this);\n    if (this.jid) { confirmIdentity(this, this.jid); completeNegotiation(this); }\n    this._status("connecting", service);',
     suite: "conformance/rfc6120-stanza-routing.test.ts",
-    test: "ordinary remote replay.* / valid$",
+    test: "inline remote replay.* / valid$",
   },
   {
     name: "retain a former authenticated account on reconnect",
@@ -3333,6 +3364,7 @@ for (const mutation of mutations) {
       "tsconfig.json",
       "bunfig.toml",
       "conformance/rfc7395.test.ts",
+      "conformance/rfc7395-opening.test.ts",
       "conformance/rfc7395-properties.test.ts",
       "conformance/rfc7395-outgoing-framing.test.ts",
       "conformance/rfc6120.test.ts",
