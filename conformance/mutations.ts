@@ -38,6 +38,14 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "skip contextual validation of decoded A-labels",
+    file: "src/jid/lib/domain.js",
+    before: '    validateClass(label, "identifier");',
+    after: '    if (!alabel) { validateClass(label, "identifier"); }',
+    suite: "conformance/rfc7622.test.js",
+    test: "decoded A-label / RFC 5892 A.1 absent left context",
+  },
+  {
     name: "report generic encoding errors instead of preferred diagnostics",
     file: "src/xml/lib/parseDocument.js",
     before: 'error.condition = "unsupported-encoding";',

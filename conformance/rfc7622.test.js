@@ -241,6 +241,71 @@ describe("RFC 7622 §§3.3–3.4 — PRECIS profiles", () => {
 });
 
 describe("RFC 7622 §3.2 — IDNA2008 domains", () => {
+  // RFC 7622 §3.2.1 requires A-label conversion, not opaque ACE acceptance.
+  // RFC 5891 §§5.3–5.5 require decoded validation and exact A-label round trips.
+  // Literal Punycode checked independently with Python's codec and idna 3.18;
+  // all vectors use pre-Unicode-16 characters. CONTEXTO/Bidi checks retain the
+  // selected strict U-label policy; these are not new DNS lookup restrictions.
+  for (const [section, input, expected] of [
+    [
+      "RFC 5892 A.1 joining context",
+      "xn--ngba799q.example",
+      "ب\u200cب.example",
+    ],
+    ["RFC 5892 A.1 absent left context", "xn--mgbc799q.example", null],
+    [
+      "RFC 5892 A.2 virama context",
+      "xn--11b2ezcw70k.example",
+      "क्\u200dष.example",
+    ],
+    ["RFC 5892 A.2 missing virama", "xn--11b2er09f.example", null],
+    ["RFC 5892 A.3 middle dot", "xn--ll-0ea.example", "l·l.example"],
+    ["RFC 5892 A.3 absent l context", "xn--ab-0ea.example", null],
+    ["RFC 5892 A.4 Greek context", "xn--wva4j.example", "͵α.example"],
+    ["RFC 5892 A.4 non-Greek context", "xn--a-jib.example", null],
+    ["RFC 5892 A.5 Hebrew context", "xn--4db4e.example", "א׳.example"],
+    ["RFC 5892 A.5 reversed context", "xn--4db3e.example", null],
+    ["RFC 5892 A.6 Hebrew context", "xn--4db6e.example", "א״.example"],
+    ["RFC 5892 A.6 reversed context", "xn--4db5e.example", null],
+    ["RFC 5892 A.7 Japanese context", "xn--a-weuul.example", "カ・a.example"],
+    ["RFC 5892 A.7 absent Japanese context", "xn--ab-3n4a.example", null],
+    ["RFC 5892 A.8 Arabic-Indic digits", "xn--ngb8i.example", "ب١.example"],
+    [
+      "RFC 5892 A.9 extended Arabic-Indic digits",
+      "xn--ngb61b.example",
+      "ب۱.example",
+    ],
+    ["RFC 5892 A.8–A.9 mixed digit sets", "xn--ngb8iyr.example", null],
+    [
+      "RFC 5893 §2 RTL with European digit",
+      "xn--1-zhcd.example",
+      "אב1.example",
+    ],
+    ["RFC 5893 §2 mixed directions", "xn--a-zhcd.example", null],
+    ["RFC 5893 §2 mixed digit classes", "xn--1-zhcd19c.example", null],
+    ["RFC 5891 §5.4 non-NFC decoded label", "xn--e-xbb.example", null],
+    ["RFC 5891 §5.4 disallowed decoded uppercase", "xn--dca.example", null],
+    [
+      "RFC 5893 §2 ASCII sibling in bidi domain",
+      "a123.xn--4dbc.example",
+      "a123.אב.example",
+    ],
+    [
+      "RFC 5893 §2 numeric sibling in bidi domain",
+      "123.xn--4dbc.example",
+      null,
+    ],
+  ]) {
+    test(`decoded A-label / ${section} / ${input}`, () => {
+      if (expected === null) {
+        expect(() => jid(input)).toThrow(TypeError);
+        return;
+      }
+      expect(jid(input).domain).toBe(expected);
+      expect(jid(input).equals(jid(expected))).toBe(true);
+    });
+  }
+
   for (const [input, output] of [
     ["EXAMPLE.COM.", "example.com"],
     ["XN--BCHER-KVA.example", "bücher.example"],
