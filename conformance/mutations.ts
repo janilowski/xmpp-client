@@ -38,6 +38,51 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "let a delayed owned error write into a replacement transport",
+    file: "src/connection/index.js",
+    before:
+      "errorGeneration !== undefined && errorGeneration !== this.#generation",
+    after: "false",
+    suite: "conformance/rfc6120-fatal-output.test.ts",
+    test: "a delayed generation-bound owned error cannot write or close a replacement transport$",
+  },
+  {
+    name: "permit ordinary output after a received stream error",
+    file: "src/connection/index.js",
+    before:
+      "const error = StreamError.fromElement(element);\n    this.#streamFailed = true;",
+    after: "const error = StreamError.fromElement(element);",
+    suite: "conformance/rfc6120-fatal-output.test.ts",
+    test: "send refuses nonza reentry from received stream error error$",
+  },
+  {
+    name: "reuse an owned stream error as output permission",
+    file: "src/connection/index.js",
+    before:
+      "const errorGeneration = this.#streamErrorWrites.get(element);\n    this.#streamErrorWrites.delete(element);",
+    after: "const errorGeneration = this.#streamErrorWrites.get(element);",
+    suite: "conformance/rfc6120-fatal-output.test.ts",
+    test: "send cannot reuse the original owned error Element as permission$",
+  },
+  {
+    name: "restore output authority after delayed presence preparation",
+    file: "src/connection/index.js",
+    before: "element = await preparePresence(source, element);",
+    after:
+      "element = await preparePresence(source, element);\n      this.#streamFailed = false;",
+    suite: "conformance/rfc6120-fatal-output.test.ts",
+    test: "send cannot admit a prepared presence after fatal error$",
+  },
+  {
+    name: "send a public stream error without entering fatal closure",
+    file: "src/connection/index.js",
+    before:
+      'name === "error" && namespace === NS_JABBER_STREAM && !streamError',
+    after: "false",
+    suite: "conformance/rfc6120-fatal-output.test.ts",
+    test: "generic send cannot send an error and remain writable$",
+  },
+  {
     name: "let a stale opening callback replace the new transport parser",
     file: "src/connection/index.js",
     before:
@@ -113,10 +158,10 @@ const mutations = [
     test: "preferred diagnostic policy / .*mismatched tags$",
   },
   {
-    name: "retain stanza authority during reset callbacks",
+    name: "retain routing and output authority during reset callbacks",
     file: "src/connection/index.js",
     before: "refuseReconnect(this, error);\n      resetConnection(this);",
-    after: "refuseReconnect(this, error);",
+    after: "refuseReconnect(this, error);\n      this.#streamFailed = false;",
     suite: "conformance/rfc6120-reset.test.ts",
     test: "after reset, authentication cannot bypass fresh SASL$",
   },
@@ -1213,11 +1258,11 @@ const mutations = [
     test: "fatal parser errors preserve reciprocal close without dispatch$",
   },
   {
-    name: "leave negotiation active after a fatal parser error",
+    name: "restore negotiation after a fatal parser error",
     file: "src/connection/index.js",
-    before:
-      "// Fatal XML stops normal dispatch, not the reciprocal-close handshake.\n    this.#streamFailed = true;",
-    after: "/* failed stream remains active */",
+    before: 'this._streamError(error.condition || "bad-format");',
+    after:
+      'this._streamError(error.condition || "bad-format");\n    this.#streamFailed = false;',
     suite: "src/connection/test/parserError.test.js",
     test: "fatal parser errors preserve reciprocal close without dispatch$",
   },
@@ -1688,8 +1733,9 @@ const mutations = [
     name: "carry stream closure into a fresh transport",
     file: "src/connection/index.js",
     before:
-      "this.#closing = false;\n    this.#streamFailed = false;\n    const events = {",
-    after: "this.#streamFailed = false;\n    const events = {",
+      "this.#closing = false;\n    this.#streamFailed = false;\n    this.#streamErrorHandled = false;\n    const events = {",
+    after:
+      "this.#streamFailed = false;\n    this.#streamErrorHandled = false;\n    const events = {",
     suite: "conformance/rfc7395.test.ts",
     test: "completed shutdown permits initiation on a fresh transport$",
   },
@@ -3389,6 +3435,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-reset.test.ts",
       "conformance/rfc6120-feature-errors.test.ts",
       "conformance/rfc6120-parser-errors.test.ts",
+      "conformance/rfc6120-fatal-output.test.ts",
       "conformance/rfc6120-binding.test.ts",
       "conformance/rfc6120-binding-senders.test.ts",
       "conformance/rfc6120-sasl.test.ts",

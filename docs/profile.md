@@ -167,6 +167,13 @@ RFCs, browser engines or general denial-of-service protection.
   IQ handlers returning malformed core error elements produce a
   `cancel/internal-server-error` reply and one local error. Foreign error-named
   payloads remain ordinary IQ results; scoped namespace bindings are preserved.
+- Fatal stream errors block ordinary `send`/`sendMany` output before admission,
+  writes or send events, including callback reentry and pending presence
+  preparation. Only the lifecycle-owned error and closing handshake may follow.
+  Generic sends cannot generate stream errors; reusing or mutating an observed
+  error Element grants no output authority. A delayed old error cannot affect
+  a replacement transport. Raw writes and custom drivers remain lower-level
+  responsibilities (RFC 6120 §4.9.1.1; RFC 7395 §§3.5–3.6).
 - IQ `gone`/`redirect` errors retain the target in the error's XML element and
   reject the request without automatically contacting that target or resending.
   Applications choosing to follow stanza redirects own user approval, peer

@@ -52,6 +52,8 @@ class Connection extends EventEmitter {
   #parserListeners = null;
   #closing = false;
   #streamFailed = false;
+  #streamErrorHandled = false;
+  #streamErrorWrites = new WeakMap();
   #streamOpening = false;
   #openingWrite = null;
   #disconnecting = null;
@@ -82,18 +84,25 @@ class Connection extends EventEmitter {
   }
 
   async _streamError(condition, children, application) {
+    if (this.#streamErrorHandled) {
+      return this.disconnect();
+    }
+    this.#streamErrorHandled = true;
+    this.#streamFailed = true;
     const generation = this.#generation;
     const socket = this.socket;
+    // One generation-bound error Element may pass the fatal output barrier.
+    const element = xml("stream:error", { "xmlns:stream": NS_JABBER_STREAM }, [
+      xml(condition, { xmlns: NS_STREAM }, children),
+      application,
+    ]);
+    this.#streamErrorWrites.set(element, generation);
     try {
-      await this.send(
-        // prettier-ignore
-        xml('stream:error', {'xmlns:stream': NS_JABBER_STREAM}, [
-          xml(condition, {xmlns: NS_STREAM}, children),
-          application,
-        ]),
-      );
+      await this.send(element);
     } catch {
       // The stream may already be unusable; disconnect regardless.
+    } finally {
+      this.#streamErrorWrites.delete(element);
     }
 
     if (this.#generation === generation && this.socket === socket) {
@@ -181,6 +190,7 @@ class Connection extends EventEmitter {
     // Only a new transport permits initiation after stream closure.
     this.#closing = false;
     this.#streamFailed = false;
+    this.#streamErrorHandled = false;
     const events = {
       data: this._onData.bind(this),
       close: this.#onSocketClosed.bind(this),
@@ -262,6 +272,8 @@ class Connection extends EventEmitter {
   // https://xmpp.org/rfcs/rfc6120.html#streams-error
   _onStreamError(element) {
     const error = StreamError.fromElement(element);
+    this.#streamFailed = true;
+    this.#streamErrorHandled = true;
 
     if (error.condition === "reset") {
       refuseReconnect(this, error);
@@ -335,6 +347,7 @@ class Connection extends EventEmitter {
     clearReported(this);
     this.parser = parser;
     this.#streamFailed = false;
+    this.#streamErrorHandled = false;
     const events = {
       element: this._onElement.bind(this),
       error: this.#onParserError.bind(this),
@@ -775,6 +788,15 @@ class Connection extends EventEmitter {
   }
 
   async send(element, token) {
+    const errorGeneration = this.#streamErrorWrites.get(element);
+    this.#streamErrorWrites.delete(element);
+    if (errorGeneration !== undefined && errorGeneration !== this.#generation) {
+      throw new ConnectionClosedError();
+    }
+    const streamError = errorGeneration !== undefined;
+    if (this.#streamFailed && !streamError) {
+      throw new Error(CONNECTION_CLOSING_MESSAGE);
+    }
     if (this.#streamOpening) {
       throw new Error(STREAM_NOT_READY_MESSAGE);
     }
@@ -815,6 +837,12 @@ class Connection extends EventEmitter {
     // Preserve the preflight envelope across a caller-defined serializer.
     const name = element.getName();
     const namespace = element.getNS()?.toString(10) ?? "";
+    if (streamError && (name !== "error" || namespace !== NS_JABBER_STREAM)) {
+      throw new TypeError("Invalid internal stream error");
+    }
+    if (name === "error" && namespace === NS_JABBER_STREAM && !streamError) {
+      throw new TypeError("Stream errors require the lifecycle handler");
+    }
     if (namespace === NS_FRAMING && ["open", "close"].includes(name)) {
       throw new TypeError("Framing headers require stream lifecycle methods");
     }
@@ -997,6 +1025,9 @@ class Connection extends EventEmitter {
         throw new ConnectionClosedError();
       }
     }
+    if (this.#streamFailed && !streamError) {
+      throw new Error(CONNECTION_CLOSING_MESSAGE);
+    }
     const admission = sendPolicies.get(this)?.prepare({
       element,
       source,
@@ -1013,6 +1044,9 @@ class Connection extends EventEmitter {
     this.#onWriteError = admission?.rollback;
     let written;
     try {
+      if (this.#streamFailed && !streamError) {
+        throw new Error(CONNECTION_CLOSING_MESSAGE);
+      }
       written = this.write(source);
     } catch (error) {
       admission?.rollback();

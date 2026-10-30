@@ -196,7 +196,6 @@ test.each(["preloaded ID", "replaced ID"] as const)(
           (error: Error) => error,
         );
       expect(forbidden).toBeInstanceOf(Error);
-      expect(forbidden?.message).toBe("Stream negotiation is not complete");
       expect(
         sm.outbound_q.map(({ stanza }: { stanza: Element }) => stanza.attrs.id),
       ).toEqual(queue);

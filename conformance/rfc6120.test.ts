@@ -31,6 +31,7 @@ import { readFrame } from "./xml.ts";
 // Stream errors and fresh authentication before SM resumption: rfc6120-reset.test.ts.
 // Malformed feature namespaces and error-before-close: rfc6120-feature-errors.test.ts.
 // Fatal XML errors and reciprocal close on usable transport: rfc6120-parser-errors.test.ts.
+// Fatal outbound barriers, callback reentry and error ownership: rfc6120-fatal-output.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).
 
 const OPEN =
