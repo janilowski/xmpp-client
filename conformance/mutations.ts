@@ -38,6 +38,40 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "omit normalization of captured stanza error by",
+    file: "src/connection/index.js",
+    before: "const by = jid(errorBy).toString();",
+    after: "const by = errorBy;",
+    suite: "conformance/rfc7622-error-by.test.ts",
+    test: "send prepares error Unicode full JID$",
+  },
+  {
+    name: "let presence preparation restore unprepared error by",
+    file: "src/connection/index.js",
+    before: "preparation = PREPARATION.COMPLETE;",
+    after: "preparation = PREPARATION.PENDING;",
+    suite: "conformance/rfc7622-error-by.test.ts",
+    test: "sendMany rejects unprepared error by introduced during presence preparation$",
+  },
+  {
+    name: "skip actual stanza error by validation",
+    file: "src/xml/lib/stanzaError.js",
+    before: "const prepared = jid(by).toString();",
+    after: "const prepared = by;",
+    suite: "conformance/rfc7622-error-by.test.ts",
+    test: "generated IQ error rejects error by empty localpart before write/SM$",
+  },
+  {
+    name: "rerun caller serialization while preparing error by",
+    file: "src/connection/index.js",
+    before:
+      "const prepared = parseDocument(\n          source,\n          XML_CONTEXT.XMPP,\n          XML_DIRECTION.OUTPUT,\n        );",
+    after:
+      "const prepared = parseDocument(\n          element.toString(),\n          XML_CONTEXT.XMPP,\n          XML_DIRECTION.OUTPUT,\n        );",
+    suite: "conformance/rfc7622-error-by.test.ts",
+    test: "send converts scalar error by once$",
+  },
+  {
     name: "split literal host colons as a service port",
     file: "src/client/lib/getDomain.js",
     before: "return authority.slice(0, end + 1);",
@@ -299,8 +333,8 @@ const mutations = [
   {
     name: "prepare capability presence before validating original XML",
     file: "src/connection/index.js",
-    before: "    validate(source);\n    if (",
-    after: "    /* Original XML validation omitted. */\n    if (",
+    before: "    validate(source);\n    preparation = PREPARATION.COMPLETE;",
+    after: "    preparation = PREPARATION.COMPLETE;",
     suite: "src/connection/test/outgoingPresence.test.ts",
     test: "invalid original XML never invokes the presence preparer or admission$",
   },
@@ -2215,7 +2249,8 @@ const mutations = [
   {
     name: "bypass serialized outgoing error content validation",
     file: "src/connection/index.js",
-    before: "errorValidator = createStanzaErrorValidator(this.NS);",
+    before:
+      "errorValidator = createStanzaErrorValidator(this.NS, preparation);",
     after: "errorValidator = undefined;",
     suite: "conformance/rfc6120-outgoing-errors.test.ts",
     test: "send rejects message error type foo before wire/SM$",
@@ -3485,6 +3520,7 @@ for (const mutation of mutations) {
       "conformance/rfc7622.test.js",
       "conformance/rfc7622-address-lengths.test.ts",
       "conformance/rfc7622-service-domain.test.ts",
+      "conformance/rfc7622-error-by.test.ts",
       "conformance/peer.ts",
       "conformance/xml.ts",
     ]) {

@@ -8,9 +8,15 @@ import {
 import { clearReported, markReported } from "../events/lib/reportedError.js";
 import jid from "../jid/index.js";
 import xml from "../xml/index.js";
-import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
+import parseDocument, {
+  validateDocument,
+  XML_CONTEXT,
+  XML_DIRECTION,
+} from "../xml/lib/parseDocument.js";
 import isLanguageTag from "../xml/lib/language.js";
-import createStanzaErrorValidator from "../xml/lib/stanzaError.js";
+import createStanzaErrorValidator, {
+  PREPARATION,
+} from "../xml/lib/stanzaError.js";
 import operation, { ConnectionClosedError } from "../events/lib/operation.js";
 import { sendPolicies, takeReplay } from "./lib/sendPolicy.js";
 import { outgoingPresence } from "./lib/outgoingPresence.ts";
@@ -861,6 +867,8 @@ class Connection extends EventEmitter {
         })
       : [];
     let source = element.toString();
+    let preparation = PREPARATION.PENDING;
+    let errorBy;
     const validate = (source) => {
       try {
         let isRoot = true;
@@ -947,7 +955,8 @@ class Connection extends EventEmitter {
                 );
               }
               stanzaErrors += 1;
-              errorValidator = createStanzaErrorValidator(this.NS);
+              errorBy = tag.attributes.by?.value;
+              errorValidator = createStanzaErrorValidator(this.NS, preparation);
             }
             errorValidator?.open(tag);
             if (
@@ -1002,6 +1011,24 @@ class Connection extends EventEmitter {
       }
     };
     validate(source);
+    preparation = PREPARATION.COMPLETE;
+    if (errorBy !== undefined) {
+      const by = jid(errorBy).toString();
+      if (by !== errorBy) {
+        // Rebuild only when normalization changes the validated snapshot.
+        // Caller writers/scalars are never replayed.
+        const prepared = parseDocument(
+          source,
+          XML_CONTEXT.XMPP,
+          XML_DIRECTION.OUTPUT,
+        );
+        prepared.getChild("error", NS_JABBER_CLIENT).attrs.by = by;
+        element = prepared;
+        element.parent = this.root;
+        source = element.toString();
+      }
+      validate(source);
+    }
     if (this.#generation !== generation || this.socket !== socket) {
       throw new ConnectionClosedError();
     }

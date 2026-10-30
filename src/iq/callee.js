@@ -3,6 +3,7 @@ import createStanzaErrorValidator, {
   TYPES,
   CONDITIONS,
   NS_STANZA,
+  PREPARATION,
 } from "../xml/lib/stanzaError.js";
 import isIRI from "../xml/lib/isIRI.js";
 import { validateDocument, XML_CONTEXT } from "../xml/lib/parseDocument.js";
@@ -158,7 +159,7 @@ function captureError(element, namespace) {
   let snapshot;
   let cursor;
   let depth = 0;
-  const validator = createStanzaErrorValidator(namespace);
+  const validator = createStanzaErrorValidator(namespace, PREPARATION.PENDING);
   validateDocument(
     `<iq xmlns="${namespace}">${source}</iq>`,
     XML_CONTEXT.XMPP,

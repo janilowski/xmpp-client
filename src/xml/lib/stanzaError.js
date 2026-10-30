@@ -1,4 +1,7 @@
 import isIRI from "./isIRI.js";
+import jid from "../../jid/index.js";
+
+export const PREPARATION = { PENDING: "pending", COMPLETE: "complete" };
 
 export const NS_STANZA = "urn:ietf:params:xml:ns:xmpp-stanzas";
 export const TYPES = new Set(["auth", "cancel", "continue", "modify", "wait"]);
@@ -34,8 +37,11 @@ const RESERVED_NAMESPACES = new Set([
 const CHARACTER_DATA = new Set(["text", "gone", "redirect"]);
 
 // RFC 6120 §§8.3.1/8.3.2/.3.5/.3.14: validate one serialized core error.
-// Feed the existing XML parser events; neither a second parse nor a tree is needed.
-export default function createStanzaErrorValidator(namespace) {
+// Consume existing parser events; snapshot preparation belongs to the sender.
+export default function createStanzaErrorValidator(
+  namespace,
+  preparation = PREPARATION.COMPLETE,
+) {
   let depth = 0;
   let conditions = 0;
   let child;
@@ -51,6 +57,13 @@ export default function createStanzaErrorValidator(namespace) {
           !TYPES.has(tag.attributes.type?.value)
         ) {
           throw new TypeError("Invalid stanza error");
+        }
+        const by = tag.attributes.by?.value;
+        if (by !== undefined) {
+          const prepared = jid(by).toString();
+          if (preparation === PREPARATION.COMPLETE && prepared !== by) {
+            throw new TypeError("Unprepared stanza error by address");
+          }
         }
         return;
       }

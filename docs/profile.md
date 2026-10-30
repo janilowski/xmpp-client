@@ -419,7 +419,10 @@ JID preparation. Bracketed IP literals stay intact; ports, paths and queries do
 not become domain text. Endpoint validation remains separate: a valid JID domain
 need not be a supported WebSocket URL host.
 
-Core stanza `to`/`from` values are prepared before serialization and SM admission.
+Core stanza `to`/`from` values and optional direct core error `by` JIDs are
+prepared before writes and SM admission. Error `by` uses the serialized snapshot,
+without replaying caller writers or scalar conversions. Necessary normalization
+can reserialize that snapshot; already prepared snapshots retain their bytes.
 Length checks use prepared UTF-8, so longer input can normalize to a valid JID.
 Strict local rejection implements RFC 7622 §4's client SHOULD; generic foreign
 nonza attributes retain their own semantics, not implicit JID-slot validation.
