@@ -1,6 +1,7 @@
 import { compare as compareAltConnections } from "./alt-connections.js";
 import isUnexpired from "./xrdExpiry.js";
 import readXML from "./readXML.ts";
+import prepareURI from "./xrdURI.ts";
 
 const NS_XRD = "http://docs.oasis-open.org/ns/xri/xrd-1.0";
 const DISCOVERY_TIMEOUT_MS = 5000;
@@ -42,9 +43,9 @@ export async function resolve(domain) {
           return false;
         }
         try {
-          const uri = new URL(attrs.href);
+          const uri = new URL(prepareURI(attrs.href));
           return (
-            METHODS.get(attrs.rel?.toLowerCase())?.has(uri.protocol) &&
+            METHODS.get(prepareURI(attrs.rel).toLowerCase())?.has(uri.protocol) &&
             !uri.username &&
             !uri.password
           );
@@ -55,8 +56,8 @@ export async function resolve(domain) {
       .map(({ attrs }) => ({
         rel: attrs.rel,
         href: attrs.href,
-        method: attrs.rel.toLowerCase().split(":").pop(),
-        uri: new URL(attrs.href).href,
+        method: prepareURI(attrs.rel).toLowerCase().split(":").pop(),
+        uri: new URL(prepareURI(attrs.href)).href,
       }))
       .toSorted(compareAltConnections);
   } catch {

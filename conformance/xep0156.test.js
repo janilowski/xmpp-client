@@ -5,6 +5,7 @@ import { resolve } from "../src/resolve/lib/http.js";
 // XRD 1.0 (2010-11-01) §§1.5–4 and RFC 8288 §2.1.2.
 // Unknown metadata is not a trust assertion; this is not a general XSD validator.
 // XML byte encodings and MIME precedence: xep0156-encoding.test.ts.
+// XML Schema anyURI escaping and endpoint identity: xep0156-uris.test.ts.
 let fetchMock;
 let clockMock;
 afterEach(() => {

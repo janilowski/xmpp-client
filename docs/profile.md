@@ -35,6 +35,10 @@ redirects are likewise never followed automatically.
 
 Only direct host-wide XRD links select endpoints. Unused metadata and extensions
 are not trust assertions; no XML Signature or XRDS trust path is implemented.
+Consumed relation/endpoint URIs use XML whitespace collapse and XLink escaping
+before native URL processing. Reverse solidus remains `%5C`, not a separator;
+existing escapes remain intact. Returned `rel`/`href` retain the raw XML values;
+use the prepared `uri` for transport.
 Expiry uses the device clock; there is no additional metadata cache.
 Equivalent endpoints are ordered lexically after transport/security preferences.
 Reported RFC 6415 erratum 4811 does not relax this profile's absolute-URL rule;

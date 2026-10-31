@@ -219,10 +219,15 @@ test("Chromium discovery rejects redirects whose target the Fetch API conceals",
 });
 
 // Existing fixture SPKI trust isolates encoding interoperability, not PKIX proof.
-// XEP-0156 §2.2; XML 1.0 §4.3.3; RFC 7303 §§3.2–3.3.
-test.each(["LE", "BE"])(
-  "Chromium bundle discovers UTF-16%s XRD and upgrades the exact Unicode WSS path",
-  async (endian) => {
+// XEP-0156 §2.2; XML 1.0 §4.3.3; RFC 7303 §§3.2–3.3; XRD §1.5.2.
+test.each([
+  ["LE", "", "/%C5%BC%C3%B3%C5%82%C4%87"],
+  ["BE", "", "/%C5%BC%C3%B3%C5%82%C4%87"],
+  ["LE", "a\\", "/a%5C%C5%BC%C3%B3%C5%82%C4%87"],
+  ["BE", "a\\", "/a%5C%C5%BC%C3%B3%C5%82%C4%87"],
+])(
+  "Chromium bundle discovers UTF-16%s XRD prefix %j and upgrades exact path %s",
+  async (endian, prefix, expectedPath) => {
     const requests = [];
     const upgrades = [];
     const endpoint = Bun.serve({
@@ -242,7 +247,7 @@ test.each(["LE", "BE"])(
           requests.push(uri.pathname);
           const content = Buffer.concat([
             Buffer.from(
-              `<?xml version="1.0" encoding="UTF-16"?><XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link rel="urn:xmpp:alt-connections:websocket" href="wss://localhost:${server.port}/`,
+              `<?xml version="1.0" encoding="UTF-16"?><XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link rel="urn:xmpp:alt-connections:websocket" href="wss://localhost:${server.port}/${prefix}`,
               "utf16le",
             ),
             Buffer.from([0x7c, 0x01, 0xf3, 0x00, 0x42, 0x01, 0x07, 0x01]),
@@ -302,9 +307,7 @@ test.each(["LE", "BE"])(
       }, endpoint.port);
       expect(result).toEqual({ connected: true, errors: [] });
       expect(requests).toEqual(["/.well-known/host-meta"]);
-      expect(upgrades).toEqual([
-        { path: "/%C5%BC%C3%B3%C5%82%C4%87", protocol: "xmpp" },
-      ]);
+      expect(upgrades).toEqual([{ path: expectedPath, protocol: "xmpp" }]);
     } finally {
       await page.close();
       await endpoint.stop(true);

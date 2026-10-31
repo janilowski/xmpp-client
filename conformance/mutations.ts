@@ -38,6 +38,38 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "omit XRD URI escaping before native URL processing",
+    file: "src/resolve/lib/xrdURI.ts",
+    before: ".replace(EXCLUDED_URI_CHARACTERS, encodeURIComponent)",
+    after: "",
+    suite: "conformance/xep0156-uris.test.ts",
+    test: "reverse solidus in path$",
+  },
+  {
+    name: "omit XRD anyURI whitespace collapse",
+    file: "src/resolve/lib/xrdURI.ts",
+    before: '.replace(XML_WHITESPACE, " ")',
+    after: "",
+    suite: "conformance/xep0156-uris.test.ts",
+    test: "collapsed space run$",
+  },
+  {
+    name: "trim non-XML whitespace from XRD URI values",
+    file: "src/resolve/lib/xrdURI.ts",
+    before: '.replace(/^ | $/g, "")',
+    after: ".trim()",
+    suite: "conformance/xep0156-uris.test.ts",
+    test: "relation does not trim non-XML whitespace$",
+  },
+  {
+    name: "select XRD methods before preparing the relation URI",
+    file: "src/resolve/lib/http.js",
+    before: "METHODS.get(prepareURI(attrs.rel).toLowerCase())",
+    after: "METHODS.get(attrs.rel?.toLowerCase())",
+    suite: "conformance/xep0156-uris.test.ts",
+    test: "relation collapses XML whitespace before method selection$",
+  },
+  {
     name: "decode UTF-16 discovery as UTF-8",
     file: "src/resolve/lib/readXML.ts",
     before: "new TextDecoder(encoding ?? UTF8, { fatal: true })",
@@ -3283,8 +3315,8 @@ const mutations = [
   {
     name: "compare XRD relation types case-sensitively",
     file: "src/resolve/lib/http.js",
-    before: "METHODS.get(attrs.rel?.toLowerCase())",
-    after: "METHODS.get(attrs.rel)",
+    before: "METHODS.get(prepareURI(attrs.rel).toLowerCase())",
+    after: "METHODS.get(prepareURI(attrs.rel))",
     suite: "conformance/xep0156.test.js",
     test: "relation and URI scheme comparisons",
   },
@@ -3587,6 +3619,7 @@ for (const mutation of mutations) {
       "conformance/xep0388-resumption-identity.test.ts",
       "conformance/xep0156.test.js",
       "conformance/xep0156-encoding.test.ts",
+      "conformance/xep0156-uris.test.ts",
       "conformance/xep0156-https.test.ts",
       "conformance/rfc7622.test.js",
       "conformance/rfc7622-contexts.test.ts",
