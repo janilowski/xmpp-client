@@ -1,16 +1,114 @@
 diff --git a/lib/Element.js b/lib/Element.js
-index a45ba26c2320f8caeb1828b8d8df07cdfb5a576d..3f6863dcc953136c445a197c2d1206fd330f0e7c 100644
+index a45ba26c..bbc2d189 100644
 --- a/lib/Element.js
 +++ b/lib/Element.js
-@@ -50,7 +50,7 @@ class Element {
-   findNS(prefix) {
-     if (!prefix) {
-       /* default namespace */
+@@ -4,0 +5,26 @@ var escape = require('./escape.js');
++const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
++
++// Resolve declarations by prefix before choosing a URI's representative alias.
++function namespaceBindings(element) {
++  const ancestors = [];
++  for (let current = element; current; current = current.parent) {
++    ancestors.push(current);
++  }
++  const bindings = new Map();
++  for (const current of ancestors.reverse()) {
++    for (const name of Object.keys(current.attrs)) {
++      if (name !== "xmlns" && !name.startsWith("xmlns:")) {
++        continue;
++      }
++      const value = current.attrs[name];
++      if (value === null || value === undefined) {
++        continue;
++      }
++      const prefix = name === "xmlns" ? "" : name.slice(6);
++      bindings.delete(prefix);
++      bindings.set(prefix, value);
++    }
++  }
++  return bindings;
++}
++
+@@ -50,0 +77,3 @@ class Element {
++    if (prefix === "xml") {
++      return XML_NAMESPACE;
++    }
+@@ -53 +82 @@ class Element {
 -      if (this.attrs.xmlns) {
 +      if (this.attrs.xmlns || this.attrs.xmlns === "") {
-         return this.attrs.xmlns;
-       } else if (this.parent) {
-         return this.parent.findNS();
+@@ -73,14 +102,3 @@ class Element {
+-    let namespaces = {};
+-
+-    if (this.parent) {
+-      namespaces = this.parent.getXmlns();
+-    }
+-
+-    for (const attr in this.attrs) {
+-      const m = attr.match("xmlns:?(.*)");
+-      // eslint-disable-next-line  no-prototype-builtins
+-      if (this.attrs.hasOwnProperty(attr) && m) {
+-        namespaces[this.attrs[attr]] = m[1];
+-      }
+-    }
+-    return namespaces;
++    return Object.fromEntries(
++      [...namespaceBindings(this)].map(([prefix, uri]) => [uri, prefix]),
++    );
+@@ -93 +111,18 @@ class Element {
+-      Object.assign(this.attrs, attrs);
++      if (!Object.hasOwn(attrs, "__proto__")) {
++        Object.assign(this.attrs, attrs);
++        return;
++      }
++      const source = Object(attrs);
++      for (const key of Reflect.ownKeys(source)) {
++        if (!Object.getOwnPropertyDescriptor(source, key)?.enumerable) {
++          continue;
++        }
++        const value = source[key];
++        if (key === "__proto__" && !Object.hasOwn(this.attrs, key)) {
++          Object.defineProperty(this.attrs, key, {
++            value, writable: true, enumerable: true, configurable: true,
++          });
++        } else {
++          this.attrs[key] = value;
++        }
++      }
+@@ -102 +137 @@ class Element {
+-      return this.attrs[name];
++      return Object.hasOwn(this.attrs, name) ? this.attrs[name] : undefined;
+@@ -105,4 +140,2 @@ class Element {
+-    const namespaces = this.getXmlns();
+-
+-    if (!namespaces[xmlns]) {
+-      return null;
++    if (xmlns === XML_NAMESPACE) {
++      return this.attrs[`xml:${name}`];
+@@ -110,2 +143,12 @@ class Element {
+-
+-    return this.attrs[[namespaces[xmlns], name].join(":")];
++    let bound = false;
++    for (const [prefix, uri] of namespaceBindings(this)) {
++      if (!prefix || String(uri) !== xmlns) {
++        continue;
++      }
++      bound = true;
++      const attribute = `${prefix}:${name}`;
++      if (Object.hasOwn(this.attrs, attribute)) {
++        return this.attrs[attribute];
++      }
++    }
++    return bound ? undefined : null;
+@@ -302 +345,5 @@ class Element {
+-      this.attrs[attr] = val;
++      if (attr === "__proto__") {
++        this.setAttrs({ [attr]: val });
++      } else {
++        this.attrs[attr] = val;
++      }
+@@ -305 +352 @@ class Element {
+-    return this.attrs[attr];
++    return Object.hasOwn(this.attrs, attr) ? this.attrs[attr] : undefined;
 diff --git a/lib/escape.js b/lib/escape.js
 index 5ace9258d64fc54a0e55bd3c4e88897d41ce7827..4239adb1e43a950f463b6c162cdf0de39882c57b 100644
 --- a/lib/escape.js
@@ -27,18 +125,116 @@ index 5ace9258d64fc54a0e55bd3c4e88897d41ce7827..4239adb1e43a950f463b6c162cdf0de3
 +  return s.replace(/["&'<>\t\n\r]/g, escapeXMLReplace);
  }
 diff --git a/src/Element.js b/src/Element.js
-index e31c19e276018e3a46e2ddd8b2f1b1ae9c6da5eb..a95f782bb91b9af7fee34ef4109fb9a04da34ae7 100644
+index e31c19e2..39070b0c 100644
 --- a/src/Element.js
 +++ b/src/Element.js
-@@ -48,7 +48,7 @@ class Element {
-   findNS(prefix) {
-     if (!prefix) {
-       /* default namespace */
+@@ -2,0 +3,26 @@ import { escapeXML, escapeXMLText } from "./escape.js";
++const XML_NAMESPACE = "http://www.w3.org/XML/1998/namespace";
++
++// Resolve declarations by prefix before choosing a URI's representative alias.
++function namespaceBindings(element) {
++  const ancestors = [];
++  for (let current = element; current; current = current.parent) {
++    ancestors.push(current);
++  }
++  const bindings = new Map();
++  for (const current of ancestors.reverse()) {
++    for (const name of Object.keys(current.attrs)) {
++      if (name !== "xmlns" && !name.startsWith("xmlns:")) {
++        continue;
++      }
++      const value = current.attrs[name];
++      if (value === null || value === undefined) {
++        continue;
++      }
++      const prefix = name === "xmlns" ? "" : name.slice(6);
++      bindings.delete(prefix);
++      bindings.set(prefix, value);
++    }
++  }
++  return bindings;
++}
++
+@@ -48,0 +75,3 @@ class Element {
++    if (prefix === "xml") {
++      return XML_NAMESPACE;
++    }
+@@ -51 +80 @@ class Element {
 -      if (this.attrs.xmlns) {
 +      if (this.attrs.xmlns || this.attrs.xmlns === "") {
-         return this.attrs.xmlns;
-       } else if (this.parent) {
-         return this.parent.findNS();
+@@ -71,14 +100,3 @@ class Element {
+-    let namespaces = {};
+-
+-    if (this.parent) {
+-      namespaces = this.parent.getXmlns();
+-    }
+-
+-    for (const attr in this.attrs) {
+-      const m = attr.match("xmlns:?(.*)");
+-      // eslint-disable-next-line  no-prototype-builtins
+-      if (this.attrs.hasOwnProperty(attr) && m) {
+-        namespaces[this.attrs[attr]] = m[1];
+-      }
+-    }
+-    return namespaces;
++    return Object.fromEntries(
++      [...namespaceBindings(this)].map(([prefix, uri]) => [uri, prefix]),
++    );
+@@ -91 +109,18 @@ class Element {
+-      Object.assign(this.attrs, attrs);
++      if (!Object.hasOwn(attrs, "__proto__")) {
++        Object.assign(this.attrs, attrs);
++        return;
++      }
++      const source = Object(attrs);
++      for (const key of Reflect.ownKeys(source)) {
++        if (!Object.getOwnPropertyDescriptor(source, key)?.enumerable) {
++          continue;
++        }
++        const value = source[key];
++        if (key === "__proto__" && !Object.hasOwn(this.attrs, key)) {
++          Object.defineProperty(this.attrs, key, {
++            value, writable: true, enumerable: true, configurable: true,
++          });
++        } else {
++          this.attrs[key] = value;
++        }
++      }
+@@ -100 +135 @@ class Element {
+-      return this.attrs[name];
++      return Object.hasOwn(this.attrs, name) ? this.attrs[name] : undefined;
+@@ -103,4 +138,2 @@ class Element {
+-    const namespaces = this.getXmlns();
+-
+-    if (!namespaces[xmlns]) {
+-      return null;
++    if (xmlns === XML_NAMESPACE) {
++      return this.attrs[`xml:${name}`];
+@@ -108,2 +141,12 @@ class Element {
+-
+-    return this.attrs[[namespaces[xmlns], name].join(":")];
++    let bound = false;
++    for (const [prefix, uri] of namespaceBindings(this)) {
++      if (!prefix || String(uri) !== xmlns) {
++        continue;
++      }
++      bound = true;
++      const attribute = `${prefix}:${name}`;
++      if (Object.hasOwn(this.attrs, attribute)) {
++        return this.attrs[attribute];
++      }
++    }
++    return bound ? undefined : null;
+@@ -300 +343,5 @@ class Element {
+-      this.attrs[attr] = val;
++      if (attr === "__proto__") {
++        this.setAttrs({ [attr]: val });
++      } else {
++        this.attrs[attr] = val;
++      }
+@@ -303 +350 @@ class Element {
+-    return this.attrs[attr];
++    return Object.hasOwn(this.attrs, attr) ? this.attrs[attr] : undefined;
 diff --git a/src/escape.js b/src/escape.js
 index 7c280a86e507440ccdb3bf8d6e6375f3717a20ab..2fe8b2721b079168c9fd00e01ffd00a46a5223a6 100644
 --- a/src/escape.js

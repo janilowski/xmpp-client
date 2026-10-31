@@ -315,6 +315,65 @@ test.each([
   },
 );
 
+test("Chromium bundled attribute namespaces agree with native DOMParser", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.address().port}`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const result = await page.evaluate(() => {
+      const original = "urn:test:original";
+      const replacement = "urn:test:replacement";
+      const xml = "http://www.w3.org/XML/1998/namespace";
+      const source = `<message xml:lang="pl" xmlns:p="${original}" xmlns:q="${original}" p:a="old" __proto__="ordinary"><child xmlns:p="${replacement}" p:a="new"/></message>`;
+      const native = new DOMParser().parseFromString(source, "application/xml");
+      const errors = [];
+      let received;
+      const parser = new globalThis.XMPP.xml.Parser();
+      parser.on("error", (error) => errors.push(error.message));
+      parser.on("element", (element) => {
+        received = element;
+      });
+      parser.end(`<stream>${source}</stream>`);
+      const child = received.getChild("child");
+      return {
+        errors,
+        native: [
+          native.documentElement.getAttributeNS(xml, "lang"),
+          native.documentElement.getAttributeNS(original, "a"),
+          native.documentElement.firstElementChild.getAttributeNS(
+            replacement,
+            "a",
+          ),
+          native.documentElement.firstElementChild.getAttributeNS(
+            original,
+            "a",
+          ),
+          native.documentElement.getAttribute("__proto__"),
+          native.documentElement.getAttribute("constructor"),
+        ],
+        values: [
+          received.getAttr("lang", xml),
+          received.getAttr("a", original),
+          child.getAttr("a", replacement),
+          child.getAttr("a", original) ?? null,
+          received.getAttr("__proto__"),
+          received.getAttr("constructor") ?? null,
+        ],
+        own: Object.hasOwn(received.attrs, "__proto__"),
+        ordinaryPrototype:
+          Object.getPrototypeOf(received.attrs) === Object.prototype,
+      };
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.native).toEqual(["pl", "old", "new", null, "ordinary", null]);
+    expect(result.values).toEqual(result.native);
+    expect(result.own).toBe(true);
+    expect(result.ordinaryPrototype).toBe(true);
+  } finally {
+    await page.close();
+  }
+});
+
 test("Chromium decodes every Unicode property without changing its repertoire", async () => {
   const build = await rolldown({ input: "src/jid/lib/unicode.js" });
   const page = await browser.newPage();

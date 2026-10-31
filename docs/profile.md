@@ -460,7 +460,10 @@ never authorize by display text. See [Unicode maintenance](unicode.md).
 The XML factory retains ltx's Element constructor rather than wrapping it.
 The checked-in Bun patch corrects explicit default-namespace cancellation and
 preserves attribute TAB/LF/CR through numeric references in both CommonJS and
-ES module exports; text escaping is unchanged. Install with `bun install --frozen-lockfile`;
+ES module exports. Attribute lookup respects implicit `xml`, aliases and nearest
+prefix bindings; legal prototype-named attributes remain own data. Constructor
+and attribute-object identity are retained; text escaping is unchanged.
+Install with `bun install --frozen-lockfile`;
 dependency upgrades must recheck cancellation, scoped dispatch and constructor
 compatibility before removing or regenerating the patch. Distributed bundles
 embed the corrected implementation; consumers' separate raw ltx installations
