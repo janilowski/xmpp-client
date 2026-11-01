@@ -183,8 +183,8 @@ TLS version tests use native Node for their controlled peer and independent
 capability probe. If `node` resolves to Bun's shim, set
 `XMPP_TEST_NODE=/usr/bin/node` when running conformance or `test:all`.
 IPv6 WSS is tested without an expected-failure marker:
-Bun 1.4.3 fixes the earlier identity-verification defect. The separate CN-only
-identity defect remains an executable expected failure; see the
+Bun 1.4.3 fixes the earlier identity-verification defect. The private Bun TLS
+adapter also rejects CN-only identities and removes static-RSA offers; see the
 [TLS boundary](docs/profile.md#transport-and-discovery).
 
 The four Prosody module versions are pinned in `server/setup.js`. The native

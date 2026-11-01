@@ -13,7 +13,6 @@ import { generate } from "selfsigned";
 // Protocol versions and TLS 1.3 preference: rfc7590-versions.test.ts.
 const HTTP_BAD_REQUEST = 400;
 const DAY_MS = 86_400_000;
-const KNOWN_CN_ONLY_BUN_VERSIONS = new Set(["1.4.2", "1.4.3", "1.4.4"]);
 let directory: string;
 let authority: Awaited<ReturnType<typeof generate>>;
 let untrustedAuthority: Awaited<ReturnType<typeof generate>>;
@@ -107,6 +106,9 @@ describe.each([
   ["direct", "expired"],
   ["direct", "untrusted"],
   ["direct", "cn-only"],
+  ["direct", "uri-only"],
+  ["direct", "valid-ipv4"],
+  ["direct", "valid-ipv6"],
   ["direct", "chain-valid"],
   ["direct", "chain-untrusted-intermediate"],
   ["direct", "chain-expired-intermediate"],
@@ -117,16 +119,23 @@ describe.each([
   ["discovery", "expired"],
   ["discovery", "untrusted"],
   ["discovery", "cn-only"],
+  ["discovery", "uri-only"],
+  ["discovery", "valid-ipv4"],
+  ["discovery", "valid-ipv6"],
   ["discovery", "chain-valid"],
   ["discovery", "chain-untrusted-intermediate"],
   ["discovery", "chain-expired-intermediate"],
   ["discovery", "chain-non-ca-intermediate"],
   ["discovery", "chain-missing-intermediate"],
 ] as const)("§3.9/6 PKIX: %s / %s", (mode, scenario) => {
-  const knownFailure =
-    KNOWN_CN_ONLY_BUN_VERSIONS.has(Bun.version) && scenario === "cn-only";
   let server: Bun.Server<undefined> | undefined;
-  let observed: { outcome: string; upgrades: number; discoveries: number };
+  const artifacts = ["source", "minified"] as const;
+  const observed: {
+    artifact: string;
+    outcome: string;
+    upgrades: number;
+    discoveries: number;
+  }[] = [];
 
   // Hook failures are never expected conformance failures, including for #50.
   beforeAll(async () => {
@@ -138,6 +147,12 @@ describe.each([
       expect(intermediate).toBeDefined();
     }
     const issuer = intermediate ?? authority;
+    const hostname = scenario === "valid-ipv6" ? "::1" : "127.0.0.1";
+    const endpoint = scenario.startsWith("valid-ip")
+      ? scenario === "valid-ipv6"
+        ? "[::1]"
+        : hostname
+      : "localhost";
 
     const certificate = await generate(
       [{ name: "commonName", value: "localhost" }],
@@ -157,15 +172,22 @@ describe.each([
             : [
                 {
                   name: "subjectAltName" as const,
-                  altNames: [
-                    {
-                      type: 2 as const,
-                      value:
-                        scenario === "wrong-name"
-                          ? "wrong.invalid"
-                          : "localhost",
-                    },
-                  ],
+                  altNames: scenario.startsWith("valid-ip")
+                    ? [{ type: 7 as const, ip: hostname }]
+                    : [
+                        {
+                          type:
+                            scenario === "uri-only"
+                              ? (6 as const)
+                              : (2 as const),
+                          value:
+                            scenario === "uri-only"
+                              ? "https://localhost/"
+                              : scenario === "wrong-name"
+                                ? "wrong.invalid"
+                                : "localhost",
+                        },
+                      ],
                 },
               ]),
         ],
@@ -180,11 +202,17 @@ describe.each([
     );
     expect(Date.parse(parsed.validFrom)).toBeLessThan(now);
     expect(Date.parse(parsed.validTo) > now).toBe(scenario !== "expired");
-    expect(parsed.subjectAltName).toBe(
-      scenario === "cn-only"
-        ? undefined
-        : `DNS:${scenario === "wrong-name" ? "wrong.invalid" : "localhost"}`,
-    );
+    if (scenario.startsWith("valid-ip")) {
+      expect(parsed.checkIP(hostname)).toBe(hostname);
+    } else {
+      expect(parsed.subjectAltName).toBe(
+        scenario === "cn-only"
+          ? undefined
+          : scenario === "uri-only"
+            ? "URI:https://localhost/"
+            : `DNS:${scenario === "wrong-name" ? "wrong.invalid" : "localhost"}`,
+      );
+    }
     if (scenario === "chain-missing-intermediate") {
       // A fresh child has no cached issuer or AIA URL to retrieve one.
       expect(parsed.infoAccess).toBeUndefined();
@@ -215,8 +243,10 @@ describe.each([
 
     let upgrades = 0;
     let discoveries = 0;
+    const warmupPorts: number[] = [];
+    const discoveryPorts: number[] = [];
     server = Bun.serve({
-      hostname: "127.0.0.1",
+      hostname,
       port: 0,
       tls: {
         cert:
@@ -226,10 +256,16 @@ describe.each([
         key: certificate.private,
       },
       fetch(request, server) {
-        if (new URL(request.url).pathname === "/.well-known/host-meta") {
+        const path = new URL(request.url).pathname;
+        if (path === "/warmup") {
+          warmupPorts.push(server.requestIP(request)!.port);
+          return new Response("native warmup");
+        }
+        if (path === "/.well-known/host-meta") {
           discoveries += 1;
+          discoveryPorts.push(server.requestIP(request)!.port);
           return new Response(
-            `<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link rel="urn:xmpp:alt-connections:websocket" href="wss://localhost:${server.port}/xmpp"/></XRD>`,
+            `<XRD xmlns="http://docs.oasis-open.org/ns/xri/xrd-1.0"><Link rel="urn:xmpp:alt-connections:websocket" href="wss://${endpoint}:${server.port}/xmpp"/></XRD>`,
           );
         }
         upgrades += 1;
@@ -251,15 +287,35 @@ describe.each([
       NODE_EXTRA_CA_CERTS:
         scenario === "untrusted" ? "" : join(directory, "ca.pem"),
     };
-    const child = Bun.spawn(
-      [
-        process.execPath,
-        "--eval",
-        `
-        import { client } from "./src/client/index.js";
-        const xmpp = client({ service: ${JSON.stringify(mode === "discovery" ? `localhost:${server.port}` : `wss://localhost:${server.port}/xmpp`)}, domain: "different-xmpp-domain.test" });
+    for (const artifact of artifacts) {
+      const previous = { upgrades, discoveries, warmups: warmupPorts.length };
+      // A native permissive pool must not bypass the library's stricter policy.
+      // Invalid-identity warmup is specific to Bun's confirmed fallback version;
+      // certificate rejection below remains unconditional on every runtime.
+      const warmup =
+        mode === "discovery" &&
+        (scenario === "valid" ||
+          (Bun.version === "1.4.4" &&
+            ["cn-only", "uri-only"].includes(scenario)));
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--eval",
+          `
+        const { client } = ${
+          artifact === "source"
+            ? 'await import("./src/client/index.js")'
+            : 'Function((await Bun.file("./dist/xmpp.min.js").text()) + "\\n;return XMPP;")()'
+        };
+        const xmpp = client({ service: ${JSON.stringify(mode === "discovery" ? `${endpoint}:${server.port}` : `wss://${endpoint}:${server.port}/xmpp`)}, domain: "different-xmpp-domain.test" });
         xmpp.reconnect.stop();
         xmpp.on("error", () => {});
+        if (${warmup}) {
+          for (let index = 0; index < 2; index++) {
+            const response = await fetch("https://localhost:${server.port}/warmup");
+            if (await response.text() !== "native warmup") { throw new Error("Warmup failed"); }
+          }
+        }
         try {
           await xmpp.connect(xmpp.options.service);
           console.log("accepted");
@@ -270,34 +326,47 @@ describe.each([
           await xmpp.stop();
         }
       `,
-      ],
-      { env, stdout: "pipe", stderr: "pipe", timeout: 5000 },
-    );
-    const [exit, stdout, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stdout).text(),
-      new Response(child.stderr).text(),
-    ]);
-    expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
-    expect(["accepted", "rejected"]).toContain(stdout.trim());
-    observed = { outcome: stdout.trim(), upgrades, discoveries };
+        ],
+        { env, stdout: "pipe", stderr: "pipe", timeout: 5000 },
+      );
+      const [exit, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
+      expect(["accepted", "rejected"]).toContain(stdout.trim());
+      if (warmup) {
+        const ports = warmupPorts.slice(previous.warmups);
+        expect(ports).toHaveLength(2);
+        expect(ports[0]).toBe(ports[1]);
+        expect(discoveryPorts.slice(previous.discoveries)).not.toContain(
+          ports[0],
+        );
+      }
+      observed.push({
+        artifact,
+        outcome: stdout.trim(),
+        upgrades: upgrades - previous.upgrades,
+        discoveries: discoveries - previous.discoveries,
+      });
+    }
   });
 
   afterAll(async () => {
     await server?.stop(true);
   });
 
-  // RFC 9525 §2: CN is not a service identity. #50 remains nonconforming on
-  // this exact runtime; a fixed or different version must reject it normally.
-  test.failingIf(knownFailure)(
-    `validates the certificate path and endpoint identity before HTTP discovery or WS upgrade${knownFailure ? ` [expected Bun ${Bun.version} violation #50]` : ""}`,
-    () => {
-      const accepted = scenario === "valid" || scenario === "chain-valid";
-      expect(observed).toEqual({
+  // RFC 9525 §2: CN and URI SANs are not HTTPS/WSS DNS/IP endpoint identities.
+  test("validates the certificate path and endpoint identity before HTTP discovery or WS upgrade", () => {
+    const accepted = scenario.startsWith("valid") || scenario === "chain-valid";
+    expect(observed).toEqual(
+      artifacts.map((artifact) => ({
+        artifact,
         outcome: accepted ? "accepted" : "rejected",
         upgrades: accepted ? 1 : 0,
         discoveries: mode === "discovery" && accepted ? 1 : 0,
-      });
-    },
-  );
+      })),
+    );
+  });
 });

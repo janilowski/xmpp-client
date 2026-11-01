@@ -1,5 +1,6 @@
 import { EventEmitter, listeners } from "../../events/index.js";
 import { parseURI } from "../../connection/lib/util.js";
+import getBunTLSOptions from "../../util/bun-tls.ts";
 
 const CODE = "ECONNERROR";
 const SUBPROTOCOL = "xmpp";
@@ -23,7 +24,15 @@ export default class Socket extends EventEmitter {
   connect(url) {
     this.url = url;
     this.secure = isSecure(url);
-    this._attachSocket(new WebSocket(url, [SUBPROTOCOL]));
+    const tls =
+      parseURI(url).protocol === "wss:" ? getBunTLSOptions() : undefined;
+    // Bun takes TLS options in its second argument; browsers keep the standard API.
+    this._attachSocket(
+      new WebSocket(
+        url,
+        tls ? { protocols: [SUBPROTOCOL], tls } : [SUBPROTOCOL],
+      ),
+    );
   }
 
   _attachSocket(socket) {

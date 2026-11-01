@@ -48,7 +48,8 @@ TLS, certificate paths, endpoint identity, SNI, protocol/cipher selection,
 compression, resumption, key handling and revocation are runtime/deployment
 obligations under RFC 7590 and current BCP 195, not a JavaScript TLS stack.
 Use a maintained runtime and do not disable certificate verification.
-Web APIs expose neither certificate chains nor channel-binding key material.
+Standard Web APIs expose neither certificate chains nor channel-binding key
+material.
 `Socket.secure` also permits explicit loopback credentials: it is not proof
 of encryption. TLS is hop-by-hop, not end-to-end protection.
 
@@ -69,18 +70,27 @@ fixtures using an SPKI exception remain separate. Public/system roots are not
 removed by the isolated NSS setup. No complete cipher, revocation or all-browser
 matrix is claimed. Expected runtime failures
 remain executable test markers, not evidence of successful validation.
-Bun 1.4.2–1.4.4 accept CN-only certificates without SAN for both WSS and
-HTTPS discovery (#50); version-bounded expected failures retain strict rejection
-assertions. Restricted trust-anchor provisioning (RFC 6120 §13.6) and long-lived
+Native Bun 1.4.2–1.4.4 retain CN fallback for Node compatibility (#50).
+The private adapter, verified on Bun 1.4.4, keeps native chain and hostname
+verification, then requires a matching DNS/IP SAN using the native DER API on the
+same connection. CN-only and URI-only SAN certificates reject before HTTP or
+WebSocket upgrade; source and minified-bundle tests retain strict assertions.
+Browsers retain their standard constructor and certificate validation.
+Restricted trust-anchor provisioning (RFC 6120 §13.6) and long-lived
 certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
 
 RFC 10015 §4 strengthens BCP 195 to prohibit offering static-RSA suites.
-Bun 1.4.4 and Chromium 156.0.8078.4 offer them for direct WSS and initial
-HTTPS discovery (#86). ClientHello tests observe actual bundle traffic before
-ServerHello, with independent fragmentation and OpenSSL controls. Exact-version
-expected failures retain the strict prohibition; they are not conformance passes.
-Web APIs expose no cipher-selection control. A server refusing RSA negotiation
-does not repair the client offer. These tests do not certify other cipher,
+Bun's private adapter removes static RSA from the effective runtime cipher list
+for direct WSS and HTTPS discovery. It preserves configured ECDHE-only and native
+TLS-1.3-only policies without mutating globals. ClientHello tests inspect source,
+ESM and minified traffic, with independent fragmentation and OpenSSL controls.
+Native Bun currently refuses an explicit cipher expression with no eligible
+TLS 1.2 suites; that fails closed. The exact native TLS-1.3-only default path
+avoids this limitation without parsing arbitrary OpenSSL expressions.
+Chromium 156.0.8078.4 still offers static RSA on both paths (#86).
+Exact-version expected failures retain the strict prohibition; they are not
+conformance passes. Standard Web APIs expose no cipher-selection control.
+Server-side RSA refusal does not repair the client offer. These tests do not certify other cipher,
 key-exchange or certificate requirements; this mandatory runtime gap remains open.
 
 Bun 1.4.4 also completes TLS 1.2 without the server's `renegotiation_info`

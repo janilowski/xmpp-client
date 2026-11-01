@@ -2,6 +2,7 @@ import { compare as compareAltConnections } from "./alt-connections.js";
 import isUnexpired from "./xrdExpiry.js";
 import readXML from "./readXML.ts";
 import prepareURI from "./xrdURI.ts";
+import getBunTLSOptions from "../../util/bun-tls.ts";
 
 const NS_XRD = "http://docs.oasis-open.org/ns/xri/xrd-1.0";
 const DISCOVERY_TIMEOUT_MS = 5000;
@@ -17,10 +18,12 @@ export async function resolve(domain, { signal } = {}) {
     const requestSignal = signal
       ? AbortSignal.any([signal, deadline])
       : deadline;
+    const tls = getBunTLSOptions();
     // Fail closed rather than letting a redirect change the trusted origin/scheme.
     const res = await fetch(`https://${domain}/.well-known/host-meta`, {
       redirect: "error",
       signal: requestSignal,
+      ...(tls ? { tls } : {}),
     });
     if (!res.ok) {
       return [];

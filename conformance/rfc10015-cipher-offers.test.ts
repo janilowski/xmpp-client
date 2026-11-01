@@ -94,58 +94,91 @@ test("RFC 10015 offer oracle: native OpenSSL independently constrained ECDHE con
 });
 
 for (const mode of OFFER_MODES) {
-  describe(`RFC 10015 §4: Bun bundle ${mode}`, () => {
-    let hellos: Hello[];
-    beforeAll(async () => {
-      hellos = await observeOffers(async (port) => {
-        const service =
-          mode === "direct WSS"
-            ? `wss://localhost:${port}/xmpp`
-            : `localhost:${port}`;
-        const child = Bun.spawn(
-          [
-            process.execPath,
-            "--eval",
-            `
-          import {client} from './dist/index.js';
+  for (const artifact of ["source", "ESM", "minified"] as const) {
+    for (const policy of [
+      "default",
+      "ECDHE-RSA-AES128-GCM-SHA256",
+      "TLS_AES_128_GCM_SHA256",
+    ]) {
+      describe(`RFC 10015 §4: Bun ${artifact} ${mode} / ${policy}`, () => {
+        let hellos: Hello[];
+        beforeAll(async () => {
+          hellos = await observeOffers(async (port) => {
+            const service =
+              mode === "direct WSS"
+                ? `wss://localhost:${port}/xmpp`
+                : `localhost:${port}`;
+            const child = Bun.spawn(
+              [
+                process.execPath,
+                "--eval",
+                `
+          const {client}=${
+            artifact === "source"
+              ? 'await import("./src/client/index.js")'
+              : artifact === "ESM"
+                ? 'await import("./dist/index.js")'
+                : 'Function((await Bun.file("./dist/xmpp.min.js").text())+"\\n;return XMPP;")()'
+          };
+          if(${JSON.stringify(policy)}!=="default") {
+            process.getBuiltinModule("node:tls").DEFAULT_CIPHERS=${JSON.stringify(policy)};
+          }
           const xmpp=client({service:${JSON.stringify(service)},domain:'different-xmpp-domain.test',timeout:2000});
           xmpp.reconnect.stop();xmpp.on('error',()=>{});
           try{await xmpp.connect(xmpp.options.service);throw new Error('Raw observer cannot establish TLS');}
           catch(error){console.log(JSON.stringify({name:error.name,message:error.message}));}
           finally{await xmpp.stop();}
         `,
-          ],
-          {
-            stdout: "pipe",
-            stderr: "pipe",
-            timeout: OFFER_TIMEOUT_MS,
-            env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: "1" },
-          },
-        );
-        const [exit, stdout, stderr] = await Promise.all([
-          child.exited,
-          new Response(child.stdout).text(),
-          new Response(child.stderr).text(),
-        ]);
-        expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
-        expect(JSON.parse(stdout).name).not.toBe("TimeoutError");
-        expect(JSON.parse(stdout).message).not.toBe(
-          "Raw observer cannot establish TLS",
-        );
-      });
-      validateOfferControls(hellos);
-    }, OFFER_TIMEOUT_MS);
+              ],
+              {
+                stdout: "pipe",
+                stderr: "pipe",
+                timeout: OFFER_TIMEOUT_MS,
+                env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: "1" },
+              },
+            );
+            const [exit, stdout, stderr] = await Promise.all([
+              child.exited,
+              new Response(child.stdout).text(),
+              new Response(child.stderr).text(),
+            ]);
+            expect({ exit, stderr }).toEqual({ exit: 0, stderr: "" });
+            expect(JSON.parse(stdout).name).not.toBe("TimeoutError");
+            expect(JSON.parse(stdout).message).not.toBe(
+              "Raw observer cannot establish TLS",
+            );
+          });
+          if (policy !== "TLS_AES_128_GCM_SHA256") {
+            validateOfferControls(hellos);
+          }
+        }, OFFER_TIMEOUT_MS);
 
-    const knownFailure = Bun.version === "1.4.4";
-    test.failingIf(knownFailure)(
-      `offers no static-RSA suites${knownFailure ? " [expected Bun 1.4.4 violation #86]" : ""}`,
-      () => {
-        expect(
-          hellos.map((hello) =>
-            hello.ciphers.filter((id) => STATIC_RSA.has(id)),
-          ),
-        ).toEqual(hellos.map(() => []));
-      },
-    );
-  });
+        test("offers no static-RSA suites and preserves the application policy", () => {
+          expect(
+            hellos.map((hello) =>
+              hello.ciphers.filter((id) => STATIC_RSA.has(id)),
+            ),
+          ).toEqual(hellos.map(() => []));
+          for (const hello of hellos) {
+            if (policy === "TLS_AES_128_GCM_SHA256") {
+              expect(hello.ciphers.toSorted()).toEqual([
+                "1301",
+                "1302",
+                "1303",
+              ]);
+              expect(
+                hello.extensions.find(({ type }) => type === 43)?.value,
+              ).toBe("020304");
+            } else if (policy !== "default") {
+              expect(
+                hello.ciphers.filter(
+                  (id) => !["1301", "1302", "1303"].includes(id),
+                ),
+              ).toEqual(["c02f"]);
+            }
+          }
+        });
+      });
+    }
+  }
 }

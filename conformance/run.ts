@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { platform, release, arch } from "node:os";
 import process from "node:process";
 
-const RUN_TIMEOUT_MS = 60_000;
+// Suite budget includes native peers and artifact matrices; peer deadlines stay local.
+const RUN_TIMEOUT_MS = 90_000;
 
 // A fresh directory prevents stale reports from masquerading as evidence.
 mkdirSync("conformance/reports", { recursive: true });

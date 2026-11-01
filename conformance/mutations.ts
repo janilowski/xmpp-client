@@ -38,6 +38,46 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "omit Bun WSS endpoint TLS policy",
+    file: "src/websocket/lib/Socket.js",
+    before: "tls ? { protocols: [SUBPROTOCOL], tls } : [SUBPROTOCOL],",
+    after: "[SUBPROTOCOL],",
+    suite: "conformance/rfc7395-tls.test.ts",
+    test: "direct / cn-only",
+  },
+  {
+    name: "omit Bun HTTPS endpoint TLS policy",
+    file: "src/resolve/lib/http.js",
+    before: "...(tls ? { tls } : {}),",
+    after: "",
+    suite: "conformance/rfc7395-tls.test.ts",
+    test: "discovery / cn-only",
+  },
+  {
+    name: "restore Bun CN fallback in raw certificate matching",
+    file: "src/util/bun-tls.ts",
+    before: 'subject: "never",',
+    after: 'subject: "always",',
+    suite: "conformance/rfc7395-tls.test.ts",
+    test: "direct / cn-only",
+  },
+  {
+    name: "retain prohibited static RSA in Bun offers",
+    file: "src/util/bun-tls.ts",
+    before: 'const NO_RSA_KEY_EXCHANGE = "!kRSA";',
+    after: 'const NO_RSA_KEY_EXCHANGE = "DEFAULT";',
+    suite: "conformance/rfc10015-cipher-offers.test.ts",
+    test: "Bun source direct WSS / default",
+  },
+  {
+    name: "break the native TLS13-only application policy",
+    file: "src/util/bun-tls.ts",
+    before: "ciphers: tls13Only ? undefined : `${ciphers}:${NO_RSA_KEY_EXCHANGE}`,",
+    after: "ciphers: `${ciphers}:${NO_RSA_KEY_EXCHANGE}`,",
+    suite: "src/util/bun-tls.test.ts",
+    test: "retains the native TLS 1.3-only default policy",
+  },
+  {
     name: "accept foreign SASL2 inline containers",
     file: "src/sasl2/index.js",
     before: 'const inline = element.getChild("inline", NS);',
@@ -3919,6 +3959,9 @@ for (const mutation of mutations) {
       "conformance/rfc7395-opening.test.ts",
       "conformance/rfc7395-properties.test.ts",
       "conformance/rfc7395-outgoing-framing.test.ts",
+      "conformance/rfc7395-tls.test.ts",
+      "conformance/rfc10015-cipher-offers.test.ts",
+      "conformance/tls-offers.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-stanza-addressing.test.ts",
@@ -3983,6 +4026,16 @@ for (const mutation of mutations) {
       "conformance/xml.ts",
     ]) {
       cpSync(file, join(directory, file));
+    }
+    if (
+      mutation.suite === "conformance/rfc7395-tls.test.ts" ||
+      mutation.suite === "conformance/rfc10015-cipher-offers.test.ts"
+    ) {
+      // Source mutations retain an independently built artifact as a control.
+      cpSync("dist", join(directory, "dist"), { recursive: true });
+      cpSync("conformance/fixtures", join(directory, "conformance/fixtures"), {
+        recursive: true,
+      });
     }
     if (mutation.file.startsWith("node_modules/ltx/")) {
       // Dependency mutations must never follow the shared node_modules symlink.

@@ -48,7 +48,7 @@ afterAll(async () => {
 // Cancellation/replacement ownership is local lifecycle policy (#93), consistent
 // with RFC 6120 §4.4 / RFC 7395 §3.6; it is not an extra XEP wire requirement.
 // Fetch is a controlled noncooperative seam. WSS and its CA/hostname checks are
-// real native behavior; neither a TLS adapter nor a verification bypass is used.
+// real native behavior; no certificate-verification bypass is used.
 for (const phase of ["headers", "body"] as const) {
   for (const cancel of ["stop", "disconnect"] as const) {
     test(`XEP-0156 lifecycle: ${cancel} retires pending ${phase} before credentials and permits fresh start`, async () => {
