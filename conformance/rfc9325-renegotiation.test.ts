@@ -21,10 +21,11 @@ const SETUP_TIMEOUT_MS = 30000;
 const CIPHER_ECDHE_RSA_AES128_GCM_SHA256 = 0xc02f;
 const EXTENDED_MASTER_SECRET = 23;
 const RENEGOTIATION_INFO = 65281;
+const X25519 = 29;
 const FATAL_HANDSHAKE_FAILURE = [2, 40];
 type Records = {
   hellos: { version: number[]; cipher: number; extensions: number[] }[];
-  sessions: { version: number[]; cipher: number }[];
+  sessions: { version: number[]; cipher: number; ecdhCurve: number }[];
   requests: string[];
   upgrades: { path: string; protocol: string }[];
   alerts: number[][];
@@ -33,6 +34,7 @@ type Records = {
 type Result = {
   accepted: boolean;
   name?: string;
+  code?: string;
   node?: string;
   authorized?: boolean;
   protocol?: string;
@@ -95,6 +97,7 @@ async function observe(
   runtime: "node" | "bundle",
   acknowledgement: "empty" | "absent",
   mode: "direct" | "discovery",
+  group: "X25519" | "P-256" = "X25519",
 ) {
   const peer = Bun.spawn(
     [
@@ -150,13 +153,13 @@ async function observe(
       import {connect} from 'node:tls';
       if(process.versions.bun)throw Error('Native Node required');
       let result, received='';
-      const socket=connect({host:'localhost',port:${ready.port},servername:'localhost',rejectUnauthorized:true,minVersion:'TLSv1.2',maxVersion:'TLSv1.2'},()=>{
+      const socket=connect({host:'localhost',port:${ready.port},servername:'localhost',rejectUnauthorized:true,minVersion:'TLSv1.2',maxVersion:'TLSv1.2',ecdhCurve:${JSON.stringify(group)}},()=>{
         result={accepted:true,node:process.version,authorized:socket.authorized,protocol:socket.getProtocol()};
         socket.write('GET /probe HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n');
       });
       socket.on('data',part=>received+=part);
       socket.on('end',()=>console.log(JSON.stringify({...result,body:received.split('\\r\\n\\r\\n')[1]})));
-      socket.on('error',error=>console.log(JSON.stringify({accepted:false,node:process.version,name:error.name})));
+      socket.on('error',error=>console.log(JSON.stringify({accepted:false,node:process.version,name:error.name,code:error.code})));
     `
         : `
       import {client} from './dist/index.js';
@@ -201,6 +204,12 @@ async function observe(
     const snapshot = await receive();
     expect(snapshot.type).toBe("snapshot");
     const records = snapshot.records as Records;
+    if (group === "P-256") {
+      return { result, records };
+    }
+    for (const session of records.sessions) {
+      expect(session.ecdhCurve).toBe(X25519);
+    }
     expect(records.hellos.length).toBeGreaterThan(0);
     for (const hello of records.hellos) {
       expect(hello.version).toEqual([3, 3]);
@@ -232,6 +241,24 @@ async function observe(
   }
 }
 
+test("TLS fixture hardening: reject native forced P-256 before HTTP", async () => {
+  const { result, records } = await observe("node", "empty", "direct", "P-256");
+  expect(result.accepted).toBe(false);
+  expect(records.sessions).toEqual([]);
+  expect(records.hellos).toEqual([]);
+  expect(records.requests).toEqual([]);
+  expect(records.upgrades).toEqual([]);
+  expect(result.code).toMatch(
+    /^ERR_SSL_(SSLV3|SSL\/TLS)_ALERT_HANDSHAKE_FAILURE$/,
+  );
+  expect(records.errors).toEqual([
+    {
+      name: "TLSLocalAlert",
+      message: "handshake_failure: No mutual ciphersuite",
+    },
+  ]);
+});
+
 for (const mode of ["direct", "discovery"] as const) {
   describe(`RFC 9325 §3.5: TLS 1.2 renegotiation acknowledgement / ${mode}`, () => {
     let rejected: Awaited<ReturnType<typeof observe>>;
@@ -256,6 +283,7 @@ for (const mode of ["direct", "discovery"] as const) {
         Array.from({ length: mode === "direct" ? 1 : 2 }, () => ({
           version: [3, 3],
           cipher: CIPHER_ECDHE_RSA_AES128_GCM_SHA256,
+          ecdhCurve: X25519,
         })),
       );
       expect(capable.records.requests).toEqual(

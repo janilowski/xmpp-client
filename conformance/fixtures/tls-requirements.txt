@@ -1,6 +1,7 @@
 # Independent TLS 1.2 test peer; never part of the distributed library.
 tlslite-ng==0.8.2 \
     --hash=sha256:bc17945ab48c7a2ecb16ae9d4b32cf976bfd67d7db74c0fedc093f9094e49ae5
+# Required by tlslite-ng; peers avoid its secret-key paths via X25519 only.
 ecdsa==0.19.2 \
     --hash=sha256:840f5dc5e375c68f36c1a7a5b9caad28f95daa65185c9253c0c08dd952bb7399
 six==1.17.0 \

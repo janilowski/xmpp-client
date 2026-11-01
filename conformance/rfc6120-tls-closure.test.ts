@@ -19,12 +19,14 @@ const TLS12_MINOR = 3;
 const TLS13_MINOR = 4;
 const TLS_WARNING = 1;
 const TLS_CLOSE_NOTIFY = 0;
+const X25519 = 29;
 const TLS12_ECDHE_RSA_AES128_GCM_SHA256 = 0xc02f;
 const TLS13_AES128_GCM_SHA256 = 0x1301;
 const CLOSE = '<close xmlns="urn:ietf:params:xml:ns:xmpp-framing"/>';
 type Records = {
-  version: number[];
-  cipher: number;
+  version: number[] | null;
+  cipher: number | null;
+  ecdhCurve: number | null;
   alerts: (string | number)[][];
   application: string[];
   eof: boolean;
@@ -83,11 +85,27 @@ afterAll(async () => {
   }
 });
 
+// P-256/FFDHE refusal is local fixture hardening, not an RFC group prohibition.
+// Successful exchanges retain the normative closure assertions referenced above.
 for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
-  test.each(["native-end", "native-destroy", "source", "minified"] as const)(
-    `RFC 6120 §4.4: authenticated TLS 1.${version - 1} client alert / %s`,
+  test.each([
+    "native-end",
+    "native-destroy",
+    "native-p256",
+    ...(version === TLS13_MINOR ? (["native-ffdhe"] as const) : []),
+    "source",
+    "minified",
+  ] as const)(
+    `TLS 1.${version - 1} closure fixture / %s`,
     async (mode) => {
       const native = mode.startsWith("native-");
+      const restrictedGroup = mode === "native-p256" || mode === "native-ffdhe";
+      const group =
+        mode === "native-p256"
+          ? "P-256"
+          : mode === "native-ffdhe"
+            ? "ffdhe2048"
+            : "X25519";
       const peer = Bun.spawn(
         [
           process.env.XMPP_TEST_PYTHON ?? "python3",
@@ -128,12 +146,12 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
           import {connect} from 'node:tls';
           import {readFileSync} from 'node:fs';
           if(process.versions.bun){throw new Error('Native Node required; set XMPP_TEST_NODE=/usr/bin/node');}
-          let authorized,protocol,received='';
-          const socket=connect({host:'localhost',port:${ready.port},ca:readFileSync(${JSON.stringify(join(directory, "ca.pem"))}),rejectUnauthorized:true,minVersion:${JSON.stringify(protocol)},maxVersion:${JSON.stringify(protocol)}});
+          let authorized,protocol,received='',code,outcome='closed';
+          const socket=connect({host:'localhost',port:${ready.port},ca:readFileSync(${JSON.stringify(join(directory, "ca.pem"))}),rejectUnauthorized:true,minVersion:${JSON.stringify(protocol)},maxVersion:${JSON.stringify(protocol)},ecdhCurve:${JSON.stringify(group)}});
           socket.on('secureConnect',()=>{authorized=socket.authorized;protocol=socket.getProtocol();assert.equal(authorized,true);socket.write('PING');});
           socket.on('data',data=>{received+=data.toString();if(received.length<4){return;}assert.equal(received,'PONG');socket.${mode === "native-end" ? "end" : "destroy"}();});
-          socket.on('error',error=>{throw error;});
-          socket.on('close',()=>console.log(JSON.stringify({outcome:'closed',authorized,protocol})));
+          socket.on('error',error=>{if(!${restrictedGroup}){throw error;}outcome='rejected';code=error.code;});
+          socket.on('close',()=>console.log(JSON.stringify({outcome,authorized,protocol,...(code?{code}:{})})));
         `
           : `
           import assert from 'node:assert/strict';
@@ -183,6 +201,28 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
           peerExit: 0,
           peerStderr: "",
         });
+        if (restrictedGroup) {
+          expect(JSON.parse(stdout)).toEqual({
+            outcome: "rejected",
+            code: expect.stringMatching(
+              /^ERR_SSL_(SSLV3|SSL\/TLS)_ALERT_HANDSHAKE_FAILURE$/,
+            ),
+          });
+          expect(observed.version).toBeNull();
+          expect(observed.cipher).toBeNull();
+          expect(observed.ecdhCurve).toBeNull();
+          expect(observed.application).toEqual([]);
+          expect(observed.errors).toEqual([
+            {
+              name: "TLSLocalAlert",
+              message:
+                version === TLS12_MINOR || mode === "native-ffdhe"
+                  ? "handshake_failure: No mutual ciphersuite"
+                  : "handshake_failure: No acceptable group advertised by client",
+            },
+          ]);
+          return;
+        }
         expect(JSON.parse(stdout)).toEqual(
           native
             ? { outcome: "closed", authorized: true, protocol }
@@ -194,6 +234,7 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
             ? TLS12_ECDHE_RSA_AES128_GCM_SHA256
             : TLS13_AES128_GCM_SHA256,
         );
+        expect(observed.ecdhCurve).toBe(X25519);
         if (mode === "native-destroy") {
           expect(observed.application).toEqual(["PING"]);
           expect(observed.alerts).toEqual([]);

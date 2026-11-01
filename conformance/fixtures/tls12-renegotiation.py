@@ -11,7 +11,7 @@ dependencies, directory, acknowledgement = sys.argv[1:]
 sys.path.insert(0, dependencies)
 import tlslite
 from tlslite.api import TLSConnection, X509, X509CertChain, parsePEMKey, HandshakeSettings
-from tlslite.messages import ServerHello
+from tlslite.messages import ServerHello, ServerKeyExchange
 
 assert tlslite.__version__ == "0.8.2", "Unexpected TLS peer version"
 assert acknowledgement in ("empty", "absent"), "Invalid acknowledgement mode"
@@ -26,6 +26,7 @@ SOCKET_TIMEOUT_SECONDS = 4
 ALERT_DRAIN_SECONDS = 0.2
 SERVER_HELLO_PAUSE_SECONDS = 0.05
 RENEGOTIATION_INFO = 65281
+X25519 = "x25519"
 records = {"hellos": [], "sessions": [], "requests": [], "upgrades": [], "alerts": [], "errors": []}
 condition = threading.Condition()
 sockets = set()
@@ -85,6 +86,10 @@ settings = HandshakeSettings()
 settings.minVersion = settings.maxVersion = (3, 3)
 settings.cipherNames = ["aes128gcm"]
 settings.keyExchangeNames = ["ecdhe_rsa"]
+settings.eccCurves = [X25519]
+settings.keyShares = [X25519]
+settings.defaultCurve = X25519
+settings.dhGroups = []
 settings.useExtendedMasterSecret = True
 
 class ObservedConnection(TLSConnection):
@@ -95,6 +100,9 @@ class ObservedConnection(TLSConnection):
             # alert to arrive before a certificate-flight write meets a reset.
             self.sock.flush()
             time.sleep(SERVER_HELLO_PAUSE_SECONDS)
+        elif isinstance(message, ServerKeyExchange):
+            # TLS 1.2's server connection does not populate ecdhCurve itself.
+            self.fixture_curve = message.named_curve
 
 listener = socket.socket()
 listener.bind(("127.0.0.1", 0))
@@ -107,7 +115,8 @@ def serve(raw):
     connection = ObservedConnection(observed)
     try:
         connection.handshakeServer(certChain=X509CertChain([leaf, authority]), privateKey=key, settings=settings)
-        records["sessions"].append({"version": list(connection.version), "cipher": connection.session.cipherSuite})
+        records["sessions"].append({"version": list(connection.version), "cipher": connection.session.cipherSuite,
+                                    "ecdhCurve": connection.fixture_curve})
         data = bytearray()
         while b"\r\n\r\n" not in data:
             chunk = connection.read(min=1, max=READ_BYTES)

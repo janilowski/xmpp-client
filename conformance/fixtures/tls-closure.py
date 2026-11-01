@@ -12,7 +12,7 @@ sys.path.insert(0, dependencies)
 import tlslite
 from tlslite.api import TLSConnection, X509, X509CertChain, parsePEMKey, HandshakeSettings
 from tlslite.constants import ContentType, AlertDescription, AlertLevel
-from tlslite.messages import Alert
+from tlslite.messages import Alert, ServerKeyExchange
 
 assert tlslite.__version__ == "0.8.2", "Run bun run test:tls:setup"
 assert version in ("3", "4") and mode in ("control", "xmpp")
@@ -24,7 +24,8 @@ FRAMING = "urn:ietf:params:xml:ns:xmpp-framing"
 SASL = "urn:ietf:params:xml:ns:xmpp-sasl"
 STREAM = "http://etherx.jabber.org/streams"
 BIND = "urn:ietf:params:xml:ns:xmpp-bind"
-records = {"version": None, "cipher": None, "alerts": [], "application": [],
+X25519 = "x25519"
+records = {"version": None, "cipher": None, "ecdhCurve": None, "alerts": [], "application": [],
            "eof": False, "errors": []}
 with open(os.path.join(directory, "leaf.pem")) as source:
     leaf = X509().parse(source.read())
@@ -65,6 +66,9 @@ class ObservedTLS(TLSConnection):
 
     def _sendMsg(self, message, *args, **kwargs):
         yield from super()._sendMsg(message, *args, **kwargs)
+        if isinstance(message, ServerKeyExchange):
+            # TLS 1.2 exposes the negotiated group in its signed server message.
+            records["ecdhCurve"] = message.named_curve
         if records["version"] and isinstance(message, Alert):
             records["alerts"].append(["sent", *message.write()])
 
@@ -154,6 +158,10 @@ settings = HandshakeSettings()
 settings.minVersion = settings.maxVersion = (3, int(version))
 settings.cipherNames = ["aes128gcm"]
 settings.keyExchangeNames = ["ecdhe_rsa"]
+settings.eccCurves = [X25519]
+settings.keyShares = [X25519]
+settings.defaultCurve = X25519
+settings.dhGroups = []
 settings.useExtendedMasterSecret = True
 listener = socket.socket()
 listener.settimeout(SOCKET_TIMEOUT_SECONDS)
@@ -169,6 +177,8 @@ try:
                                privateKey=key, settings=settings, alpn=[b"http/1.1"])
     records["version"] = list(connection.version)
     records["cipher"] = connection.session.cipherSuite
+    if connection.ecdhCurve is not None:
+        records["ecdhCurve"] = connection.ecdhCurve
     if mode == "control":
         assert connection.read(min=4, max=4) == b"PING"
         records["application"].append("PING")
