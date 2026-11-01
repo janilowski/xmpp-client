@@ -320,6 +320,18 @@ describe("RFC 7622 §3.2 — IDNA2008 domains", () => {
     ["RFC 7622 §3.2.1 decoded leading hyphen", "xn----bga.example", null],
     ["RFC 7622 §3.2.1 decoded trailing hyphen", "xn----9fa.example", null],
     ["RFC 5891 §5.4 decoded reserved hyphens", "xn--ab---epa.example", null],
+    ["RFC 7622 §3.2.1 decoded high surrogate", "xn--ib9b.example", null],
+    ["RFC 7622 §3.2.1 decoded low surrogate", "xn--zy0c.example", null],
+    [
+      "RFC 3492 §§6.2–6.4 oversized unterminated integer",
+      "xn--99999999.example",
+      null,
+    ],
+    [
+      "RFC 3492 §§5–6 supplementary scalar U+20000",
+      "xn--j50i.example",
+      "𠀀.example",
+    ],
     [
       "RFC 5893 §2 ASCII sibling in bidi domain",
       "a123.xn--4dbc.example",
