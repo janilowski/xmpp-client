@@ -142,7 +142,7 @@ and [compromised CA trust](https://github.com/oven-sh/bun/security/advisories/GH
 affecting earlier releases. Upgrade with `bun upgrade` before installing dependencies.
 
 ```sh
-sudo dnf install nodejs prosody lua lua-devel luarocks nss-tools python3-pip
+sudo dnf install nodejs prosody lua lua-devel luarocks nss-tools python3-pip openssl
 bun install --frozen-lockfile
 bun run test:tls:setup
 bun run prosody:setup
@@ -158,6 +158,7 @@ anything you need: `sudo systemctl stop prosody`.
 `test:unit` needs no server. `test:e2e` runs native integration tests;
 `test:browser` builds and tests both bundles in Chromium. `test:all` runs
 static checks, conformance and mutation checks, and both integration suites.
+OpenSSL 3 CLI provides independent TLS, CRL and OCSP fixture controls.
 The independent TLS 1.2 peer requires Python 3 and hash-pinned packages installed
 by `test:tls:setup` into `server/.cache/tls-peer`, not system site-packages.
 Re-run setup when its requirements change. No Python code enters the bundle.

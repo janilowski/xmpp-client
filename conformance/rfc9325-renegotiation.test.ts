@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { generate } from "selfsigned";
 
+// RFC 9325 profile entry: versions in rfc7590-versions.test.ts; cipher offers
+// and current updates in rfc10015-cipher-offers.test.ts; revocation oracle and
+// explicit-CRL capability in rfc9325-revocation.test.ts. Remaining gaps: #8/#10.
 // RFC 9325 §3.5 strengthens RFC 5746 §§3.4/4.1: a TLS 1.2 client must
 // emit fatal handshake_failure if the server omits renegotiation_info.
 // The separate RFC 9325 ClientHello-extension requirement is not established here.

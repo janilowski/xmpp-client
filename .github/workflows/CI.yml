@@ -70,6 +70,7 @@ jobs:
             lua-bitop \
             lua-sec \
             libnss3-tools \
+            openssl \
             luarocks
 
           # Prosody 13 requires Lua 5.2+; use Lua 5.4.
