@@ -76,6 +76,7 @@
   "scripts": {
     "test:unit": "bun test src server/fixture.test.js server/readiness.test.js ./src/sasl2/test.js ./src/sasl/test.js ./src/resource-binding/test.js ./src/reconnect/test.js ./src/debug/test.js ./src/error/test.js ./src/client/test.js",
     "test:conformance": "bun conformance/run.ts",
+    "test:tls:setup": "bun conformance/setup-tls-peer.ts",
     "test:mutations": "bun conformance/mutations.ts",
     "test": "bun run test:unit",
     "test:e2e": "bun test/integration.js e2e",
@@ -88,7 +89,7 @@
     "size": "bun run build && bun run bundlesize",
     "test:static": "bun run test:unit && bun run lint && bun run typecheck && bun run build && bun run bundlesize",
     "test:all": "bun run test:static && bun run test:conformance && bun run test:mutations && bun run test:e2e && bun run test:browser",
-    "ci": "bun install --frozen-lockfile && bun run prosody:setup && bun run test:all",
+    "ci": "bun install --frozen-lockfile && bun run test:tls:setup && bun run prosody:setup && bun run test:all",
     "clean": "bun run server:stop ; rm -f server/localhost.key server/localhost.crt server/prosody.err server/prosody.log server/prosody.pid lerna-debug.log ; rm -rf server/modules server/.cache node_modules dist",
     "preversion": "bun run build",
     "typecheck": "tsc --noEmit && tsc --project test/tsconfig.public.json",

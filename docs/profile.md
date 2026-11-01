@@ -83,6 +83,13 @@ Web APIs expose no cipher-selection control. A server refusing RSA negotiation
 does not repair the client offer. These tests do not certify other cipher,
 key-exchange or certificate requirements; this mandatory runtime gap remains open.
 
+Bun 1.4.4 also completes TLS 1.2 without the server's `renegotiation_info`
+acknowledgement, contrary to RFC 9325 §3.5 (#91). Authenticated full-handshake
+WSS/discovery tests retain a strict, version-bounded expected failure with
+acknowledgement-present and native Node controls. The independent Python peer
+is test infrastructure only. No browser result or successful attack is claimed;
+Web APIs expose no renegotiation-policy control.
+
 After a received XMPP `reset` (RFC 6120 §4.9.3.16), that client instance
 refuses further connections, including discovery, manual reconnect and
 stop/start. Automatic retries stop. The original `StreamError` is returned.
