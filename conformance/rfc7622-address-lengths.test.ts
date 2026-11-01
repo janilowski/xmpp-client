@@ -428,6 +428,105 @@ for (const boundary of INVALID_PARTS) {
   );
 }
 
+// RFC 9844 §3 removes RFC 6874's zone syntax from RFC 7622; §6 keeps zones
+// local. This checks JID slots, not browser URL support or IPv6 reachability.
+for (const [form, domain] of [
+  ["raw", "[fe80::1%eth0]"],
+  ["escaped", "[fe80::1%25eth0]"],
+] as const) {
+  for (const writer of ["element", "custom"] as const) {
+    test.each(
+      SEND_METHODS.flatMap((method) =>
+        SLOTS.map((slot) => [method, slot] as const),
+      ),
+    )(
+      `RFC 9844 §§3/6: reject zone identifiers before admission / ${form} / ${writer} / %s %s`,
+      async (method, slot) => {
+        const boundJid = "user@[fe80::1]/r%eth0";
+        const { xmpp, peer, frames, sent, acks, failures, errors, barrier } =
+          await addressStream({ domain: "[fe80::1]", boundJid });
+        const invalid = xml("message", {
+          id: "invalid-zone",
+          [slot]: writer === "element" ? `user@${domain}/r` : boundJid,
+        });
+        let serializations = 0;
+        if (writer === "custom") {
+          // This control checks metadata/wire consistency, not the domain validator.
+          invalid.toString = () => {
+            serializations++;
+            return `<message xmlns="${CONTENT}" id="invalid-zone" ${slot}="user@${domain}/r"/>`;
+          };
+        }
+        try {
+          const result = await (
+            method === "send"
+              ? xmpp.send(invalid)
+              : xmpp.sendMany([invalid, xml("message", { id: "never" })])
+          ).catch((error: Error) => error);
+          expect(result).toBeInstanceOf(TypeError);
+          if (writer === "custom") {
+            expect(serializations).toBe(1);
+            expect(result).toMatchObject({
+              message: "Invalid outgoing XML",
+              cause: {
+                message: "Serialized stanza does not match its attributes",
+              },
+            });
+          } else {
+            expect(result.message).toBe("Invalid IP literal.");
+          }
+          await barrier();
+          expect(frames).toEqual([]);
+          expect(sent).toEqual([]);
+          expect(acks).toEqual([]);
+          expect(failures).toEqual([]);
+
+          // A full one-stanza SM budget remains available; '%' in a resource
+          // is not a domain zone identifier and must remain valid.
+          const recovery = xml("message", {
+            id: "ipv6-recovery",
+            [slot]: slot === "from" ? boundJid : "other@[fe80::1]/r%eth0",
+          });
+          if (writer === "custom") {
+            recovery.toString = () => {
+              serializations++;
+              return `<message xmlns="${CONTENT}" id="ipv6-recovery" ${slot}="${slot === "from" ? boundJid : "other@[fe80::1]/r%eth0"}"/>`;
+            };
+          }
+          const recovered = await (
+            method === "send" ? xmpp.send(recovery) : xmpp.sendMany([recovery])
+          ).catch((error: Error) => error);
+          expect(recovered).toBeUndefined();
+          if (writer === "custom") {
+            expect(serializations).toBe(2);
+          }
+          await barrier();
+          expect(frames.map((frame) => readFrame(frame)[0])).toEqual([
+            {
+              open: `{${CONTENT}}message`,
+              attributes: {
+                "{}id": "ipv6-recovery",
+                [`{}${slot}`]:
+                  slot === "from" ? boundJid : "other@[fe80::1]/r%eth0",
+              },
+            },
+          ]);
+          expect(sent).toEqual(["ipv6-recovery"]);
+          peer.send(`<a xmlns="${SM}" h="1"/>`);
+          await barrier();
+          expect(acks).toEqual(["ipv6-recovery"]);
+          expect(failures).toEqual([]);
+          expect(errors).toEqual([]);
+          expect(peer.errors).toEqual([]);
+        } finally {
+          await xmpp.stop();
+          await peer.stop();
+        }
+      },
+    );
+  }
+}
+
 // Names alone do not designate JID slots: unrelated extension nonzas retain
 // their own attribute semantics and do not consume XEP-0198 stanza counters.
 test.each([...SEND_METHODS])(
