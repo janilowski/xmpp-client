@@ -14,6 +14,7 @@ import {
 // Optional core stanza-error JIDs and snapshot preparation: rfc7622-error-by.test.ts.
 // Per-occurrence contexts (RFC 8753 §6): rfc7622-contexts.test.ts.
 // Six Bidi conditions and their application scope: rfc7622-bidi.test.ts.
+// Selected whole-string case mapping: rfc7622-case-mapping.test.ts.
 describe("RFC 7622 — cross-runtime contextual and repertoire vectors", () => {
   for (const { section, slot, input, expected } of [
     ...CONTEXT_VECTORS,

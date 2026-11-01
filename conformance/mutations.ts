@@ -104,6 +104,25 @@ const mutations = [
     test: "preserves",
   },
   {
+    name: "lowercase localparts one code point at a time",
+    file: "src/jid/lib/precis.js",
+    before: 'value = value.toLowerCase().normalize("NFC");',
+    after:
+      'value = [...value].map((char) => char.toLowerCase()).join("").normalize("NFC");',
+    suite: "conformance/rfc7622-case-mapping.test.ts",
+    test: "selected case mapping: final Sigma / localpart",
+  },
+  {
+    name: "lowercase domainparts one code point at a time",
+    file: "src/jid/lib/domain.js",
+    before:
+      'value = mapWidth(value.toLowerCase()).normalize("NFC").replaceAll("。", ".");',
+    after:
+      'value = mapWidth([...value].map((char) => char.toLowerCase()).join("")).normalize("NFC").replaceAll("。", ".");',
+    suite: "conformance/rfc7622-case-mapping.test.ts",
+    test: "selected case mapping: final Sigma / domainpart",
+  },
+  {
     name: "ignore implicit xml in qualified attribute lookup",
     file: "node_modules/ltx/lib/Element.js",
     before: "if (xmlns === XML_NAMESPACE) {",
@@ -3817,6 +3836,7 @@ for (const mutation of mutations) {
       "conformance/rfc7622.test.js",
       "conformance/rfc7622-contexts.test.ts",
       "conformance/rfc7622-bidi.test.ts",
+      "conformance/rfc7622-case-mapping.test.ts",
       "conformance/rfc7622-address-lengths.test.ts",
       "conformance/rfc7622-service-domain.test.ts",
       "conformance/rfc7622-error-by.test.ts",
