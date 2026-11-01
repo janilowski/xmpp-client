@@ -22,6 +22,7 @@ const WATCHDOG_MS = TIMEOUT_MS * 4;
 const PROOF_MECHANISM = "TEST-FEATURES";
 
 // XEP-0388 v1.0.4 §2.6.1: success is followed by features without a restart.
+// Namespace-scoped inline offers: xep0388-offer-namespaces.test.ts.
 // XEP-0198 v1.6.3 §9.2: successful inline resumption forbids those features.
 // The deadline below is client policy, not a duration prescribed by either XEP.
 type Binding = "classic" | "inline" | "resume" | "failed-resume";

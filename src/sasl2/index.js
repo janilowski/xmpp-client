@@ -199,7 +199,7 @@ export default function sasl2(
 async function getStreamFeatures({ element, features }) {
   const promises = [];
 
-  const inline = element.getChild("inline");
+  const inline = element.getChild("inline", NS);
   if (!inline) return promises;
 
   for (const element of inline.getChildElements()) {

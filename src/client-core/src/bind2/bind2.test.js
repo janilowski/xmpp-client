@@ -4,6 +4,38 @@ import { disconnectClients } from "../../../../test/support/mockClient.js";
 afterEach(disconnectClients);
 
 import { mockClient, id, promiseError } from "../../../../test/support/index.js";
+import parseDocument from "../../../xml/lib/parseDocument.js";
+import xml from "../../../xml/index.js";
+
+for (const offer of [
+  '<inline xmlns="urn:test:foreign"><feature xmlns="urn:xmpp:bind:0" var="urn:test:session-feature"/></inline>',
+  '<inline><other var="urn:test:session-feature"/></inline>',
+]) {
+  test(`Bind2 ignores a non-Bind2 feature advertisement: ${offer}`, async () => {
+    const { entity } = mockClient({ credentials: CREDENTIALS });
+    let calls = 0;
+    entity.bind2.use(
+      "urn:test:session-feature",
+      () => {
+        calls += 1;
+        return xml("request", "urn:test:session-feature");
+      },
+      () => {},
+    );
+    entity.mockInput(
+      parseDocument(
+        `<features xmlns="http://etherx.jabber.org/streams"><authentication xmlns="urn:xmpp:sasl:2"><mechanism>PLAIN</mechanism><inline><bind xmlns="urn:xmpp:bind:0">${offer}</bind></inline></authentication></features>`,
+      ),
+    );
+    const authenticate = await catchAuthenticate(entity);
+    expect(calls).toBe(0);
+    expect(
+      authenticate
+        .getChild("bind", "urn:xmpp:bind:0")
+        .getChild("request", "urn:test:session-feature"),
+    ).toBeUndefined();
+  });
+}
 
 const CREDENTIALS = { username: "user", password: "secret" };
 

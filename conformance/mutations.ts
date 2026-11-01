@@ -38,6 +38,38 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept foreign SASL2 inline containers",
+    file: "src/sasl2/index.js",
+    before: 'const inline = element.getChild("inline", NS);',
+    after: 'const inline = element.getChild("inline");',
+    suite: "conformance/xep0388-offer-namespaces.test.ts",
+    test: "foreign SASL2 inline has only",
+  },
+  {
+    name: "accept foreign Bind2 inline containers",
+    file: "src/client-core/src/bind2/bind2.js",
+    before: 'const inline = element.getChild("inline", NS);',
+    after: 'const inline = element.getChild("inline");',
+    suite: "conformance/xep0388-offer-namespaces.test.ts",
+    test: "foreign Bind2 inline has only",
+  },
+  {
+    name: "accept foreign Bind2 feature namesakes",
+    file: "src/client-core/src/bind2/bind2.js",
+    before: 'inline.getChildren("feature", NS)',
+    after: 'inline.getChildren("feature")',
+    suite: "conformance/xep0388-offer-namespaces.test.ts",
+    test: "foreign Bind2 feature has only",
+  },
+  {
+    name: "interpret every Bind2 child as a feature",
+    file: "src/client-core/src/bind2/bind2.js",
+    before: 'inline.getChildren("feature", NS)',
+    after: "inline.getChildElements().filter((child) => child.getNS() === NS)",
+    suite: "conformance/xep0388-offer-namespaces.test.ts",
+    test: "wrong feature local name has only",
+  },
+  {
     name: "dispatch SASL by prefixed QName instead of local name",
     file: "src/sasl/exchange.js",
     before: "const name = element.getName();",
@@ -3932,6 +3964,7 @@ for (const mutation of mutations) {
       "conformance/xep0030.test.ts",
       "conformance/xep0115.test.ts",
       "conformance/xep0388-features.test.ts",
+      "conformance/xep0388-offer-namespaces.test.ts",
       "conformance/xep0388-authorization-identifier.test.ts",
       "conformance/xep0388-resumption-identity.test.ts",
       "conformance/xep0156.test.js",

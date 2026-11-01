@@ -41,10 +41,10 @@ export default function bind2({ sasl2, entity }, tag) {
 function getSessionFeatures({ element, features }) {
   const promises = [];
 
-  const inline = element.getChild("inline");
+  const inline = element.getChild("inline", NS);
   if (!inline) return promises;
 
-  for (const element of inline.getChildElements()) {
+  for (const element of inline.getChildren("feature", NS)) {
     const xmlns = element.attrs.var;
     const feature = features.get(xmlns);
     if (!feature) continue;
