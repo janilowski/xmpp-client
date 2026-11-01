@@ -654,6 +654,101 @@ test.each([
   },
 );
 
+// RFC 6120 §§4.7.4/4.9.2 and XML §2.12: preserve language scope for callers.
+// Selecting/localizing human-facing diagnostics is application-owned, not .text.
+test.each([
+  ["stream default", "", "", undefined, undefined, "text"],
+  ["error override", ' xml:lang="fr"', "", "fr", undefined, "text"],
+  ["text override", ' xml:lang="fr"', ' xml:lang="cs"', "fr", "cs", "text"],
+  ["empty reset", ' xml:lang="fr"', ' xml:lang=""', "fr", "", "text"],
+  ["prefixed text", "", ' xml:lang="cs"', undefined, "cs", "e:text"],
+] as const)(
+  "RFC 6120 §4.9.2: retain stream-error language declarations through close / %s",
+  async (_name, rootDeclaration, textDeclaration, rootLang, textLang, textName) => {
+    const peers = ["pl", undefined].map(
+      (language) =>
+        new ScriptedPeer((frame, remote) => {
+          if (frame.startsWith("<open")) {
+            remote.send(
+              `<open xmlns="${FRAMING}" from="example.test" version="1.0"${language === undefined ? "" : ' xml:lang="pl"'}/>`,
+            );
+            remote.send(
+              `<error xmlns="${STREAM}"${rootDeclaration}><policy-violation xmlns="${ERRORS}"/><${textName} xmlns="${ERRORS}" xmlns:e="${ERRORS}"${textDeclaration}>Diagnostic</${textName}></error>`,
+            );
+          } else if (frame.startsWith("<close")) {
+            remote.send(`<close xmlns="${FRAMING}"/>`);
+          }
+        }),
+    );
+    const xmpp = client({
+      service: peers[0]!.url,
+      domain: "example.test",
+      lang: "de",
+    });
+    xmpp.reconnect.stop();
+    const headers: Element[] = [];
+    const errors: (Error & { element: Element; text: string })[] = [];
+    const events: string[] = [];
+    const snapshots: unknown[] = [];
+    xmpp.on("open", (header: Element) => {
+      events.push("open");
+      headers.push(header);
+    });
+    xmpp.on("error", (error: (typeof errors)[number]) => {
+      events.push("error");
+      errors.push(error);
+      const diagnostic = error.element.getChild("text", ERRORS)!;
+      snapshots.push([
+        headers.at(-1)!.attrs["xml:lang"],
+        error.element.attrs["xml:lang"],
+        diagnostic.attrs["xml:lang"],
+        diagnostic.parent === error.element,
+        error.text,
+      ]);
+    });
+    try {
+      for (const [index, peer] of peers.entries()) {
+        xmpp.options = { ...xmpp.options, service: peer.url };
+        const result = await xmpp.start().catch((error: Error) => error);
+        expect(result).toBe(errors[index]);
+        expect(result.name).toBe("StreamError");
+        await peer.waitForClose();
+        expect(await waitForDisconnect(xmpp)).toBe(true);
+
+        // Fresh input headers replace old defaults; output preference is distinct.
+        const expected = [index === 0 ? "pl" : undefined, rootLang, textLang];
+        expect(snapshots[index]).toEqual([...expected, true, "Diagnostic"]);
+        const error = errors[index]!;
+        const diagnostic = error.element.getChild("text", ERRORS)!;
+        expect<(string | undefined)[]>([
+          headers[index]!.attrs["xml:lang"],
+          error.element.attrs["xml:lang"],
+          diagnostic.attrs["xml:lang"],
+        ]).toEqual(expected);
+        expect(diagnostic.parent).toBe(error.element);
+        expect(error.element.parent).toBeNull();
+        expect(error.text).toBe("Diagnostic");
+        expect(readFrame(peer.transcript[0]!)[0]).toMatchObject({
+          attributes: { "{http://www.w3.org/XML/1998/namespace}lang": "de" },
+        });
+        expect(peer.transcript.slice(1)).toEqual([
+          `<close xmlns="${FRAMING}"/>`,
+        ]);
+        expect(peer.errors).toEqual([]);
+        await xmpp.stop();
+      }
+      expect(events).toEqual(["open", "error", "open", "error"]);
+      expect(errors).toHaveLength(2);
+      expect(headers).toHaveLength(2);
+    } finally {
+      await xmpp.stop();
+      for (const peer of peers) {
+        await peer.stop();
+      }
+    }
+  },
+);
+
 test.each([
   ["policy-violation", "policy-violation"],
   ["future-condition", "undefined-condition"],

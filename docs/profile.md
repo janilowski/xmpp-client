@@ -223,6 +223,9 @@ RFCs, browser engines or general denial-of-service protection.
   Applications MUST NOT interpret that text programmatically. It SHOULD NOT be
   the primary user-facing message for stanza errors (RFC 6120 §8.3.2), and MUST
   NOT be the primary message for stream errors (§4.9.2).
+  `StreamError.text` exposes the first diagnostic, not a localized selection.
+  Raw `error.element` declarations and ancestry remain available after closure;
+  callers retain the latest input header for inherited language.
 - Applications generating stanza errors own authorization-sensitive selection.
   Use `service-unavailable` rather than `item-not-found` or
   `recipient-unavailable` if those conditions would disclose availability to
