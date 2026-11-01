@@ -55,6 +55,50 @@ test("cancels an oversized discovery body before reading its remainder", async (
   expect(cancelled).toBe(true);
 });
 
+test("caller cancellation cancels an owned pending discovery body", async () => {
+  const controller = new AbortController();
+  const entered = Promise.withResolvers();
+  let stream;
+  let cancelled = false;
+  fetchMock.mockResolvedValue(
+    new Response(
+      new ReadableStream({
+        start(value) {
+          stream = value;
+          value.enqueue(new TextEncoder().encode("<XRD"));
+        },
+        pull() {
+          entered.resolve();
+        },
+        cancel() {
+          cancelled = true;
+        },
+      }),
+    ),
+  );
+  const pending = resolve(DOMAIN, { signal: controller.signal });
+  try {
+    await entered.promise;
+    controller.abort(new DOMException("Cancelled", "AbortError"));
+    let timer;
+    const result = await Promise.race([
+      pending,
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve("pending"), 50);
+      }),
+    ]);
+    clearTimeout(timer);
+    expect(result).toEqual([]);
+    expect(cancelled).toBe(true);
+    expect(fetchMock.mock.calls[0][1].signal.aborted).toBe(true);
+  } finally {
+    if (!cancelled) {
+      stream.close();
+    }
+    await pending;
+  }
+});
+
 test("does not trust a host-meta document from an unsuccessful HTTP response", async () => {
   fetchMock.mockResolvedValue(
     new Response(DOCUMENT, { status: HTTP_NOT_FOUND }),

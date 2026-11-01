@@ -11,12 +11,16 @@ const METHODS = new Map([
   ["urn:xmpp:alt-connections:xbosh", new Set(["http:", "https:"])],
 ]);
 
-export async function resolve(domain) {
+export async function resolve(domain, { signal } = {}) {
   try {
+    const deadline = AbortSignal.timeout(DISCOVERY_TIMEOUT_MS);
+    const requestSignal = signal
+      ? AbortSignal.any([signal, deadline])
+      : deadline;
     // Fail closed rather than letting a redirect change the trusted origin/scheme.
     const res = await fetch(`https://${domain}/.well-known/host-meta`, {
       redirect: "error",
-      signal: AbortSignal.timeout(DISCOVERY_TIMEOUT_MS),
+      signal: requestSignal,
     });
     if (!res.ok) {
       return [];
@@ -24,7 +28,7 @@ export async function resolve(domain) {
     if (!res.body) {
       return [];
     }
-    const document = await readXML(res);
+    const document = await readXML(res, requestSignal);
     if (!document.is("XRD", NS_XRD)) {
       return [];
     }

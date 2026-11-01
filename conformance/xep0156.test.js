@@ -6,6 +6,7 @@ import { resolve } from "../src/resolve/lib/http.js";
 // Unknown metadata is not a trust assertion; this is not a general XSD validator.
 // XML byte encodings and MIME precedence: xep0156-encoding.test.ts.
 // XML Schema anyURI escaping and endpoint identity: xep0156-uris.test.ts.
+// Cancellation and connection ownership: xep0156-cancellation.test.ts.
 let fetchMock;
 let clockMock;
 afterEach(() => {

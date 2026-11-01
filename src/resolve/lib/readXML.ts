@@ -39,8 +39,21 @@ function charset(contentType: string | null) {
 
 // RFC 7303 §§3.2–3.3: BOM, then MIME charset, then XML/default encoding.
 // Decoding is fatal and bounded before parsing; XMPP's UTF-8 rule is separate.
-export default async function readXML(response: Response) {
+export default async function readXML(
+  response: Response,
+  signal?: AbortSignal,
+) {
   const reader = response.body!.getReader();
+  let cancellation: Promise<void> | undefined;
+  const onAbort = () => {
+    cancellation = reader.cancel(signal!.reason);
+    // The abort reason owns this failure; still observe cleanup rejection.
+    cancellation.catch(() => {});
+  };
+  signal?.addEventListener("abort", onAbort, { once: true });
+  if (signal?.aborted) {
+    onAbort();
+  }
   const prefix = new Uint8Array(MAX_BOM_BYTES);
   let prefixLength = 0;
   let bytes = 0;
@@ -48,8 +61,10 @@ export default async function readXML(response: Response) {
   let decoder: TextDecoder | undefined;
   let context = XML_CONTEXT.DOCUMENT;
   try {
+    signal?.throwIfAborted();
     for (;;) {
       const { done, value } = await reader.read();
+      signal?.throwIfAborted();
       let offset = 0;
       if (!done) {
         bytes += value.byteLength;
@@ -96,8 +111,13 @@ export default async function readXML(response: Response) {
       }
     }
   } finally {
-    await reader.cancel();
-    reader.releaseLock();
+    signal?.removeEventListener("abort", onAbort);
+    try {
+      await (cancellation ?? reader.cancel());
+    } finally {
+      reader.releaseLock();
+    }
   }
+  signal?.throwIfAborted();
   return parseDocument(source, context);
 }
