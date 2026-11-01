@@ -36,6 +36,7 @@ import { readFrame } from "./xml.ts";
 // Fatal XML errors and reciprocal close on usable transport: rfc6120-parser-errors.test.ts.
 // Fatal outbound barriers, callback reentry and error ownership: rfc6120-fatal-output.test.ts.
 // Graceful private closure, retained inbound processing and SM: rfc6120-closing-output.test.ts.
+// Authenticated TLS close_notify transmission: rfc6120-tls-closure.test.ts.
 // Prepared optional stanza-error by addresses (§8.3.1): rfc7622-error-by.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).
 

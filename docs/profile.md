@@ -105,6 +105,12 @@ acknowledgement-present and native Node controls. The independent Python peer
 is test infrastructure only. No browser result or successful attack is claimed;
 Web APIs expose no renegotiation-policy control.
 
+Normal Bun TLS 1.2/1.3 closure is checked with an authenticated peer that waits
+for the client's `close_notify` before sending its own. Source/minified clients
+complete an XMPP exchange; native orderly/abrupt controls distinguish alerts
+from EOF. This does not establish client processing of the reciprocal alert,
+fatal-error closure or browser behavior.
+
 After a received XMPP `reset` (RFC 6120 §4.9.3.16), that client instance
 refuses further connections, including discovery, manual reconnect and
 stop/start. Automatic retries stop. The original `StreamError` is returned.
