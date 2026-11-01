@@ -22,6 +22,7 @@ import { readFrame } from "./xml.ts";
 // Content namespace isolation and SM accounting: rfc6120-namespaces.test.ts.
 // Default namespace cancellation and consumer dispatch: rfc6120-namespace-scope.test.ts.
 // Attribute expanded names at the public consumer boundary: rfc6120-namespace-attributes.test.ts.
+// Namespace URI references on input/output: rfc6120-namespace-uris.test.ts.
 // Outgoing XML well-formedness and Unicode: rfc6120-outgoing-xml.test.ts.
 // XML restrictions, incoming declarations and character data (§11): rfc6120-xml.test.ts.
 // Stream-content prefix rules and extension scopes: rfc6120-content-prefixes.test.ts.

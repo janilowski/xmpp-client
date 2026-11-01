@@ -1,11 +1,13 @@
 import { SaxesParser } from "saxes";
 import Element from "ltx/lib/Element.js";
 import XMLError from "./XMLError.js";
+import isURIReference from "./isURIReference.ts";
 
 export const XML_CONTEXT = { DOCUMENT: "document", HTTP: "http", XMPP: "xmpp" };
 export const XML_DIRECTION = { INPUT: "input", OUTPUT: "output" };
 export const MAX_XML_BYTES = 1024 * 1024;
 const MAX_XML_DEPTH = 64;
+const XMLNS_ATTRIBUTE = "xmlns";
 const UNPAIRED_SURROGATE = /[\uD800-\uDFFF]/u;
 const encoder = new TextEncoder();
 
@@ -23,6 +25,19 @@ function createParser(source, context, direction) {
     error.condition = "not-well-formed";
     throw error;
   });
+  if (context === XML_CONTEXT.XMPP) {
+    // RFC 6120 §11.3 covers both directions, including unused declarations.
+    parser.on("attribute", ({ name, prefix, value }) => {
+      if (
+        (name === XMLNS_ATTRIBUTE || prefix === XMLNS_ATTRIBUTE) &&
+        !isURIReference(value)
+      ) {
+        const error = new XMLError("Invalid namespace URI reference");
+        error.condition = "not-well-formed";
+        throw error;
+      }
+    });
+  }
   const prohibited =
     context === XML_CONTEXT.XMPP
       ? ["doctype", "processinginstruction", "comment"]
@@ -99,6 +114,7 @@ export default function parseDocument(
     throw error;
   }
   const parser = createParser(source, context, direction);
+  /** @type {Element | undefined} */
   let root;
   let cursor;
   let depth = 0;

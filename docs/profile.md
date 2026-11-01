@@ -257,6 +257,10 @@ RFCs, browser engines or general denial-of-service protection.
   documents are validated before writes and SM queue admission; invalid local
   XML rejects with a TypeError (RFC 6120 §11.3).
   Generated XML declarations must omit `standalone` (RFC 6120 §11.5).
+  XMPP namespace declarations require RFC 3986 URI references, including unused
+  bindings. Relative references remain accepted; case and percent escapes are
+  not normalized. Literal Unicode requires URI escaping. Generic HTTP XML
+  processing retains the XML processor's optional URI-syntax checking boundary.
   Incoming standalone declarations are ignored; generic XML documents retain
   their normal grammar. WebSocket standalone documents do not waive SDDecl rules.
   Generated WebSocket openings use the same XML/language checks before parser
