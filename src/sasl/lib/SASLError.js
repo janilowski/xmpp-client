@@ -23,10 +23,11 @@ class SASLError extends XMPPError {
     // SASL2 retains SASL's condition namespace and permits application details.
     const children = element.getChildElements();
     const condition = children.find(
-      (child) => child.getNS() === SASL && child.name !== "text",
+      (child) => child.getNS() === SASL && child.getName() !== "text",
     );
+    const name = condition?.getName();
     const error = new this(
-      CONDITIONS.has(condition?.name) ? condition.name : "not-authorized",
+      CONDITIONS.has(name) ? name : "not-authorized",
       element.getChildText("text", element.getNS()) || "",
       children.find(
         (child) => child.getNS() !== SASL && child.getNS() !== element.getNS(),

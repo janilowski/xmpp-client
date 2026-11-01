@@ -6,6 +6,7 @@ import { readFrame } from "./xml.ts";
 
 // SASL wire encoding and restart cases: rfc6120-sasl.test.ts.
 // SASL identity, ordering, failure and retry: rfc6120-sasl-negotiation.test.ts.
+// SASL/SASL2 expanded-name dispatch and errors: rfc6120-sasl-namespaces.test.ts.
 // SASL2 post-success features and SM resumption: xep0388-features.test.ts.
 // SM resumption identity and queue ownership: xep0198-resumption.test.ts.
 // Hostile SASL Base64 input: rfc6120-sasl-base64.test.ts.

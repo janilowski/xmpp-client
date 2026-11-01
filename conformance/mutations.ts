@@ -38,6 +38,46 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "dispatch SASL by prefixed QName instead of local name",
+    file: "src/sasl/exchange.js",
+    before: "const name = element.getName();",
+    after: "const name = element.name;",
+    suite: "conformance/rfc6120-sasl-namespaces.test.ts",
+    test: "accepts prefix challenge and prefix success",
+  },
+  {
+    name: "interpret prefixed SASL diagnostic text as a condition",
+    file: "src/sasl/lib/SASLError.js",
+    before: 'child.getName() !== "text"',
+    after: 'child.name !== "text"',
+    suite: "conformance/rfc6120-sasl-namespaces.test.ts",
+    test: "preserves prefix failure account-disabled",
+  },
+  {
+    name: "discard prefixed SASL condition names",
+    file: "src/sasl/lib/SASLError.js",
+    before: "const name = condition?.getName();",
+    after: "const name = condition?.name;",
+    suite: "conformance/rfc6120-sasl-namespaces.test.ts",
+    test: "ignores a foreign condition namesake",
+  },
+  {
+    name: "dispatch foreign namespace SASL namesakes",
+    file: "src/sasl/exchange.js",
+    before: "if (element.getNS() !== namespace) {",
+    after: "if (false) {",
+    suite: "conformance/rfc6120-sasl-namespaces.test.ts",
+    test: "accepts prefix challenge and prefix success",
+  },
+  {
+    name: "select foreign SASL condition namesakes",
+    file: "src/sasl/lib/SASLError.js",
+    before: 'child.getNS() === SASL && child.getName() !== "text"',
+    after: 'child.getName() !== "text"',
+    suite: "conformance/rfc6120-sasl-namespaces.test.ts",
+    test: "ignores a foreign condition namesake",
+  },
+  {
     name: "omit outgoing namespace URI validation",
     file: "src/xml/lib/parseDocument.js",
     before: "if (context === XML_CONTEXT.XMPP) {",
@@ -3338,7 +3378,7 @@ const mutations = [
   {
     name: "omit generic fallback for unknown SASL conditions",
     file: "src/sasl/lib/SASLError.js",
-    before: "CONDITIONS.has(condition?.name)",
+    before: "CONDITIONS.has(name)",
     after: "!!condition",
     suite: "conformance/rfc6120-sasl-negotiation.test.ts",
     test: "unknown/malformed failure",
@@ -3813,6 +3853,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-binding-senders.test.ts",
       "conformance/rfc6120-sasl.test.ts",
       "conformance/rfc6120-sasl-negotiation.test.ts",
+      "conformance/rfc6120-sasl-namespaces.test.ts",
       "conformance/rfc6120-sasl-base64.test.ts",
       "conformance/rfc4616.test.ts",
       "conformance/rfc5802.test.js",

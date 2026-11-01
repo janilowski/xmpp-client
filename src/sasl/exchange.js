@@ -31,25 +31,26 @@ export default function exchange(
       if (element.getNS() !== namespace) {
         return;
       }
-      if (element.name === "failure") {
+      const name = element.getName();
+      if (name === "failure") {
         throw SASLError.fromElement(element);
       }
       if (
         responding ||
         aborted ||
-        !["challenge", "success"].includes(element.name)
+        !["challenge", "success"].includes(name)
       ) {
         throw new SASLError("SASL: Unexpected negotiation element");
       }
       if (
-        (element.name === "challenge" || namespace === SASL) &&
+        (name === "challenge" || namespace === SASL) &&
         element.getChildElements().length
       ) {
         throw new SASLError("SASL: Unexpected child in mechanism data");
       }
       responding = true;
       try {
-        if (element.name === "challenge") {
+        if (name === "challenge") {
           await mech.challenge(
             mech.binary ? decodeBytes(element.text()) : decode(element.text()),
           );
