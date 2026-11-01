@@ -314,6 +314,12 @@ describe("RFC 7622 §3.2 — IDNA2008 domains", () => {
     ["RFC 5893 §2 mixed digit classes", "xn--1-zhcd19c.example", null],
     ["RFC 5891 §5.4 non-NFC decoded label", "xn--e-xbb.example", null],
     ["RFC 5891 §5.4 disallowed decoded uppercase", "xn--dca.example", null],
+    ["RFC 5891 §5.4 decoded unassigned U+0378", "xn--zva.example", null],
+    ["RFC 5891 §5.4 decoded leading combining mark", "xn--a-wbb.example", null],
+    ["RFC 5891 §5.4 decoded disallowed emoji", "xn--e28h.example", null],
+    ["RFC 7622 §3.2.1 decoded leading hyphen", "xn----bga.example", null],
+    ["RFC 7622 §3.2.1 decoded trailing hyphen", "xn----9fa.example", null],
+    ["RFC 5891 §5.4 decoded reserved hyphens", "xn--ab---epa.example", null],
     [
       "RFC 5893 §2 ASCII sibling in bidi domain",
       "a123.xn--4dbc.example",
