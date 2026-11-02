@@ -5,6 +5,7 @@ export const OFFER_TIMEOUT_MS = 10000;
 export const OFFER_MODES = ["direct WSS", "HTTPS discovery"] as const;
 export type OfferMode = (typeof OFFER_MODES)[number];
 export type Hello = NonNullable<ReturnType<ClientHello["feed"]>>;
+const NULL_COMPRESSION = "00";
 
 // RFC 10015 §4 / Table 4, IANA TLS Cipher Suites (reviewed 2026-10-30).
 // Independent static-RSA inventory, not all registry entries marked "D".
@@ -152,6 +153,10 @@ export async function observeOffers(exercise: (port: number) => Promise<void>) {
 
 export function validateOfferControls(hellos: Hello[]) {
   for (const hello of hellos) {
+    // RFC 9325 §3.3: TLS 1.2 SHOULD NOT support record compression.
+    // RFC 9846 §4.1.2: a TLS 1.3 ClientHello MUST offer exactly null.
+    // Initial offers only, not proof of hostile selection/resumption handling.
+    assert.equal(hello.compression, NULL_COMPRESSION);
     assert.equal(hello.version, "0303");
     assert.ok(hello.ciphers.includes("c02f"), "Missing ECDHE positive control");
     assert.ok(

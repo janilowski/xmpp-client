@@ -44,6 +44,16 @@ test("RFC 10015 offer oracle: independent fragmented ClientHello and malformed b
   }
   expect(hello?.ciphers).toEqual(["009c", "c02f", "1301"]);
   expect(hello?.compression).toBe("00");
+  // Literal alternatives ensure the observer does not hardcode null support.
+  for (const compression of ["01", "0100"]) {
+    const alternate = Buffer.concat([
+      body.subarray(0, -4),
+      Buffer.from([compression.length / 2]),
+      Buffer.from(compression, "hex"),
+      Buffer.from("0000", "hex"),
+    ]);
+    expect(parseHello(alternate).compression).toBe(compression);
+  }
   expect(new ClientHello().feed(source.subarray(0, -1))).toBeUndefined();
   expect(() =>
     new ClientHello().feed(Buffer.from([22, 3, 1, 255, 255])),
@@ -150,6 +160,10 @@ for (const mode of OFFER_MODES) {
           });
           if (policy !== "TLS_AES_128_GCM_SHA256") {
             validateOfferControls(hellos);
+          } else {
+            for (const hello of hellos) {
+              expect(hello.compression).toBe("00");
+            }
           }
         }, OFFER_TIMEOUT_MS);
 
