@@ -86,7 +86,7 @@ jobs:
       - name: Install integration fixtures
         run: |
           bun run prosody:setup
-          bunx playwright install --with-deps chromium
+          bunx playwright install --with-deps chromium firefox
 
       - name: Integration tests
         run: |

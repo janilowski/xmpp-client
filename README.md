@@ -134,7 +134,7 @@ predominantly JavaScript and is being migrated incrementally.
 ### Native integration environment (Fedora)
 
 No VM or container is required. Use Bun 1.4.4 (also pinned in CI),
-Prosody 13 with Lua 5.4, and Playwright's Chromium. Development tools additionally
+Prosody 13 with Lua 5.4, and Playwright's Chromium/Firefox. Development tools additionally
 require Node 22.22.1+ and Git 2.32+; the library's runtime floor is unchanged.
 
 Bun 1.4.4 fixes the bundled [Brotli decoder vulnerability](https://github.com/oven-sh/bun/security/advisories/GHSA-663w-cv8g-jj2p)
@@ -146,7 +146,7 @@ sudo dnf install nodejs prosody lua lua-devel luarocks nss-tools python3-pip ope
 bun install --frozen-lockfile
 bun run test:tls:setup
 bun run prosody:setup
-bunx playwright install chromium
+bunx playwright install chromium firefox
 bun run test:all
 ```
 
@@ -156,7 +156,8 @@ If the system service already occupies them, stop it only if it is not serving
 anything you need: `sudo systemctl stop prosody`.
 
 `test:unit` needs no server. `test:e2e` runs native integration tests;
-`test:browser` builds and tests both bundles in Chromium. `test:all` runs
+`test:browser` tests both bundles in Chromium and adds a bounded Firefox
+minified-bundle protocol suite, not Firefox TLS validation. `test:all` runs
 static checks, conformance and mutation checks, and both integration suites.
 OpenSSL 3 CLI provides independent TLS, CRL and OCSP fixture controls.
 The independent TLS 1.2 peer requires Python 3 and hash-pinned packages installed

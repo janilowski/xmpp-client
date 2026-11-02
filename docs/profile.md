@@ -77,6 +77,12 @@ fixtures using an SPKI exception remain separate. Public/system roots are not
 removed by the isolated NSS setup. No complete cipher, revocation or all-browser
 matrix is claimed. Expected runtime failures
 remain executable test markers, not evidence of successful validation.
+
+Firefox also runs a bounded minified-bundle wire suite: authentication/restart,
+binding identity, bidirectional stanzas, namespace alternatives, fatal-input
+isolation and reciprocal XML/WebSocket closure. Its explicit loopback WS fixture
+does not validate TLS or establish the full Chromium coverage on Firefox.
+
 Native Bun 1.4.2–1.4.4 retain CN fallback for Node compatibility (#50).
 The private adapter, verified on Bun 1.4.4, keeps native chain and hostname
 verification, then requires a matching DNS/IP SAN using the native DER API on the
