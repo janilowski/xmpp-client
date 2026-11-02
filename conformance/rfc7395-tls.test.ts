@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { X509Certificate } from "node:crypto";
+import { createPrivateKey, X509Certificate } from "node:crypto";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -10,9 +10,14 @@ import { generate } from "selfsigned";
 // XEP-0156 1.4.0 §2.2: authenticate the complete HTTPS discovery and WSS
 // certificate paths and endpoint identities independently of the XMPP domain.
 // PKIX belongs to the runtime; these are integration scenarios.
+// Leaf signature/EKU controls: RFC 5280 §§6.1.3(a)(1), 4.2.1.12.
 // Protocol versions and TLS 1.3 preference: rfc7590-versions.test.ts.
 const HTTP_BAD_REQUEST = 400;
 const DAY_MS = 86_400_000;
+const OPENSSL_TIMEOUT_MS = 5000;
+const OPENSSL_VERIFY_FAILURE = 2;
+const SERVER_AUTH = "1.3.6.1.5.5.7.3.1";
+const CLIENT_AUTH = "1.3.6.1.5.5.7.3.2";
 let directory: string;
 let authority: Awaited<ReturnType<typeof generate>>;
 let untrustedAuthority: Awaited<ReturnType<typeof generate>>;
@@ -102,6 +107,8 @@ afterAll(async () => {
 
 describe.each([
   ["direct", "valid"],
+  ["direct", "bad-signature"],
+  ["direct", "wrong-eku"],
   ["direct", "wrong-name"],
   ["direct", "expired"],
   ["direct", "untrusted"],
@@ -115,6 +122,8 @@ describe.each([
   ["direct", "chain-non-ca-intermediate"],
   ["direct", "chain-missing-intermediate"],
   ["discovery", "valid"],
+  ["discovery", "bad-signature"],
+  ["discovery", "wrong-eku"],
   ["discovery", "wrong-name"],
   ["discovery", "expired"],
   ["discovery", "untrusted"],
@@ -166,7 +175,12 @@ describe.each([
         extensions: [
           { name: "basicConstraints", cA: false },
           { name: "keyUsage", digitalSignature: true, keyEncipherment: true },
-          { name: "extKeyUsage", serverAuth: true },
+          {
+            name: "extKeyUsage",
+            ...(scenario === "wrong-eku"
+              ? { clientAuth: true }
+              : { serverAuth: true }),
+          },
           ...(scenario === "cn-only"
             ? []
             : [
@@ -193,12 +207,23 @@ describe.each([
         ],
       },
     );
+    const signedCertificate = certificate.cert;
+    const signed = new X509Certificate(signedCertificate);
+    expect(signed.verify(new X509Certificate(issuer.cert).publicKey)).toBe(
+      true,
+    );
+    if (scenario === "bad-signature") {
+      // Change only signatureValue, retaining the signed fields and leaf key.
+      const der = Buffer.from(signed.raw);
+      der[der.length - 1] = der[der.length - 1]! ^ 1;
+      certificate.cert = new X509Certificate(der).toString();
+    }
     const parsed = new X509Certificate(certificate.cert);
     expect(parsed.ca).toBe(false);
     expect(parsed.subject).toBe("CN=localhost");
     expect(parsed.issuer).toBe(new X509Certificate(issuer.cert).subject);
     expect(parsed.verify(new X509Certificate(issuer.cert).publicKey)).toBe(
-      true,
+      scenario !== "bad-signature",
     );
     expect(Date.parse(parsed.validFrom)).toBeLessThan(now);
     expect(Date.parse(parsed.validTo) > now).toBe(scenario !== "expired");
@@ -216,6 +241,84 @@ describe.each([
     if (scenario === "chain-missing-intermediate") {
       // A fresh child has no cached issuer or AIA URL to retrieve one.
       expect(parsed.infoAccess).toBeUndefined();
+    }
+
+    if (["valid", "bad-signature", "wrong-eku"].includes(scenario)) {
+      expect(
+        parsed.checkPrivateKey(createPrivateKey(certificate.private)),
+      ).toBe(true);
+      expect(parsed.keyUsage).toEqual([
+        scenario === "wrong-eku" ? CLIENT_AUTH : SERVER_AUTH,
+      ]);
+      const file = `${mode}-${scenario}.pem`;
+      const original = `${mode}-${scenario}-signed.pem`;
+      await Promise.all([
+        writeFile(join(directory, file), certificate.cert),
+        writeFile(join(directory, original), signedCertificate),
+      ]);
+      const checks =
+        scenario === "wrong-eku"
+          ? ([
+              ["sslclient", file, 0, null],
+              [
+                "sslserver",
+                file,
+                OPENSSL_VERIFY_FAILURE,
+                "unsuitable certificate purpose",
+              ],
+            ] as const)
+          : scenario === "bad-signature"
+            ? ([
+                ["sslserver", original, 0, null],
+                [
+                  "sslserver",
+                  file,
+                  OPENSSL_VERIFY_FAILURE,
+                  "certificate signature failure",
+                ],
+              ] as const)
+            : ([["sslserver", file, 0, null]] as const);
+      // Native OpenSSL distinguishes bad issuer signatures from wrong purpose.
+      for (const [purpose, filename, expectedExit, diagnostic] of checks) {
+        const verifier = Bun.spawn(
+          [
+            "openssl",
+            "verify",
+            "-CAfile",
+            "ca.pem",
+            "-purpose",
+            purpose,
+            "-verify_hostname",
+            "localhost",
+            filename,
+          ],
+          {
+            cwd: directory,
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: OPENSSL_TIMEOUT_MS,
+          },
+        );
+        try {
+          const [exit, stdout, stderr] = await Promise.all([
+            verifier.exited,
+            new Response(verifier.stdout).text(),
+            new Response(verifier.stderr).text(),
+          ]);
+          expect({ exit, stdout, stderr }).toMatchObject({
+            exit: expectedExit,
+          });
+          if (diagnostic) {
+            expect(stderr).toContain(diagnostic);
+          } else {
+            expect(stdout.trim()).toBe(`${filename}: OK`);
+            expect(stderr).toBe("");
+          }
+        } finally {
+          verifier.kill();
+          await verifier.exited;
+        }
+      }
     }
 
     if (intermediate) {
