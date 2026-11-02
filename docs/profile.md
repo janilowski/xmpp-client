@@ -130,8 +130,10 @@ for the client's `close_notify` before sending its own. Source/minified clients
 complete an XMPP exchange. A Linux `/proc` witness checks that the client retains
 the exact socket until the reciprocal alert and releases it while the peer TCP
 socket remains open; native premature-close controls fail that same assertion.
-Native abrupt closure remains distinct from alerts. This does not establish
-fatal-error closure or browser behavior.
+The same witness covers malformed XML after binding/stanza exchange: one stream
+error precedes closure, ordinary output is blocked and later stanzas are not
+delivered. Native abrupt closure remains distinct from alerts. Other fatal-error
+paths and browser TLS closure remain unverified.
 
 After a received XMPP `reset` (RFC 6120 §4.9.3.16), that client instance
 refuses further connections, including discovery, manual reconnect and

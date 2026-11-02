@@ -150,10 +150,15 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
     ...(version === TLS13_MINOR ? (["native-ffdhe"] as const) : []),
     "source",
     "minified",
+    "source-fatal",
+    "minified-fatal",
   ] as const)(
     `TLS 1.${version - 1} closure fixture / %s`,
     async (mode) => {
       const native = mode.startsWith("native-");
+      // RFC 6120 §4.9.1.1 routes XML-fatal closure through §4.4. An XMPP
+      // stream error is not the TLS error-alert exception in RFC 9846 §6.1.
+      const fatal = mode.endsWith("-fatal");
       const restrictedGroup = mode === "native-p256" || mode === "native-ffdhe";
       const gated = !restrictedGroup && mode !== "native-destroy";
       if (gated) {
@@ -172,7 +177,7 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
           resolve(process.env.XMPP_TEST_TLS_PEER ?? "server/.cache/tls-peer"),
           directory,
           String(version),
-          native ? "control" : "xmpp",
+          native ? "control" : fatal ? "xmpp-fatal" : "xmpp",
           ...(gated ? ["reciprocal"] : []),
         ],
         {
@@ -223,15 +228,30 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
           : `
           import assert from 'node:assert/strict';
           const keepAlive=setInterval(()=>{},1000);process.stdin.once('data',()=>{clearInterval(keepAlive);process.stdin.destroy();});
-          const {client,xml}=${mode === "source" ? 'await import("./src/client/index.js")' : 'Function((await Bun.file("./dist/xmpp.min.js").text())+"\\n;return XMPP;")()'};
+          const {client,xml}=${mode.startsWith("source") ? 'await import("./src/client/index.js")' : 'Function((await Bun.file("./dist/xmpp.min.js").text())+"\\n;return XMPP;")()'};
           const xmpp=client({service:'wss://localhost:${ready.port}/xmpp',domain:'example.test',username:'user',password:'password',resource:'r',timeout:${XMPP_TIMEOUT_MS}});
-          const errors=[];xmpp.reconnect.stop();xmpp.on('error',error=>errors.push({name:error.name,message:error.message}));
+          const errors=[],messages=[];let reportFailure;const failed=new Promise(resolve=>{reportFailure=resolve;});xmpp.reconnect.stop();xmpp.on('error',error=>{errors.push({name:error.name,message:error.message,condition:error.condition});reportFailure(error);});
+          xmpp.on('stanza',element=>{if(element.is('message')){messages.push(element.getChildText('body'));}});
           try{
             await xmpp.start();assert.equal(xmpp.jid.toString(),'user@example.test/r');
             const received=new Promise(resolve=>xmpp.on('stanza',element=>{if(element.is('message')){resolve(element.getChildText('body'));}}));
             await xmpp.send(xml('message',{to:'friend@example.test'},xml('body',{},'probe')));
             assert.equal(await received,'reply');
-            const stopped=xmpp.stop();setImmediate(()=>console.log(JSON.stringify({phase:'stopping'})));await stopped;assert.deepEqual(errors,[]);console.log(JSON.stringify({outcome:'closed',reply:'reply'}));
+            ${
+              fatal
+                ? `
+            const disconnected=new Promise(resolve=>xmpp.once('disconnect',resolve));
+            await xmpp.send(xml('message',{to:'friend@example.test'},xml('body',{},'fatal-trigger')));
+            const error=await failed;assert.equal(error.name,'XMLError');assert.equal(error.condition,'not-well-formed');
+            await assert.rejects(xmpp.send(xml('message',{to:'friend@example.test'},xml('body',{},'forbidden'))));
+            await assert.rejects(xmpp.sendMany([xml('message',{to:'friend@example.test'},xml('body',{},'forbidden-batch'))]));
+            setImmediate(()=>console.log(JSON.stringify({phase:'stopping'})));
+            await disconnected;
+            assert.deepEqual(errors.map(({name,condition})=>({name,condition})),[{name:'XMLError',condition:'not-well-formed'}]);
+            `
+                : `const stopped=xmpp.stop();setImmediate(()=>console.log(JSON.stringify({phase:'stopping'})));await stopped;assert.deepEqual(errors,[]);`
+            }
+            assert.deepEqual(messages,['reply']);console.log(JSON.stringify({outcome:'closed',reply:'reply'}));
           }finally{await xmpp.stop();}
         `;
         const probe = Bun.spawn(
@@ -396,7 +416,9 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
         if (native) {
           expect(observed.application).toEqual(["PING"]);
         } else {
-          expect(observed.application).toHaveLength(7);
+          expect(observed.application).toHaveLength(fatal ? 9 : 7);
+          // The independent peer checks the fatal error's expanded XML names
+          // and requires its immediate XML close; prefixes/declarations vary.
           expect(observed.application.slice(-2)).toEqual([CLOSE, "WS_CLOSE"]);
         }
       } finally {

@@ -17,7 +17,7 @@ from tlslite.constants import ContentType, AlertDescription, AlertLevel
 from tlslite.messages import Alert, ServerKeyExchange
 
 assert tlslite.__version__ == "0.8.2", "Run bun run test:tls:setup"
-assert version in ("3", "4") and mode in ("control", "xmpp")
+assert version in ("3", "4") and mode in ("control", "xmpp", "xmpp-fatal")
 SOCKET_TIMEOUT_SECONDS = 4
 MAX_MESSAGE_BYTES = 16384
 MAX_FRAMES = 32
@@ -25,6 +25,7 @@ WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 FRAMING = "urn:ietf:params:xml:ns:xmpp-framing"
 SASL = "urn:ietf:params:xml:ns:xmpp-sasl"
 STREAM = "http://etherx.jabber.org/streams"
+ERRORS = "urn:ietf:params:xml:ns:xmpp-streams"
 BIND = "urn:ietf:params:xml:ns:xmpp-bind"
 X25519 = "x25519"
 records = {"version": None, "cipher": None, "ecdhCurve": None, "alerts": [], "application": [],
@@ -110,6 +111,7 @@ def exchange_xmpp(connection):
 
     authenticated = False
     bound = False
+    fatal = False
     for _ in range(MAX_FRAMES):
         header = exact(2)
         opcode, length = header[0] & 15, header[1] & 127
@@ -128,6 +130,8 @@ def exchange_xmpp(connection):
         text = payload.decode()
         records["application"].append(text)
         element = ET.fromstring(text)
+        if fatal:
+            assert element.tag == "{" + FRAMING + "}close", "Application output after stream error"
         if element.tag == "{" + FRAMING + "}open":
             send(f'<open xmlns="{FRAMING}" from="example.test" id="peer" version="1.0"/>')
             feature = f'<bind xmlns="{BIND}"/>' if authenticated else \
@@ -146,9 +150,24 @@ def exchange_xmpp(connection):
             send(f'<iq xmlns="jabber:client" type="result" id="{identifier}">'
                  f'<bind xmlns="{BIND}"><jid>user@example.test/r</jid></bind></iq>')
         elif element.tag == "{jabber:client}message":
-            assert bound and element.find("{jabber:client}body").text == "probe"
-            send('<message xmlns="jabber:client" from="friend@example.test" '
-                 'to="user@example.test/r"><body>reply</body></message>')
+            assert bound
+            body = element.find("{jabber:client}body").text
+            if body == "probe":
+                send('<message xmlns="jabber:client" from="friend@example.test" '
+                     'to="user@example.test/r"><body>reply</body></message>')
+            else:
+                assert mode == "xmpp-fatal" and body == "fatal-trigger"
+                send('<message xmlns="jabber:client"><body></message>')
+                send('<message xmlns="jabber:client" from="friend@example.test" '
+                     'to="user@example.test/r"><body>late</body></message>')
+        elif element.tag == "{" + STREAM + "}error":
+            assert mode == "xmpp-fatal"
+            # Preferred local diagnostic; RFC 6120 also permits bad-format.
+            conditions = [child.tag for child in element
+                          if child.tag.startswith("{" + ERRORS + "}")
+                          and child.tag != "{" + ERRORS + "}text"]
+            assert conditions == ["{" + ERRORS + "}not-well-formed"]
+            fatal = True
         elif element.tag == "{" + FRAMING + "}close":
             send(f'<close xmlns="{FRAMING}"/>')
         else:
