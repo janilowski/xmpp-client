@@ -165,7 +165,8 @@ by `test:tls:setup` into `server/.cache/tls-peer`, not system site-packages.
 Re-run setup when its requirements change. No Python code enters the bundle.
 The loopback TLS peers use disposable RSA certificates and X25519-only key
 exchange; forced P-256 and FFDHE controls verify rejection before application
-traffic.
+traffic. The reciprocal TLS closure witness requires Linux `/proc` to inspect
+child-owned socket descriptors.
 Their required `ecdsa` dependency has an unfixed timing advisory
 ([CVE-2024-23342](https://github.com/tlsfuzzer/python-ecdsa/security/advisories/GHSA-wj6h-64fc-37mp)).
 The curve restriction avoids its secret-key operations in these peers; it does

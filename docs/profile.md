@@ -123,8 +123,10 @@ Web APIs expose no renegotiation-policy control.
 
 Normal Bun TLS 1.2/1.3 closure is checked with an authenticated peer that waits
 for the client's `close_notify` before sending its own. Source/minified clients
-complete an XMPP exchange; native orderly/abrupt controls distinguish alerts
-from EOF. This does not establish client processing of the reciprocal alert,
+complete an XMPP exchange. A Linux `/proc` witness checks that the client retains
+the exact socket until the reciprocal alert and releases it while the peer TCP
+socket remains open; native premature-close controls fail that same assertion.
+Native abrupt closure remains distinct from alerts. This does not establish
 fatal-error closure or browser behavior.
 
 After a received XMPP `reset` (RFC 6120 §4.9.3.16), that client instance

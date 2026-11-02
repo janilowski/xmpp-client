@@ -1,19 +1,32 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import { createPrivateKey, X509Certificate } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  readdir,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { generate } from "selfsigned";
 
 // RFC 6120 §4.4, RFC 7395 §3.6 and RFC 9846 §6.1: normal TLS closure
-// sends warning close_notify. The independent authenticated peer withholds its
-// alert until the client alert arrives. This proves transmission, NOT client
-// processing of the reciprocal alert, and does not complete the #8 TLS gate.
+// sends warning close_notify. The Linux /proc witness proves the actual socket
+// stays owned until the authenticated reciprocal alert, without peer TCP EOF.
+// This does not establish browser behavior or complete the entire #8 TLS gate.
 const SETUP_TIMEOUT_MS = 30000;
 const TEST_TIMEOUT_MS = 20000;
 const CHILD_TIMEOUT_MS = 8000;
 const PEER_TIMEOUT_MS = 12000;
 const XMPP_TIMEOUT_MS = 2000;
+const DESCRIPTOR_TIMEOUT_MS = 2000;
+const DESCRIPTOR_POLL_MS = 10;
+const TCP_LOCAL_ADDRESS_COLUMN = 1;
+const TCP_REMOTE_ADDRESS_COLUMN = 2;
+const TCP_INODE_COLUMN = 9;
 const TLS_VERSION_MAJOR = 3;
 const TLS12_MINOR = 3;
 const TLS13_MINOR = 4;
@@ -33,6 +46,47 @@ type Records = {
   errors: { name: string; message: string }[];
 };
 let directory: string;
+
+type SocketFile = { path: string; target: string };
+async function findSocket(pid: number, localPort: number, remotePort: number) {
+  // Linux exposes TCP inodes separately from process-owned descriptors.
+  for (const table of ["tcp", "tcp6"]) {
+    const rows = (await readFile(`/proc/${pid}/net/${table}`, "utf8"))
+      .trim()
+      .split("\n")
+      .slice(1);
+    for (const row of rows) {
+      const columns = row.trim().split(/\s+/);
+      if (
+        parseInt(columns[TCP_LOCAL_ADDRESS_COLUMN]!.split(":")[1]!, 16) !==
+          localPort ||
+        parseInt(columns[TCP_REMOTE_ADDRESS_COLUMN]!.split(":")[1]!, 16) !==
+          remotePort
+      ) {
+        continue;
+      }
+      const target = `socket:[${columns[TCP_INODE_COLUMN]}]`;
+      for (const fd of await readdir(`/proc/${pid}/fd`)) {
+        const file = { path: `/proc/${pid}/fd/${fd}`, target };
+        if (await ownsSocket(file)) {
+          return file;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
+async function ownsSocket(file: SocketFile) {
+  try {
+    return (await readlink(file.path)) === file.target;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+    return false;
+  }
+}
 
 beforeAll(async () => {
   directory = await mkdtemp(join(tmpdir(), "xmpp-tls-closure-"));
@@ -91,6 +145,7 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
   test.each([
     "native-end",
     "native-destroy",
+    "native-premature",
     "native-p256",
     ...(version === TLS13_MINOR ? (["native-ffdhe"] as const) : []),
     "source",
@@ -100,6 +155,10 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
     async (mode) => {
       const native = mode.startsWith("native-");
       const restrictedGroup = mode === "native-p256" || mode === "native-ffdhe";
+      const gated = !restrictedGroup && mode !== "native-destroy";
+      if (gated) {
+        expect(process.platform).toBe("linux");
+      }
       const group =
         mode === "native-p256"
           ? "P-256"
@@ -114,8 +173,14 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
           directory,
           String(version),
           native ? "control" : "xmpp",
+          ...(gated ? ["reciprocal"] : []),
         ],
-        { stdout: "pipe", stderr: "pipe", timeout: PEER_TIMEOUT_MS },
+        {
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: PEER_TIMEOUT_MS,
+        },
       );
       const reader = peer.stdout.getReader();
       let pending = "";
@@ -135,6 +200,7 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
         return message;
       }
       let child: ReturnType<typeof Bun.spawn> | undefined;
+      let clientReader: typeof reader | undefined;
       try {
         const ready = (await receive()) as { port: number; tlslite: string };
         expect(ready.tlslite).toBe("0.8.2");
@@ -146,15 +212,17 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
           import {connect} from 'node:tls';
           import {readFileSync} from 'node:fs';
           if(process.versions.bun){throw new Error('Native Node required; set XMPP_TEST_NODE=/usr/bin/node');}
+          ${gated ? "const keepAlive=setInterval(()=>{},1000);process.stdin.once('data',()=>{clearInterval(keepAlive);process.stdin.destroy();});" : ""}
           let authorized,protocol,received='',code,outcome='closed';
           const socket=connect({host:'localhost',port:${ready.port},ca:readFileSync(${JSON.stringify(join(directory, "ca.pem"))}),rejectUnauthorized:true,minVersion:${JSON.stringify(protocol)},maxVersion:${JSON.stringify(protocol)},ecdhCurve:${JSON.stringify(group)}});
           socket.on('secureConnect',()=>{authorized=socket.authorized;protocol=socket.getProtocol();assert.equal(authorized,true);socket.write('PING');});
-          socket.on('data',data=>{received+=data.toString();if(received.length<4){return;}assert.equal(received,'PONG');socket.${mode === "native-end" ? "end" : "destroy"}();});
+          socket.on('data',data=>{received+=data.toString();if(received.length<4){return;}assert.equal(received,'PONG');socket.${gated ? `end(()=>${mode === "native-premature" ? "socket.destroy()" : "console.log(JSON.stringify({phase:'output-ended'}))"})` : "destroy()"};});
           socket.on('error',error=>{if(!${restrictedGroup}){throw error;}outcome='rejected';code=error.code;});
-          socket.on('close',()=>console.log(JSON.stringify({outcome,authorized,protocol,...(code?{code}:{})})));
+          socket.on('close',()=>{${mode === "native-premature" ? "console.log(JSON.stringify({phase:'output-ended'}));" : ""}console.log(JSON.stringify({outcome,authorized,protocol,...(code?{code}:{})}));});
         `
           : `
           import assert from 'node:assert/strict';
+          const keepAlive=setInterval(()=>{},1000);process.stdin.once('data',()=>{clearInterval(keepAlive);process.stdin.destroy();});
           const {client,xml}=${mode === "source" ? 'await import("./src/client/index.js")' : 'Function((await Bun.file("./dist/xmpp.min.js").text())+"\\n;return XMPP;")()'};
           const xmpp=client({service:'wss://localhost:${ready.port}/xmpp',domain:'example.test',username:'user',password:'password',resource:'r',timeout:${XMPP_TIMEOUT_MS}});
           const errors=[];xmpp.reconnect.stop();xmpp.on('error',error=>errors.push({name:error.name,message:error.message}));
@@ -163,7 +231,7 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
             const received=new Promise(resolve=>xmpp.on('stanza',element=>{if(element.is('message')){resolve(element.getChildText('body'));}}));
             await xmpp.send(xml('message',{to:'friend@example.test'},xml('body',{},'probe')));
             assert.equal(await received,'reply');
-            await xmpp.stop();assert.deepEqual(errors,[]);console.log(JSON.stringify({outcome:'closed',reply:'reply'}));
+            const stopped=xmpp.stop();setImmediate(()=>console.log(JSON.stringify({phase:'stopping'})));await stopped;assert.deepEqual(errors,[]);console.log(JSON.stringify({outcome:'closed',reply:'reply'}));
           }finally{await xmpp.stop();}
         `;
         const probe = Bun.spawn(
@@ -181,15 +249,91 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
             },
             stdout: "pipe",
             stderr: "pipe",
+            stdin: "pipe",
             timeout: CHILD_TIMEOUT_MS,
           },
         );
         child = probe;
+        let clientPending = "";
+        clientReader = gated ? probe.stdout.getReader() : undefined;
+        async function receiveClient() {
+          while (!clientPending.includes("\n")) {
+            const { done, value } = await clientReader!.read();
+            if (done) {
+              throw new Error("TLS closure client exited before its response");
+            }
+            clientPending += new TextDecoder().decode(value);
+          }
+          const newline = clientPending.indexOf("\n");
+          const response = JSON.parse(clientPending.slice(0, newline));
+          clientPending = clientPending.slice(newline + 1);
+          return response;
+        }
+        if (gated) {
+          const connected = await receive();
+          expect(connected.phase).toBe("connected");
+          const file = await findSocket(
+            probe.pid,
+            connected.clientPort,
+            ready.port,
+          );
+          expect(file).toBeDefined();
+          peer.stdin.write("exchange\n");
+          await peer.stdin.flush();
+          expect(await receive()).toEqual({
+            phase: "held",
+            alerts: [["received", TLS_WARNING, TLS_CLOSE_NOTIFY]],
+            eof: false,
+          });
+          expect(await receiveClient()).toEqual({
+            phase: native ? "output-ended" : "stopping",
+          });
+          const retained = await ownsSocket(file!);
+          if (mode === "native-premature") {
+            // The same oracle must reject a client that destroys its read side.
+            expect(() => assert.equal(retained, true)).toThrow(
+              assert.AssertionError,
+            );
+          } else {
+            expect(retained).toBe(true);
+          }
+          peer.stdin.write("alert\n");
+          await peer.stdin.flush();
+          expect(await receive()).toEqual({
+            phase: "sent",
+            alerts: [
+              ["received", TLS_WARNING, TLS_CLOSE_NOTIFY],
+              ["sent", TLS_WARNING, TLS_CLOSE_NOTIFY],
+            ],
+          });
+          const deadline = Date.now() + DESCRIPTOR_TIMEOUT_MS;
+          while ((await ownsSocket(file!)) && Date.now() < deadline) {
+            await Bun.sleep(DESCRIPTOR_POLL_MS);
+          }
+          expect(await ownsSocket(file!)).toBe(false);
+          peer.stdin.write("finish\n");
+          await peer.stdin.flush();
+          probe.stdin.write("finish\n");
+          await probe.stdin.flush();
+        }
         const [exit, stdout, stderr] = await Promise.all([
           probe.exited,
-          new Response(probe.stdout).text(),
+          gated
+            ? receiveClient().then(JSON.stringify)
+            : new Response(probe.stdout).text(),
           new Response(probe.stderr).text(),
         ]);
+        if (clientReader) {
+          let trailing = clientPending;
+          for (;;) {
+            const { done, value } = await clientReader.read();
+            if (done) {
+              break;
+            }
+            trailing += new TextDecoder().decode(value);
+          }
+          expect(trailing).toBe("");
+        }
         const observed = (await receive()) as Records;
         const [peerExit, peerStderr] = await Promise.all([
           peer.exited,
@@ -260,6 +404,7 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
         peer.kill();
         await Promise.all([child?.exited, peer.exited]);
         reader.releaseLock();
+        clientReader?.releaseLock();
       }
     },
     TEST_TIMEOUT_MS,

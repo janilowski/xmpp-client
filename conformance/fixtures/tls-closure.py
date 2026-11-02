@@ -7,7 +7,9 @@ import socket
 import sys
 import xml.etree.ElementTree as ET
 
-dependencies, directory, version, mode = sys.argv[1:]
+dependencies, directory, version, mode, *options = sys.argv[1:]
+gated = options == ["reciprocal"]
+assert not options or gated
 sys.path.insert(0, dependencies)
 import tlslite
 from tlslite.api import TLSConnection, X509, X509CertChain, parsePEMKey, HandshakeSettings
@@ -179,6 +181,9 @@ try:
     records["cipher"] = connection.session.cipherSuite
     if connection.ecdhCurve is not None:
         records["ecdhCurve"] = connection.ecdhCurve
+    if gated:
+        print(json.dumps({"phase": "connected", "clientPort": raw.getpeername()[1]}), flush=True)
+        assert sys.stdin.readline().strip() == "exchange"
     if mode == "control":
         assert connection.read(min=4, max=4) == b"PING"
         records["application"].append("PING")
@@ -192,9 +197,17 @@ try:
     header, parser = result
     assert header.type == ContentType.alert
     assert list(parser.bytes[parser.index:]) == [AlertLevel.warning, AlertDescription.close_notify]
+    if gated:
+        print(json.dumps({"phase": "held", "alerts": records["alerts"],
+                          "eof": records["eof"]}), flush=True)
+        assert sys.stdin.readline().strip() == "alert"
     for _ in connection._sendMsg(Alert().create(AlertDescription.close_notify, AlertLevel.warning)):
         pass
     connection.sock.flush()
+    if gated:
+        print(json.dumps({"phase": "sent", "alerts": records["alerts"]}), flush=True)
+        # Keep TCP open: only the authenticated alert can release the client fd.
+        assert sys.stdin.readline().strip() == "finish"
 except Exception as error:
     records["errors"].append({"name": type(error).__name__, "message": str(error)})
 finally:
