@@ -7,7 +7,8 @@ import { createRevocationFixture } from "./fixtures/revocation.ts";
 // RFC 9325 §7.5 requires a revocation strategy; RFC 6120 §13.7.2 step 5
 // concerns initial checks, unlike periodic SHOULDs in §13.7.2.3.
 // These independent oracle/runtime capability controls do NOT establish the
-// library's default policy, browser revocation, or completion of #95.
+// library's default policy, browser revocation, or full revocation coverage.
+// Runtime/deployment ownership is documented in docs/profile.md (#95).
 // https://www.rfc-editor.org/rfc/rfc9325.html#section-7.5
 // https://www.rfc-editor.org/rfc/rfc6120.html#section-13.7.2
 const SETUP_TIMEOUT_MS = 30000;

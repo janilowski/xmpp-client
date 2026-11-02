@@ -78,11 +78,14 @@ WebSocket upgrade; source and minified-bundle tests retain strict assertions.
 Browsers retain their standard constructor and certificate validation.
 Restricted trust-anchor provisioning (RFC 6120 §13.6) and long-lived
 certificate expiry/OCSP rechecks (§13.7.2.3) are not verified by these tests.
-Initial revocation integration remains unresolved (#95). With a disposable CA,
-Bun 1.4.4 accepts an otherwise valid issuer-revoked leaf by default; explicitly
-supplied CRLs reject it before HTTP. Signed CRL/OCSP fixtures and native controls
-prove that capability, not default library or browser enforcement. No public
-CRL provisioning API is currently provided.
+Certificate revocation is delegated to the runtime and deployment (#95).
+The library does not acquire or refresh CRLs/OCSP responses or expose public
+revocation configuration. Deployments must evaluate and configure their native
+TLS policy; a successful connection is not proof of a revocation check.
+With a disposable CA, Bun 1.4.4 accepts an otherwise valid issuer-revoked leaf
+by default; explicitly supplied native CRLs reject it before HTTP. Signed
+CRL/OCSP fixtures prove that capability, not default library or browser
+enforcement. Delegation does not establish complete revocation conformance.
 
 RFC 10015 §4 strengthens BCP 195 to prohibit offering static-RSA suites.
 Bun's private adapter removes static RSA from the effective runtime cipher list
