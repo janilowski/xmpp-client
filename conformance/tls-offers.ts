@@ -81,6 +81,7 @@ export async function observeOffers(exercise: (port: number) => Promise<void>) {
     },
   );
   const reader = child.stdout.getReader();
+  let completed = false;
   let pending = "";
   const receive = async () => {
     while (!pending.includes("\n")) {
@@ -111,20 +112,41 @@ export async function observeOffers(exercise: (port: number) => Promise<void>) {
     assert.equal(observed.type, "snapshot");
     assert.deepEqual(observed.errors, []);
     assert.ok(observed.hellos.length > 0, "No ClientHello observed");
-    return observed.hellos.map((source) => {
+    const hellos = observed.hellos.map((source) => {
       const hello = new ClientHello().feed(Buffer.from(source, "base64"));
       assert.ok(hello, "Incomplete ClientHello snapshot");
       return hello;
     });
+    completed = true;
+    return hellos;
   } finally {
-    child.stdin.write("stop\n");
-    child.stdin.end();
-    const [exit, stderr] = await Promise.all([
-      child.exited,
-      new Response(child.stderr).text(),
-    ]);
-    assert.equal(exit, 0);
-    assert.equal(stderr, "");
+    // A failed observer may already have closed stdin. Reap it without
+    // replacing the original failure with a broken-pipe cleanup error.
+    let shutdownError;
+    if (completed) {
+      try {
+        child.stdin.write("stop\n");
+        child.stdin.end();
+      } catch (error) {
+        shutdownError = error;
+        child.kill();
+      }
+    } else {
+      child.kill();
+    }
+    try {
+      const [exit, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stderr).text(),
+      ]);
+      if (completed) {
+        assert.ifError(shutdownError);
+        assert.equal(exit, 0);
+        assert.equal(stderr, "");
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
 }
 
