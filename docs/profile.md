@@ -26,6 +26,13 @@ Without either, only UTF-8 is supported. Unsupported encodings and malformed
 bytes yield no endpoints; replacement characters cannot repair invalid input.
 The read-time byte limit and XML limits remain separate local resource policies.
 
+Discovery uses a DTD-free XML profile (#96): every `DOCTYPE` is rejected,
+including otherwise valid XRD documents. Internal entity/default-attribute
+declarations are not processed; external DTDs/entities are never retrieved.
+Serve plain XRD or configure a trusted WSS endpoint explicitly. This is an
+approved compatibility restriction, not unrestricted XRD/XML conformance.
+XMPP's separate mandatory DTD prohibition remains unchanged.
+
 HTTP redirects are rejected: a deliberate departure from RFC 6415 §2's SHOULD
 follow redirects. Browser Fetch hides manual redirect destinations and offers no
 per-hop approval for automatic following. Rejecting redirects avoids a hidden
