@@ -67,12 +67,15 @@ Version tests reject TLS 1.0/1.1, accept TLS 1.2/1.3 and prefer TLS 1.3 for both
 paths. Native Node peers and authenticated capability probes independently
 confirm the offered protocols; only the legacy test peer/probe permits obsolete
 crypto. These are Bun integration checks, not browser-version or cipher audits.
-Separate Linux Chromium tests use a disposable CA in an isolated NSS database,
-browser home, XDG paths and profile, without certificate-error exceptions.
+Separate Linux Chromium/Firefox tests use a disposable CA with isolated browser
+home, XDG paths and profiles, without certificate-error exceptions. Chromium's
+NSS database is under its isolated home; Firefox's is inside its profile.
 They verify missing fixture trust for direct WSS and initial HTTPS discovery.
 Trusted-CA controls reject wrong names, expiry and CN-only certificates there
 and at WSS targets selected by valid discovery, with successful controls and
-native certificate-error diagnostics. Protocol interoperability
+native certificate-error diagnostics. Firefox's generic WSS failure is paired
+with independent HTTPS certificate diagnostics at that same endpoint, not
+misrepresented as a WSS-specific certificate reason. Protocol interoperability
 fixtures using an SPKI exception remain separate. Public/system roots are not
 removed by the isolated NSS setup. No complete cipher, revocation or all-browser
 matrix is claimed. Expected runtime failures
@@ -81,7 +84,8 @@ remain executable test markers, not evidence of successful validation.
 Firefox also runs a bounded minified-bundle wire suite: authentication/restart,
 binding identity, bidirectional stanzas, namespace alternatives, fatal-input
 isolation and reciprocal XML/WebSocket closure. Its explicit loopback WS fixture
-does not validate TLS or establish the full Chromium coverage on Firefox.
+does not validate TLS; the separate native CA suite above covers selected
+certificate checks. Full Chromium coverage on Firefox is not established.
 
 Native Bun 1.4.2–1.4.4 retain CN fallback for Node compatibility (#50).
 The private adapter, verified on Bun 1.4.4, keeps native chain and hostname

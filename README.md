@@ -156,8 +156,8 @@ If the system service already occupies them, stop it only if it is not serving
 anything you need: `sudo systemctl stop prosody`.
 
 `test:unit` needs no server. `test:e2e` runs native integration tests;
-`test:browser` tests both bundles in Chromium and adds a bounded Firefox
-minified-bundle protocol suite, not Firefox TLS validation. `test:all` runs
+`test:browser` tests both bundles in Chromium, minified protocol flows in Firefox,
+and native certificate validation in both engines. `test:all` runs
 static checks, conformance and mutation checks, and both integration suites.
 OpenSSL 3 CLI provides independent TLS, CRL and OCSP fixture controls.
 The independent TLS 1.2 peer requires Python 3 and hash-pinned packages installed
@@ -185,8 +185,8 @@ them. CI uploads only the server logs on failure.
 
 TLS verification remains enabled in Bun using the fixture CA. The protocol
 interoperability browser uses an SPKI exception, not certificate-validation proof.
-Separate Linux Chromium tests import a disposable CA into an isolated NSS database
-and verify trust, hostname and expiry for WSS and HTTPS discovery without exceptions.
+Separate Linux Chromium/Firefox tests import a disposable CA into isolated NSS
+databases and verify trust, hostname and expiry for WSS and HTTPS discovery without exceptions.
 They isolate the browser home, XDG paths and profile; public/system roots remain.
 `certutil` is required (`nss-tools` on Fedora, `libnss3-tools` on Ubuntu).
 Set `XMPP_CERTUTIL` only when that executable is outside `PATH`.
