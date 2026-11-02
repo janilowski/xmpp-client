@@ -31,6 +31,7 @@ try {
       ? [
           "./browser.test.js",
           "./test/browser-tls.test.ts",
+          "./test/browser-tls-closure.test.ts",
           "./test/browser-cipher-offers.test.ts",
           "./test/browser-protocol.test.ts",
         ]

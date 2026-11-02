@@ -139,7 +139,19 @@ socket remains open; native premature-close controls fail that same assertion.
 The same witness covers malformed XML after binding/stanza exchange: one stream
 error precedes closure, ordinary output is blocked and later stanzas are not
 delivered. Native abrupt closure remains distinct from alerts. Other fatal-error
-paths and browser TLS closure remain unverified.
+paths remain unverified.
+
+Normal browser TLS closure has reproduced runtime failures (#99) on both TLS
+versions. Chromium 156.0.8078.4 sends no `close_notify` before TCP EOF. Firefox
+157.0 sends the alert but closes its receive socket before the peer's response;
+TLS 1.3 permits that generally, but the inherited XMPP profile requires waiting.
+An authenticated peer gates its own alert/TCP closure; Linux process-tree socket
+ownership, native orderly/premature controls and complete error-free XMPP
+exchanges distinguish these failures from teardown or handshake problems.
+Exact-version markers retain the normative assertions. `stop()` or a clean
+WebSocket close event is not proof of TLS shutdown, and the standard WebSocket
+API cannot force the missing native behavior. These findings keep the transport
+gate open; browser fatal-error closure is not covered by this normal-path probe.
 
 After a received XMPP `reset` (RFC 6120 §4.9.3.16), that client instance
 refuses further connections, including discovery, manual reconnect and

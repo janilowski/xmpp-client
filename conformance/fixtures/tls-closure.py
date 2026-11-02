@@ -8,13 +8,15 @@ import sys
 import xml.etree.ElementTree as ET
 
 dependencies, directory, version, mode, *options = sys.argv[1:]
-gated = options == ["reciprocal"]
+gated = options in (["reciprocal"], ["reciprocal-eof"])
+hold_eof = options == ["reciprocal-eof"]
 assert not options or gated
 sys.path.insert(0, dependencies)
 import tlslite
 from tlslite.api import TLSConnection, X509, X509CertChain, parsePEMKey, HandshakeSettings
 from tlslite.constants import ContentType, AlertDescription, AlertLevel
 from tlslite.messages import Alert, ServerKeyExchange
+from tlslite.errors import TLSAbruptCloseError
 
 assert tlslite.__version__ == "0.8.2", "Run bun run test:tls:setup"
 assert version in ("3", "4") and mode in ("control", "xmpp", "xmpp-fatal")
@@ -229,6 +231,11 @@ try:
         assert sys.stdin.readline().strip() == "finish"
 except Exception as error:
     records["errors"].append({"name": type(error).__name__, "message": str(error)})
+    if (hold_eof and isinstance(error, TLSAbruptCloseError) and records["eof"]
+            and not records["alerts"] and records["application"][-1:] == ["WS_CLOSE"]):
+        # Observe browser receive ownership before this peer sends TCP FIN.
+        print(json.dumps({"phase": "eof", "records": records}), flush=True)
+        assert sys.stdin.readline().strip() == "finish"
 finally:
     if raw is not None:
         raw.close()
