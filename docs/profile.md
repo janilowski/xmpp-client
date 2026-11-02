@@ -112,11 +112,17 @@ ESM and minified traffic, with independent fragmentation and OpenSSL controls.
 Native Bun currently refuses an explicit cipher expression with no eligible
 TLS 1.2 suites; that fails closed. The exact native TLS-1.3-only default path
 avoids this limitation without parsing arbitrary OpenSSL expressions.
-Chromium 156.0.8078.4 still offers static RSA on both paths (#86).
+Chromium 156.0.8078.4 and Firefox 157.0 still offer static RSA on both paths (#86).
 Exact-version expected failures retain the strict prohibition; they are not
 conformance passes. Standard Web APIs expose no cipher-selection control.
 Server-side RSA refusal does not repair the client offer. These tests do not certify other cipher,
 key-exchange or certificate requirements; this mandatory runtime gap remains open.
+
+Initial Bun, Chromium and Firefox ClientHellos offer only null TLS record
+compression. Independent non-null/list parser controls guard that observation.
+This is bounded offer evidence for RFC 9325 §3.3 and RFC 9846 §4.1.2, not proof
+of hostile server-selection or resumed-session handling. Certificate compression
+and WebSocket permessage-deflate are separate mechanisms.
 
 Bun 1.4.4 also completes TLS 1.2 without the server's `renegotiation_info`
 acknowledgement, contrary to RFC 9325 §3.5 (#91). Authenticated full-handshake

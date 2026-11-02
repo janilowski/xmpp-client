@@ -166,7 +166,7 @@ The Linux CI verification matrix is not a public support guarantee:
 | --------------------- | ------------------------ | -------------------------------------------------------- |
 | Bun 1.4.4             | Source, ESM and minified | Protocol, PKIX, TLS versions/closure and cipher offers   |
 | Chromium 156.0.8078.4 | ESM and classic bundles  | Protocol, Unicode, native certificates and cipher offers |
-| Firefox 157.0         | Minified classic bundle  | Protocol, Unicode and native certificates                |
+| Firefox 157.0         | Minified classic bundle  | Protocol, Unicode, native certificates and cipher offers |
 
 Coverage differs by engine; known runtime violations remain explicit expected
 failures, not conformance passes. Native Node 24.18.0 supplies peer/oracle

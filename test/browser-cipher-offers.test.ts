@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { chromium, type BrowserContext } from "playwright";
+import { chromium, firefox, type BrowserContext } from "playwright";
 import {
   OFFER_MODES,
   OFFER_TIMEOUT_MS,
@@ -14,10 +14,21 @@ import {
 
 // RFC 10015 §4 / Table 4: default native browser offers, not certificate checks.
 // https://www.rfc-editor.org/rfc/rfc10015.html#section-4
-const probe = Bun.spawnSync([chromium.executablePath(), "--version"]);
+const VERSION_TIMEOUT_MS = 5000;
+const probe = Bun.spawnSync([chromium.executablePath(), "--version"], {
+  timeout: VERSION_TIMEOUT_MS,
+});
 expect(probe.exitCode).toBe(0);
 const version = probe.stdout.toString().match(/\d+\.\d+\.\d+\.\d+/)?.[0];
 expect(version).toBeDefined();
+const firefoxProbe = Bun.spawnSync([firefox.executablePath(), "--version"], {
+  timeout: VERSION_TIMEOUT_MS,
+});
+expect(firefoxProbe.exitCode).toBe(0);
+const firefoxVersion = firefoxProbe.stdout
+  .toString()
+  .match(/\d+\.\d+(?:\.\d+)*/)?.[0];
+expect(firefoxVersion).toBeDefined();
 let context: BrowserContext;
 let directory: string;
 let origin: ReturnType<typeof Bun.serve>;
@@ -88,6 +99,83 @@ for (const mode of OFFER_MODES) {
     const knownFailure = version === "156.0.8078.4";
     test.failingIf(knownFailure)(
       `offers no static-RSA suites${knownFailure ? " [expected Chromium 156.0.8078.4 violation #86]" : ""}`,
+      () => {
+        expect(
+          hellos.map((hello) =>
+            hello.ciphers.filter((id) => STATIC_RSA.has(id)),
+          ),
+        ).toEqual(hellos.map(() => []));
+      },
+    );
+  });
+}
+
+// RFC 9325 §3.3 (TLS 1.2 SHOULD NOT) / RFC 9846 §4.1.2 (TLS 1.3 MUST).
+// Only initial TLS record-compression offers: not certificate compression,
+// WebSocket permessage-deflate, negotiated refusal or full Firefox TLS coverage.
+for (const mode of OFFER_MODES) {
+  describe(`RFC 10015 §4: Firefox minified bundle ${mode}`, () => {
+    let hellos: Hello[];
+    beforeAll(async () => {
+      const browser = await firefox.launch();
+      try {
+        expect(browser.version()).toBe(firefoxVersion!);
+        hellos = await observeOffers(async (port) => {
+          const page = await browser.newPage();
+          try {
+            await page.goto(`http://127.0.0.1:${origin.port}/`);
+            await page.addScriptTag({ path: "dist/xmpp.min.js" });
+            const result = await page.evaluate(
+              async (service) => {
+                const bundle = globalThis as typeof globalThis & {
+                  XMPP: typeof import("../src/index.ts");
+                };
+                const xmpp = bundle.XMPP.client({
+                  service,
+                  domain: "different-xmpp-domain.test",
+                  timeout: 2000,
+                }) as ReturnType<typeof bundle.XMPP.client> & {
+                  connect(service: string): Promise<void>;
+                };
+                xmpp.reconnect.stop();
+                xmpp.on("error", () => {});
+                try {
+                  await xmpp.connect(service);
+                  return "accepted";
+                } catch (error) {
+                  return {
+                    outcome: "rejected",
+                    name: error instanceof Error ? error.name : "unknown",
+                  };
+                } finally {
+                  await xmpp.stop();
+                }
+              },
+              mode === "direct WSS"
+                ? `wss://localhost:${port}/xmpp`
+                : `localhost:${port}`,
+            );
+            expect(result).toMatchObject({ outcome: "rejected" });
+            expect(result).not.toMatchObject({ name: "TimeoutError" });
+          } finally {
+            await page.close();
+          }
+        });
+        validateOfferControls(hellos);
+      } finally {
+        await browser.close();
+      }
+    }, OFFER_TIMEOUT_MS);
+
+    test("offers only null TLS compression", () => {
+      expect(hellos.map((hello) => hello.compression)).toEqual(
+        hellos.map(() => "00"),
+      );
+    });
+
+    const knownFailure = firefoxVersion === "157.0";
+    test.failingIf(knownFailure)(
+      `offers no static-RSA suites${knownFailure ? " [expected Firefox 157.0 violation #86]" : ""}`,
       () => {
         expect(
           hellos.map((hello) =>
