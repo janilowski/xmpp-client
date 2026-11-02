@@ -159,6 +159,20 @@ anything you need: `sudo systemctl stop prosody`.
 `test:browser` tests both bundles in Chromium, minified protocol flows in Firefox,
 and native certificate validation in both engines. `test:all` runs
 static checks, conformance and mutation checks, and both integration suites.
+
+The Linux CI verification matrix is not a public support guarantee:
+
+| Runtime               | Client artifacts         | Evidence                                                 |
+| --------------------- | ------------------------ | -------------------------------------------------------- |
+| Bun 1.4.4             | Source, ESM and minified | Protocol, PKIX, TLS versions/closure and cipher offers   |
+| Chromium 156.0.8078.4 | ESM and classic bundles  | Protocol, Unicode, native certificates and cipher offers |
+| Firefox 157.0         | Minified classic bundle  | Protocol, Unicode and native certificates                |
+
+Coverage differs by engine; known runtime violations remain explicit expected
+failures, not conformance passes. Native Node 24.18.0 supplies peer/oracle
+controls, not Node-client proof. Other engines, platforms and untested scenario
+combinations remain unverified, not declared unsupported.
+
 OpenSSL 3 CLI provides independent TLS, CRL and OCSP fixture controls.
 The independent TLS 1.2 peer requires Python 3 and hash-pinned packages installed
 by `test:tls:setup` into `server/.cache/tls-peer`, not system site-packages.
