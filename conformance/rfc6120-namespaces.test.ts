@@ -77,10 +77,14 @@ async function session(onFrame?: (frame: string, peer: ScriptedPeer) => void) {
 }
 
 // RFC 6120 §§4.1/4.8.4/11.2: an extension element named iq is not an IQ.
+// Namespaces 1.0 §2.3: case and percent spelling never normalize namespace names.
 test.each(
-  FOREIGN_NAMESPACES.flatMap((namespace) =>
-    RESPONSE_TYPES.map((type) => [namespace, type]),
-  ),
+  [
+    ...FOREIGN_NAMESPACES,
+    "JABBER:client",
+    "jabber:Client",
+    "jabber:clien%74",
+  ].flatMap((namespace) => RESPONSE_TYPES.map((type) => [namespace, type])),
 )(
   "RFC 6120 §4.8.4: foreign root namespace %j cannot complete an IQ %s",
   async (namespace, type) => {
@@ -111,6 +115,38 @@ test.each(
         )
         .catch((error: Error) => error);
       expect(result).not.toBeInstanceOf(Error);
+      expect(result.getNS()).toBe(CLIENT);
+      expect(result.getChild("verified", FOREIGN)).toBeDefined();
+      expect(errors).toEqual([]);
+      expect(peer.errors).toEqual([]);
+    } finally {
+      await xmpp.stop();
+      await peer.stop();
+    }
+  },
+);
+
+// XML attribute-reference replacement precedes namespace comparison (§2.3).
+test.each(["jabber:client", "jabber:clien&#116;"])(
+  "Namespaces §2.3: XML-normalized namespace %j completes a correlated IQ",
+  async (namespace) => {
+    const { xmpp, peer, errors } = await session((frame, remote) => {
+      const root = readFrame(frame)[0];
+      if (!("open" in root) || root.attributes["{}id"] !== "normalized") {
+        return;
+      }
+      remote.send(
+        `<iq xmlns="${namespace}" type="result" id="normalized"><verified xmlns="${FOREIGN}"/></iq>`,
+      );
+    });
+    try {
+      const result = await xmpp.iqCaller.request(
+        xml(
+          "iq",
+          { type: "get", id: "normalized" },
+          xml("ping", { xmlns: PING }),
+        ),
+      );
       expect(result.getNS()).toBe(CLIENT);
       expect(result.getChild("verified", FOREIGN)).toBeDefined();
       expect(errors).toEqual([]);
