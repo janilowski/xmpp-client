@@ -1,5 +1,11 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import { firefox, type Browser, type Page } from "playwright";
+import { rolldown } from "rolldown";
+import {
+  CONTEXT_VECTORS,
+  MAPPING_VECTORS,
+  VERSION_VECTORS,
+} from "../conformance/rfc7622/vectors.js";
 import { ScriptedPeer } from "../conformance/peer.ts";
 import { readFrame } from "../conformance/xml.ts";
 import type { Element } from "../types/index.js";
@@ -19,6 +25,11 @@ const CLOSE = `<close xmlns="${FRAMING}"/>`;
 const DEADLINE_MS = 4000;
 let browser: Browser;
 let origin: ReturnType<typeof Bun.serve>;
+type BrowserGlobals = typeof globalThis & {
+  XMPP: typeof import("../src/index.ts");
+  UnicodeTables: Record<string, { test(value: string): boolean }>;
+  restoreUnicodeMethods?: () => void;
+};
 
 beforeAll(async () => {
   browser = await firefox.launch();
@@ -34,6 +45,161 @@ afterAll(async () => {
   await browser?.close();
   origin?.stop(true);
 });
+
+// Internal table-decoder evidence, not a new public export. The frozen digest
+// covers every property/code point; public bundle behavior is checked below.
+test("Firefox decodes every Unicode property without changing its repertoire", async () => {
+  const build = await rolldown({ input: "src/jid/lib/unicode.js" });
+  let page: Page | undefined;
+  try {
+    page = await browser.newPage();
+    const { output } = await build.generate({
+      format: "iife",
+      name: "UnicodeTables",
+      minify: true,
+    });
+    await page.goto(`http://127.0.0.1:${origin.port}/`);
+    await page.addScriptTag({ content: output[0]!.code });
+    const hash = await page.evaluate(async () => {
+      const properties = Object.entries(
+        (globalThis as BrowserGlobals).UnicodeTables,
+      )
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([, property]) => property);
+      const end = 0x110000;
+      const values = new Uint8Array(properties.length * end);
+      for (let bit = 0; bit < properties.length; bit++) {
+        for (let cp = 0; cp < end; cp++) {
+          values[bit * end + cp] = Number(
+            properties[bit]!.test(String.fromCodePoint(cp)),
+          );
+        }
+      }
+      // eslint-disable-next-line n/no-unsupported-features/node-builtins -- Runs in Firefox, not Node.
+      const digest = await globalThis.crypto.subtle.digest("SHA-256", values);
+      return [...new Uint8Array(digest)]
+        .map((byte) => byte.toString(16).padStart(2, "0"))
+        .join("");
+    });
+    expect(hash).toBe(
+      "c445e88b892f68395bd6025dabb88abb11d9e53de2165bb77849a1ca1487ba83",
+    );
+  } finally {
+    try {
+      await page?.close();
+    } finally {
+      await build.close();
+    }
+  }
+}, 20000);
+
+// RFC 7622 §§3.2–3.4 / RFC 5892 contexts and the selected Unicode-16 profile.
+// Expectations come from the shared literal vectors, never production tables.
+test("Firefox minified JIDs preserve shared contexts, mappings and Unicode 16 repertoire", async () => {
+  const page = await browser.newPage();
+  try {
+    await page.goto(`http://127.0.0.1:${origin.port}/`);
+    await page.addScriptTag({ path: "dist/xmpp.min.js" });
+    const vectors = [
+      ...CONTEXT_VECTORS,
+      ...MAPPING_VECTORS,
+      ...VERSION_VECTORS,
+    ];
+    const actual = await page.evaluate(
+      (vectors) => ({
+        caseMapping: "\u1c89".toLowerCase(),
+        normalization: "\u{1ccf0}".normalize("NFKC"),
+        results: vectors.map(({ input }) => {
+          try {
+            return (globalThis as BrowserGlobals).XMPP.jid(input).toString();
+          } catch (error) {
+            return error instanceof TypeError
+              ? null
+              : { error: error instanceof Error ? error.name : String(error) };
+          }
+        }),
+      }),
+      vectors,
+    );
+    expect(actual.caseMapping).toBe("\u1c8a");
+    expect(actual.normalization).toBe("0");
+    for (let index = 0; index < vectors.length; index++) {
+      const { section, slot, input, expected } = vectors[index]!;
+      expect({ section, slot, input, actual: actual.results[index] }).toEqual({
+        section,
+        slot,
+        input,
+        actual: expected,
+      });
+    }
+  } finally {
+    await page.close();
+  }
+});
+
+test.each(["case mapping", "normalization"])(
+  "Firefox minified JIDs fail closed with inadequate Unicode 16 %s",
+  async (probe) => {
+    // Each fresh realm loads the bundle only after simulating missing support.
+    const page = await browser.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${origin.port}/`);
+      await page.evaluate((probe) => {
+        const lower = String.prototype.toLowerCase;
+        const normalize = String.prototype.normalize;
+        (globalThis as BrowserGlobals).restoreUnicodeMethods = () => {
+          String.prototype.toLowerCase = lower;
+          String.prototype.normalize = normalize;
+        };
+        if (probe === "case mapping") {
+          String.prototype.toLowerCase = function () {
+            return String(this) === "\u1c89" ? "\u1c89" : lower.call(this);
+          };
+        } else {
+          String.prototype.normalize = function (form) {
+            return String(this) === "\u{1ccf0}" && form === "NFKC"
+              ? "\u{1ccf0}"
+              : normalize.call(this, form);
+          };
+        }
+      }, probe);
+      await page.addScriptTag({ path: "dist/xmpp.min.js" });
+      const actual = await page.evaluate(() => {
+        const globals = globalThis as BrowserGlobals;
+        globals.restoreUnicodeMethods!();
+        const { jid } = globals.XMPP;
+        return {
+          rejected: [
+            "\u1c89@example.com",
+            "bücher.example",
+            "xn--bcher-kva.example",
+            "example.com/é",
+          ].map((input) => {
+            try {
+              jid(input);
+              return false;
+            } catch (error) {
+              return error instanceof TypeError;
+            }
+          }),
+          ascii: jid("A@example.com/ASCII").toString(),
+        };
+      });
+      expect(actual).toEqual({
+        rejected: [true, true, true, true],
+        ascii: "a@example.com/ASCII",
+      });
+    } finally {
+      try {
+        await page.evaluate(() =>
+          (globalThis as BrowserGlobals).restoreUnicodeMethods?.(),
+        );
+      } finally {
+        await page.close();
+      }
+    }
+  },
+);
 
 for (const mode of [
   "ordinary",
