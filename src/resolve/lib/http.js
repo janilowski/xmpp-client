@@ -18,9 +18,10 @@ export async function resolve(domain, { signal } = {}) {
     const requestSignal = signal
       ? AbortSignal.any([signal, deadline])
       : deadline;
-    const tls = getBunTLSOptions();
+    const url = `https://${domain}/.well-known/host-meta`;
+    const tls = getBunTLSOptions(url);
     // Fail closed rather than letting a redirect change the trusted origin/scheme.
-    const res = await fetch(`https://${domain}/.well-known/host-meta`, {
+    const res = await fetch(url, {
       redirect: "error",
       signal: requestSignal,
       ...(tls ? { tls } : {}),

@@ -35,6 +35,32 @@ const certificates = await Promise.all(
 );
 
 describe("Bun TLS endpoint policy", () => {
+  test.each([
+    ["wss://EXAMPLE.test.:443/path?query=1", "example.test"],
+    [
+      "https://xn--bcher-kva.example./.well-known/host-meta",
+      "xn--bcher-kva.example",
+    ],
+    ["wss://bücher.example./xmpp", "xn--bcher-kva.example"],
+    ["https://localhost/path", undefined],
+    ["wss://127.0.0.1/xmpp", undefined],
+    ["wss://[::1]/xmpp", undefined],
+  ])("RFC 6066 §3: endpoint SNI override for %s", (endpoint, servername) => {
+    expect(getBunTLSOptions(endpoint)!.servername).toBe(servername);
+  });
+
+  test("SNI normalization retains certificate verification", () => {
+    const options = getBunTLSOptions("wss://localhost./xmpp")!;
+    expect(options.rejectUnauthorized).toBe(true);
+    expect(options.ciphers).toBe(getBunTLSOptions()!.ciphers);
+    expect(
+      options.checkServerIdentity!("localhost", certificates[1]),
+    ).toBeUndefined();
+    expect(
+      options.checkServerIdentity!("localhost", certificates[8]),
+    ).toBeInstanceOf(Error);
+  });
+
   test("rejects CN-only even when native compatibility permits it", () => {
     expect(
       new X509Certificate(certificates[0].raw).subjectAltName,

@@ -25,7 +25,7 @@ export default class Socket extends EventEmitter {
     this.url = url;
     this.secure = isSecure(url);
     const tls =
-      parseURI(url).protocol === "wss:" ? getBunTLSOptions() : undefined;
+      parseURI(url).protocol === "wss:" ? getBunTLSOptions(url) : undefined;
     // Bun takes TLS options in its second argument; browsers keep the standard API.
     this._attachSocket(
       new WebSocket(

@@ -60,6 +60,13 @@ material.
 `Socket.secure` also permits explicit loopback credentials: it is not proof
 of encryption. TLS is hop-by-hop, not end-to-end protection.
 
+For a DNS endpoint ending in a root dot, Bun's native SNI override removes
+that dot as required by RFC 6066 §3 (#104). The HTTP authority, URL/path and
+certificate endpoint remain unchanged; the logical XMPP domain is not SNI.
+Authenticated source/ESM/minified WSS/discovery tests check case/root-dot
+alternatives and omit literal-IP SNI. Browser SNI and actual IDNA SNI remain
+unverified by this bounded matrix; standard browser APIs are unchanged.
+
 For WSS and HTTPS discovery, the selected profile relies on native HTTPS/PKIX
 validation rather than adding RFC 6120 §13.7.1.1's extra CA `digitalSignature`
 requirement, imported by §13.7.2 step 4. RFC 5280 §4.2.1.3 assigns certificate

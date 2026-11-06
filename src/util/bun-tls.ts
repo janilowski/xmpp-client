@@ -27,7 +27,9 @@ const TLS13_CIPHERS = new Set([
   "TLS_AES_128_GCM_SHA256",
 ]);
 
-export default function getBunTLSOptions(): ConnectionOptions | undefined {
+export default function getBunTLSOptions(
+  endpoint?: string,
+): ConnectionOptions | undefined {
   const process = globalThis.process;
   if (!process?.versions?.bun) {
     return undefined;
@@ -43,6 +45,7 @@ export default function getBunTLSOptions(): ConnectionOptions | undefined {
   const { domainToASCII } = process.getBuiltinModule(
     "node:url",
   ) as typeof import("node:url");
+  const hostname = endpoint ? new URL(endpoint).hostname : "";
 
   const ciphers = tls.DEFAULT_CIPHERS;
   // Bun raises its native default minimum to TLS 1.3 when the legacy list is
@@ -52,6 +55,8 @@ export default function getBunTLSOptions(): ConnectionOptions | undefined {
     .every((cipher) => TLS13_CIPHERS.has(cipher));
 
   return {
+    // RFC 6066 §3: normalize SNI only; retain the URL and HTTP authority.
+    ...(hostname.endsWith(".") ? { servername: hostname.slice(0, -1) } : {}),
     ciphers: tls13Only
       ? undefined
       : `${ciphers}:${NO_RSA_KEY_EXCHANGE}:${NO_CBC_CIPHERS}`,

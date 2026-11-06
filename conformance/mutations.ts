@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "retain the DNS root dot in Bun SNI",
+    file: "src/util/bun-tls.ts",
+    before: "{ servername: hostname.slice(0, -1) }",
+    after: "{ servername: hostname }",
+    suite: "conformance/rfc6066-sni.test.ts",
+    test: "DNS root dot SNI/Host / source",
+  },
+  {
+    name: "omit the WSS endpoint from native SNI policy",
+    file: "src/websocket/lib/Socket.js",
+    before: "getBunTLSOptions(url)",
+    after: "getBunTLSOptions()",
+    suite: "conformance/rfc6066-sni.test.ts",
+    test: "DNS root dot SNI/Host / source / direct",
+  },
+  {
+    name: "omit the HTTPS endpoint from native SNI policy",
+    file: "src/resolve/lib/http.js",
+    before: "getBunTLSOptions(url)",
+    after: "getBunTLSOptions()",
+    suite: "conformance/rfc6066-sni.test.ts",
+    test: "DNS root dot SNI/Host / source / discovery",
+  },
+  {
     name: "omit Bun WSS endpoint TLS policy",
     file: "src/websocket/lib/Socket.js",
     before: "tls ? { protocols: [SUBPROTOCOL], tls } : [SUBPROTOCOL],",
@@ -3988,6 +4012,7 @@ for (const mutation of mutations) {
       "conformance/rfc10015-cipher-offers.test.ts",
       "conformance/rfc9325-cbc.test.ts",
       "conformance/rfc6120-certificates.test.ts",
+      "conformance/rfc6066-sni.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/rfc6120.test.ts",
@@ -4059,7 +4084,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc7395-tls.test.ts" ||
       mutation.suite === "conformance/rfc10015-cipher-offers.test.ts" ||
       mutation.suite === "conformance/rfc9325-cbc.test.ts" ||
-      mutation.suite === "conformance/rfc6120-certificates.test.ts"
+      mutation.suite === "conformance/rfc6120-certificates.test.ts" ||
+      mutation.suite === "conformance/rfc6066-sni.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });
