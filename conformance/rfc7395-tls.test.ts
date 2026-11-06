@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { generate } from "selfsigned";
 
 // RFC 7395 §§3.9, 6; RFC 7590 §3.4; RFC 6120 §13.7.2;
-// RFC 5280 §§6.1.3(a), 6.1.4(k); RFC 9525 §1.2;
+// RFC 5280 §§6.1.3(a), 6.1.4(k/n); RFC 9525 §1.2;
 // XEP-0156 1.4.0 §2.2: authenticate the complete HTTPS discovery and WSS
 // certificate paths and endpoint identities independently of the XMPP domain.
 // PKIX belongs to the runtime; these are integration scenarios.
@@ -60,6 +60,7 @@ beforeAll(async () => {
     "chain-untrusted-intermediate",
     "chain-expired-intermediate",
     "chain-non-ca-intermediate",
+    "chain-missing-key-cert-sign",
   ]) {
     const issuer =
       scenario === "chain-untrusted-intermediate"
@@ -86,7 +87,8 @@ beforeAll(async () => {
             : [
                 {
                   name: "keyUsage" as const,
-                  keyCertSign: true,
+                  digitalSignature: scenario === "chain-missing-key-cert-sign",
+                  keyCertSign: scenario !== "chain-missing-key-cert-sign",
                   cRLSign: true,
                   critical: true,
                 },
@@ -120,6 +122,7 @@ describe.each([
   ["direct", "chain-untrusted-intermediate"],
   ["direct", "chain-expired-intermediate"],
   ["direct", "chain-non-ca-intermediate"],
+  ["direct", "chain-missing-key-cert-sign"],
   ["direct", "chain-missing-intermediate"],
   ["discovery", "valid"],
   ["discovery", "bad-signature"],
@@ -135,6 +138,7 @@ describe.each([
   ["discovery", "chain-untrusted-intermediate"],
   ["discovery", "chain-expired-intermediate"],
   ["discovery", "chain-non-ca-intermediate"],
+  ["discovery", "chain-missing-key-cert-sign"],
   ["discovery", "chain-missing-intermediate"],
 ] as const)("§3.9/6 PKIX: %s / %s", (mode, scenario) => {
   let server: Bun.Server<undefined> | undefined;
@@ -330,9 +334,11 @@ describe.each([
           : authority.cert,
       );
 
-      expect(parsedIntermediate.ca).toBe(
-        scenario !== "chain-non-ca-intermediate",
-      );
+      if (scenario !== "chain-missing-key-cert-sign") {
+        expect(parsedIntermediate.ca).toBe(
+          scenario !== "chain-non-ca-intermediate",
+        );
+      }
       expect(parsedIntermediate.issuer).toBe(parsedIssuer.subject);
       expect(parsedIntermediate.verify(parsedIssuer.publicKey)).toBe(true);
       expect(parsedIntermediate.verify(parsedAuthority.publicKey)).toBe(
@@ -342,6 +348,76 @@ describe.each([
       expect(Date.parse(parsedIntermediate.validTo) > now).toBe(
         scenario !== "chain-expired-intermediate",
       );
+
+      if (scenario === "chain-missing-key-cert-sign") {
+        // RFC 5280 §6.1.4(n): digitalSignature cannot authorize CA signing.
+        // Decode the actual CA flag separately: X509Certificate.ca also
+        // considers key usage, so false alone cannot isolate this defect.
+        const leafFile = `${mode}-${scenario}.pem`;
+        const issuerFile = `${mode}-${scenario}-issuer.pem`;
+        await Promise.all([
+          writeFile(join(directory, leafFile), certificate.cert),
+          writeFile(join(directory, issuerFile), intermediate.cert),
+        ]);
+        for (const [args, expectedExit] of [
+          [
+            [
+              "x509",
+              "-in",
+              issuerFile,
+              "-noout",
+              "-ext",
+              "basicConstraints,keyUsage",
+            ],
+            0,
+          ],
+          [
+            [
+              "verify",
+              "-CAfile",
+              "ca.pem",
+              "-untrusted",
+              issuerFile,
+              "-purpose",
+              "sslserver",
+              "-verify_hostname",
+              "localhost",
+              leafFile,
+            ],
+            OPENSSL_VERIFY_FAILURE,
+          ],
+        ] as const) {
+          const verifier = Bun.spawn(["openssl", ...args], {
+            cwd: directory,
+            stdout: "pipe",
+            stderr: "pipe",
+            timeout: OPENSSL_TIMEOUT_MS,
+          });
+          try {
+            const [exit, stdout, stderr] = await Promise.all([
+              verifier.exited,
+              new Response(verifier.stdout).text(),
+              new Response(verifier.stderr).text(),
+            ]);
+            expect({ exit, stdout, stderr }).toMatchObject({
+              exit: expectedExit,
+            });
+            if (expectedExit === 0) {
+              expect(stdout.trim()).toBe(
+                "X509v3 Basic Constraints: critical\n    CA:TRUE\nX509v3 Key Usage: critical\n    Digital Signature, CRL Sign",
+              );
+              expect(stderr).toBe("");
+            } else {
+              expect(stderr).toContain(
+                "key usage does not include certificate signing",
+              );
+            }
+          } finally {
+            verifier.kill();
+            await verifier.exited;
+          }
+        }
+      }
     }
 
     let upgrades = 0;
