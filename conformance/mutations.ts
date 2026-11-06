@@ -70,6 +70,14 @@ const mutations = [
     test: "Bun source direct WSS / default",
   },
   {
+    name: "allow CBC without negotiated EtM in Bun",
+    file: "src/util/bun-tls.ts",
+    before: '"!SHA1:!ECDHE-RSA-AES128-SHA256:!ECDHE-ECDSA-AES128-SHA256";',
+    after: '"";',
+    suite: "conformance/rfc9325-cbc.test.ts",
+    test: "CBC requires negotiated EtM or refusal / source direct",
+  },
+  {
     name: "accept an empty TLS end-entity subject",
     file: "src/util/bun-tls.ts",
     before: "if (!parsed.subject || parsed.ca) {",
@@ -88,8 +96,9 @@ const mutations = [
   {
     name: "break the native TLS13-only application policy",
     file: "src/util/bun-tls.ts",
-    before: "ciphers: tls13Only ? undefined : `${ciphers}:${NO_RSA_KEY_EXCHANGE}`,",
-    after: "ciphers: `${ciphers}:${NO_RSA_KEY_EXCHANGE}`,",
+    before:
+      "ciphers: tls13Only\n      ? undefined\n      : `${ciphers}:${NO_RSA_KEY_EXCHANGE}:${NO_CBC_CIPHERS}`,",
+    after: "ciphers: `${ciphers}:${NO_RSA_KEY_EXCHANGE}:${NO_CBC_CIPHERS}`,",
     suite: "src/util/bun-tls.test.ts",
     test: "retains the native TLS 1.3-only default policy",
   },
@@ -3977,7 +3986,9 @@ for (const mutation of mutations) {
       "conformance/rfc7395-outgoing-framing.test.ts",
       "conformance/rfc7395-tls.test.ts",
       "conformance/rfc10015-cipher-offers.test.ts",
+      "conformance/rfc9325-cbc.test.ts",
       "conformance/rfc6120-certificates.test.ts",
+      "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
@@ -4047,6 +4058,7 @@ for (const mutation of mutations) {
     if (
       mutation.suite === "conformance/rfc7395-tls.test.ts" ||
       mutation.suite === "conformance/rfc10015-cipher-offers.test.ts" ||
+      mutation.suite === "conformance/rfc9325-cbc.test.ts" ||
       mutation.suite === "conformance/rfc6120-certificates.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.

@@ -3,6 +3,10 @@ import type { ConnectionOptions } from "node:tls";
 // RFC 9525 §§2, 6.3; RFC 10015 §4: tighten Bun's compatibility defaults
 // on the same verified connection, without changing browser-owned TLS.
 const NO_RSA_KEY_EXCHANGE = "!kRSA";
+// RFC 9325 §4.2: Bun has no EtM or generic CBC selector. Exclude its
+// CBC-SHA1 MAC suites and both explicitly supported CBC-SHA256 suites.
+const NO_CBC_CIPHERS =
+  "!SHA1:!ECDHE-RSA-AES128-SHA256:!ECDHE-ECDSA-AES128-SHA256";
 // RFC 9155 §2: Bun 1.4.4's native order without SHA-1. BoringSSL has no
 // defaults-minus-hash expression; actual-offer tests detect upstream drift.
 const SIGNATURE_ALGORITHMS = [
@@ -48,7 +52,9 @@ export default function getBunTLSOptions(): ConnectionOptions | undefined {
     .every((cipher) => TLS13_CIPHERS.has(cipher));
 
   return {
-    ciphers: tls13Only ? undefined : `${ciphers}:${NO_RSA_KEY_EXCHANGE}`,
+    ciphers: tls13Only
+      ? undefined
+      : `${ciphers}:${NO_RSA_KEY_EXCHANGE}:${NO_CBC_CIPHERS}`,
     sigalgs: SIGNATURE_ALGORITHMS,
     rejectUnauthorized: true,
     checkServerIdentity(hostname, certificate) {

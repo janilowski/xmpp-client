@@ -4,6 +4,9 @@ import * as tls from "node:tls";
 import { generate } from "selfsigned";
 import getBunTLSOptions from "./bun-tls.ts";
 
+const CIPHER_EXCLUSIONS =
+  ":!kRSA:!SHA1:!ECDHE-RSA-AES128-SHA256:!ECDHE-ECDSA-AES128-SHA256";
+
 const certificates = await Promise.all(
   (
     [
@@ -144,11 +147,11 @@ describe("Bun TLS endpoint policy", () => {
     ).toBeInstanceOf(Error);
   });
 
-  test("requires native PKIX verification and removes static RSA exchange", () => {
+  test("requires native PKIX verification and excludes static RSA and CBC", () => {
     const configured = tls.DEFAULT_CIPHERS;
     const options = getBunTLSOptions()!;
     expect(options.rejectUnauthorized).toBe(true);
-    expect(options.ciphers).toBe(`${configured}:!kRSA`);
+    expect(options.ciphers).toBe(`${configured}${CIPHER_EXCLUSIONS}`);
     expect(tls.DEFAULT_CIPHERS).toBe(configured);
   });
 
@@ -184,21 +187,24 @@ describe("Bun TLS endpoint policy", () => {
     expect(getBunTLSOptions()).toBeDefined();
   });
 
-  test.each(["ECDHE-RSA-AES128-GCM-SHA256"])(
-    "preserves the configured cipher list: %s",
-    (configured) => {
-      const runtimeTLS = process.getBuiltinModule("node:tls")!;
-      const original = Reflect.get(runtimeTLS, "DEFAULT_CIPHERS");
-      try {
-        Reflect.set(runtimeTLS, "DEFAULT_CIPHERS", configured);
-        const effective = Reflect.get(runtimeTLS, "DEFAULT_CIPHERS");
-        expect(getBunTLSOptions()!.ciphers).toBe(`${effective}:!kRSA`);
-        expect(Reflect.get(runtimeTLS, "DEFAULT_CIPHERS")).toBe(effective);
-      } finally {
-        Reflect.set(runtimeTLS, "DEFAULT_CIPHERS", original);
-      }
-    },
-  );
+  test.each([
+    "ECDHE-RSA-AES128-GCM-SHA256",
+    "ECDHE-RSA-AES256-GCM-SHA384",
+    "ECDHE-RSA-CHACHA20-POLY1305",
+  ])("preserves the configured cipher list: %s", (configured) => {
+    const runtimeTLS = process.getBuiltinModule("node:tls")!;
+    const original = Reflect.get(runtimeTLS, "DEFAULT_CIPHERS");
+    try {
+      Reflect.set(runtimeTLS, "DEFAULT_CIPHERS", configured);
+      const effective = Reflect.get(runtimeTLS, "DEFAULT_CIPHERS");
+      expect(getBunTLSOptions()!.ciphers).toBe(
+        `${effective}${CIPHER_EXCLUSIONS}`,
+      );
+      expect(Reflect.get(runtimeTLS, "DEFAULT_CIPHERS")).toBe(effective);
+    } finally {
+      Reflect.set(runtimeTLS, "DEFAULT_CIPHERS", original);
+    }
+  });
 
   test("retains the native TLS 1.3-only default policy", () => {
     const runtimeTLS = process.getBuiltinModule("node:tls")!;

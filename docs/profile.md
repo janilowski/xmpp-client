@@ -145,6 +145,18 @@ conformance passes. Standard Web APIs expose no cipher-selection control.
 Server-side RSA refusal does not repair the client offer. These tests do not certify other cipher,
 key-exchange or certificate requirements; this mandatory runtime gap remains open.
 
+The approved Bun policy also rejects CBC suites rather than implementing EtM
+(RFC 9325 §4.2 / #102). Bun 1.4.4 offers no native EtM enforcement; its generic
+`!CBC` cipher selector is ignored. The adapter excludes CBC-SHA1 MAC suites and
+both supported CBC-SHA256 suites, without changing handshake signature policy.
+Authenticated native controls verify CBC with EtM; application tests require
+EtM or refusal before protected HTTP and preserve GCM/TLS 1.3. Independent IANA
+offer checks cover the default and explicitly expanded cipher lists.
+CBC-only servers are intentionally unsupported. A configured CBC-only list
+also fails closed against TLS 1.3 because Bun rejects an empty legacy list;
+the native TLS-1.3-only default remains supported. Browser CBC negotiation is
+not established by these Bun tests; there is no Web API cipher-policy control.
+
 Initial Bun, Chromium and Firefox ClientHellos offer only null TLS record
 compression. Independent non-null/list parser controls guard that observation.
 This is bounded offer evidence for RFC 9325 §3.3 and RFC 9846 §4.2.2, not proof
