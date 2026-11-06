@@ -60,6 +60,17 @@ material.
 `Socket.secure` also permits explicit loopback credentials: it is not proof
 of encryption. TLS is hop-by-hop, not end-to-end protection.
 
+For WSS and HTTPS discovery, the selected profile relies on native HTTPS/PKIX
+validation rather than adding RFC 6120 §13.7.1.1's extra CA `digitalSignature`
+requirement, imported by §13.7.2 step 4. RFC 5280 §4.2.1.3 assigns certificate
+signing to the separate `keyCertSign` bit; absence of `digitalSignature` is not
+absence of signature verification. Native signature, path, purpose, endpoint
+identity and validity checks remain required. RFC 7395 §6 recognizes the
+browser's certificate-access boundary; Bun-specific access does not supply a
+portable browser check. This is an explicit profile limitation, not proof of
+literal compliance with the extra CA requirement or an exemption from other
+certificate constraints.
+
 The Bun disposable-CA tests exercise root trust, hostname and expiry rejection
 for direct WSS and HTTPS discovery. Intermediate-chain scenarios accept a valid
 chain and reject an untrusted, expired, non-CA or missing intermediate.
