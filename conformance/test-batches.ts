@@ -1,9 +1,12 @@
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { basename, dirname, resolve } from "node:path";
+import { validateReport } from "./report.ts";
 
 // Match Bun's test filenames; callers execute the discovered paths explicitly.
 // https://bun.com/docs/test
 const TEST_FILENAME = /[._](?:test|spec)\.(?:js|jsx|ts|tsx|mjs|cjs|mts|cts)$/;
+const BATCH_TIMEOUT_MS = 90_000;
 
 export function discoverSuites(directory: string) {
   const suites = readdirSync(directory, {
@@ -35,4 +38,27 @@ export function groupSuites(paths: readonly string[]) {
     groups.set(standard, suites);
   }
   return groups;
+}
+
+export function runBatch(command: string[], report: string) {
+  const result = spawnSync(command[0], command.slice(1), {
+    stdio: "inherit",
+    timeout: BATCH_TIMEOUT_MS,
+  });
+  let reportError: string | undefined;
+  try {
+    validateReport(
+      new TextDecoder("utf-8", { fatal: true }).decode(readFileSync(report)),
+    );
+  } catch (error) {
+    reportError = error instanceof Error ? error.message : String(error);
+  }
+  return {
+    command,
+    exitCode: result.status,
+    signal: result.signal,
+    error: result.error?.message,
+    reportError,
+    passed: result.status === 0 && reportError === undefined,
+  };
 }

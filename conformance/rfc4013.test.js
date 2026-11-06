@@ -39,21 +39,24 @@ test.each([
 });
 
 test.each([
-  "",
-  "\u00ad",
-  "\u0007",
-  "\ue000",
-  "\uffff",
-  "\ud800",
-  "\ufff9",
-  "\u2ff0",
-  "\u202e",
-  "\u{e0001}",
-  "\u0627a\u0628",
-  "\u0627\u0031",
-])("RFC 4013 prohibited output / bidi / empty username: %j", async (input) => {
-  await expect(initial(input)).rejects.toThrow();
-});
+  ["empty", ""],
+  ["U+00AD", "\u00ad"],
+  ["U+0007", "\u0007"],
+  ["U+E000", "\ue000"],
+  ["U+FFFF", "\uffff"],
+  ["U+D800", "\ud800"],
+  ["U+FFF9", "\ufff9"],
+  ["U+2FF0", "\u2ff0"],
+  ["U+202E", "\u202e"],
+  ["U+E0001", "\u{e0001}"],
+  ["mixed RandAL/Latin", "\u0627a\u0628"],
+  ["RandAL ending with digit", "\u0627\u0031"],
+])(
+  "RFC 4013 prohibited output / bidi / empty username: %s",
+  async (_label, input) => {
+    await expect(initial(input)).rejects.toThrow();
+  },
+);
 
 test.each([
   "\u0221",

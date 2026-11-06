@@ -39,6 +39,12 @@ harness and transport units form another batch. Discovery retains every test
 file, including unknown prefixes. Reports record each executed command/result;
 a failed batch fails the gate without suppressing the remaining batches.
 
+JUnit XML must also parse successfully. Metadata preserves the child status
+and a separate report error; malformed artifacts are retained unchanged and
+fail the gate. Give hostile Unicode inputs explicit ASCII display labels,
+keeping the original values in test data so reporter escaping cannot merge
+otherwise distinct cases.
+
 The transcript normalizer shares `saxes` with production; agreement alone is not
 independent validation. Literal malformed inputs and Chromium's native DOMParser
 provide additional oracles. Saxes 6 is archived upstream; it is not certified by

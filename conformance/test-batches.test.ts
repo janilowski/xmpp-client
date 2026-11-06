@@ -1,8 +1,86 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { discoverSuites, groupSuites } from "./test-batches.ts";
+import { discoverSuites, groupSuites, runBatch } from "./test-batches.ts";
+
+test("runner treats an invalid report as failure without changing child status or bytes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "xmpp-report-status-"));
+  try {
+    const report = join(directory, "tests.xml");
+    const invalid = '<testsuite><testcase name="\uFFFF"/></testsuite>';
+    await writeFile(report, invalid);
+    const command = [process.execPath, "--eval", "process.exitCode = 0"];
+    const result = runBatch(command, report);
+    expect(result.passed).toBe(false);
+    expect(result.exitCode).toBe(0);
+    expect(result.reportError).toBeString();
+    expect(await readFile(report, "utf8")).toBe(invalid);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("runner rejects malformed UTF-8 without replacing report bytes", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "xmpp-report-encoding-"));
+  try {
+    const report = join(directory, "tests.xml");
+    const invalid = Buffer.concat([
+      Buffer.from('<testsuite><testcase name="'),
+      Buffer.from([0xff]),
+      Buffer.from('"/></testsuite>'),
+    ]);
+    await writeFile(report, invalid);
+    const result = runBatch(
+      [process.execPath, "--eval", "process.exitCode = 0"],
+      report,
+    );
+    expect(result.passed).toBe(false);
+    expect(result.exitCode).toBe(0);
+    expect(result.reportError).toBeString();
+    expect(await readFile(report)).toEqual(invalid);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+test("runner retains failure status with a valid report and refuses missing output", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "xmpp-report-failure-"));
+  try {
+    const report = join(directory, "tests.xml");
+    await writeFile(
+      report,
+      '<testsuite tests="1" failures="1"><testcase name="case"><failure>failed</failure></testcase></testsuite>',
+    );
+    const failed = runBatch(
+      [process.execPath, "--eval", "process.exitCode = 1"],
+      report,
+    );
+    expect(failed.passed).toBe(false);
+    expect(failed.exitCode).toBe(1);
+    expect(failed.reportError).toBeUndefined();
+    const missing = runBatch(
+      [process.execPath, "--eval", "process.exitCode = 0"],
+      join(directory, "missing.xml"),
+    );
+    expect(missing.passed).toBe(false);
+    expect(missing.exitCode).toBe(0);
+    expect(missing.reportError).toBeString();
+    await writeFile(
+      report,
+      '<testsuite tests="1" failures="0"><testcase name="case"/></testsuite>',
+    );
+    const passed = runBatch(
+      [process.execPath, "--eval", "process.exitCode = 0"],
+      report,
+    );
+    expect(passed.passed).toBe(true);
+    expect(passed.exitCode).toBe(0);
+    expect(passed.reportError).toBeUndefined();
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
 
 test("runner discovers all Bun filename forms but not drafts or directories", async () => {
   const directory = await mkdtemp(join(tmpdir(), "xmpp-suite-discovery-"));

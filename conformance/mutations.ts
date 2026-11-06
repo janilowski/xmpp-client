@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "replace invalid report UTF-8 silently",
+    file: "conformance/test-batches.ts",
+    before: 'new TextDecoder("utf-8", { fatal: true })',
+    after: 'new TextDecoder("utf-8")',
+    suite: "conformance/test-batches.test.ts",
+    test: "runner rejects malformed UTF-8",
+  },
+  {
+    name: "accept an invalid JUnit report",
+    file: "conformance/report.ts",
+    before: "new SaxesParser().write(source).close();",
+    after: "/* validation omitted */",
+    suite: "conformance/report.test.ts",
+    test: "JUnit rejects XML",
+  },
+  {
+    name: "pass a batch whose report is invalid",
+    file: "conformance/test-batches.ts",
+    before: "result.status === 0 && reportError === undefined",
+    after: "result.status === 0",
+    suite: "conformance/test-batches.test.ts",
+    test: "runner treats an invalid report as failure",
+  },
+  {
     name: "drop suites while grouping conformance batches",
     file: "conformance/test-batches.ts",
     before: "suites.push(path);",
@@ -4041,6 +4065,8 @@ for (const mutation of mutations) {
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
       "conformance/test-batches.test.ts",
+      "conformance/report.ts",
+      "conformance/report.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-stanza-addressing.test.ts",

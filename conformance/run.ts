@@ -1,12 +1,9 @@
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { join, resolve } from "node:path";
 import { platform, release, arch } from "node:os";
 import process from "node:process";
-import { discoverSuites, groupSuites } from "./test-batches.ts";
-
-// Bound each standard independently; transport/peer deadlines stay unchanged.
-const BATCH_TIMEOUT_MS = 90_000;
+import { discoverSuites, groupSuites, runBatch } from "./test-batches.ts";
 
 // A fresh directory prevents stale reports from masquerading as evidence.
 mkdirSync("conformance/reports", { recursive: true });
@@ -30,25 +27,24 @@ const suites = [
   ].map((path) => resolve(path)),
 ];
 const results = [...groupSuites(suites)].map(([standard, paths]) => {
-  const args = [
+  const report = join(directory, `${standard}.xml`);
+  const command = [
+    process.execPath,
     "test",
     ...paths,
     "--reporter=junit",
-    `--reporter-outfile=${join(directory, `${standard}.xml`)}`,
+    `--reporter-outfile=${report}`,
   ];
-  const result = spawnSync(process.execPath, args, {
-    stdio: "inherit",
-    timeout: BATCH_TIMEOUT_MS,
-  });
+  const result = runBatch(command, report);
+  if (result.reportError !== undefined) {
+    console.error(`Invalid JUnit report (${standard}): ${result.reportError}`);
+  }
   return {
     standard,
-    command: [process.execPath, ...args],
-    exitCode: result.status,
-    signal: result.signal,
-    error: result.error?.message,
+    ...result,
   };
 });
-const exitCode = results.every((result) => result.exitCode === 0) ? 0 : 1;
+const exitCode = results.every((result) => result.passed) ? 0 : 1;
 writeFileSync(
   join(directory, "environment.json"),
   JSON.stringify(
