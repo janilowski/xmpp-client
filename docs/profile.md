@@ -92,6 +92,12 @@ removed by the isolated NSS setup. No complete cipher, revocation or all-browser
 matrix is claimed. Expected runtime failures
 remain executable test markers, not evidence of successful validation.
 
+The strict Chromium/Firefox matrix also rejects TLS 1.0/1.1, accepts 1.2/1.3
+and prefers 1.3. An authenticated native Node probe first establishes each
+peer's capability; its application records identify the versions used for
+discovery and WebSocket upgrade. Positive discovery cases share the peer's
+HTTPS origin; these are version-policy checks, not additional CORS evidence.
+
 Firefox also runs a bounded minified-bundle wire suite: authentication/restart,
 binding identity, bidirectional stanzas, namespace alternatives, fatal-input
 isolation and reciprocal XML/WebSocket closure. Its explicit loopback WS fixture

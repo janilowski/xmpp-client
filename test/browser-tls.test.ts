@@ -17,6 +17,7 @@ const DAY_MS = 86_400_000;
 const CONNECTION_TIMEOUT_MS = 2000;
 const OBSERVATION_MS = 3000;
 const TOOL_TIMEOUT_MS = 5000;
+const PEER_TIMEOUT_MS = 15000;
 const TEST_TIMEOUT_MS = 20000;
 const XRD = "http://docs.oasis-open.org/ns/xri/xrd-1.0";
 const RELATION = "urn:xmpp:alt-connections:websocket";
@@ -24,9 +25,27 @@ const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const STREAM = "http://etherx.jabber.org/streams";
 const ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const CA_NICKNAME = "Disposable XMPP browser CA";
+// Either the server refuses the version or the client returns protocol_version.
+const PROTOCOL_VERSION_ERRORS = new Set([
+  "ERR_SSL_UNSUPPORTED_PROTOCOL",
+  "ERR_SSL_TLSV1_ALERT_PROTOCOL_VERSION",
+]);
 type Mode = "direct WSS" | "HTTPS discovery";
 type Scenario = "valid" | "wrong-name" | "expired" | "CN-only";
 type Certificate = Awaited<ReturnType<typeof generate>>;
+type TLSRecords = {
+  sessions: string[];
+  requests: { path: string; protocol: string }[];
+  upgrades: { path: string; protocol: string; subprotocol: string }[];
+  errors: string[];
+};
+type TLSMessage = {
+  type: string;
+  node?: string;
+  port: number;
+  probe?: object;
+  records: TLSRecords;
+};
 
 function certutil(args: string[]) {
   const child = spawnSync(process.env.XMPP_CERTUTIL ?? "certutil", args, {
@@ -175,19 +194,23 @@ async function connect(
   context: BrowserContext,
   origin: string,
   service: string,
-  expectedError?: string,
-  certificateEndpoint?: string,
+  expectedError?: string | readonly string[],
+  tlsEndpoint?: string,
 ) {
   const page = await context.newPage();
+  const pageErrors: string[] = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
   const nativeErrors: string[] = [];
+  const expectedErrors =
+    typeof expectedError === "string" ? [expectedError] : (expectedError ?? []);
   let failedSocket: string | undefined;
   const observed = Promise.withResolvers<void>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const record = (message: string) => {
     nativeErrors.push(message);
     if (
-      (expectedError && message.includes(expectedError)) ||
-      (certificateEndpoint && message === "CLOSE_TLS_FAILED")
+      expectedErrors.some((error) => message.includes(error)) ||
+      (tlsEndpoint && message === "CLOSE_TLS_FAILED")
     ) {
       observed.resolve();
     }
@@ -236,48 +259,232 @@ async function connect(
       },
       { service, timeout: CONNECTION_TIMEOUT_MS },
     );
-    if (expectedError && certificateEndpoint) {
-      // Firefox exposes only a generic WS TLS failure. Independently check the
-      // same endpoint's certificate via HTTPS; this is not a WS diagnostic.
+    if (expectedErrors.length && tlsEndpoint) {
+      // Firefox exposes only a generic WS TLS failure. Independently check that
+      // same TLS endpoint via HTTPS; this is not a WS-specific diagnostic.
       timer = setTimeout(() => observed.resolve(), OBSERVATION_MS);
       await observed.promise;
-      expect(failedSocket).toBe(certificateEndpoint);
+      expect(failedSocket).toBe(tlsEndpoint);
       expect(nativeErrors).toContain("CLOSE_TLS_FAILED");
-      const certificatePage = await context.newPage();
+      const diagnosticPage = await context.newPage();
       let diagnostic = "";
       try {
-        await certificatePage.goto(
-          certificateEndpoint.replace(/^wss:/u, "https:"),
-          {
-            timeout: OBSERVATION_MS,
-          },
-        );
+        await diagnosticPage.goto(tlsEndpoint.replace(/^wss:/u, "https:"), {
+          timeout: OBSERVATION_MS,
+        });
       } catch (error) {
         diagnostic = String(error);
       } finally {
-        await certificatePage.close();
+        await diagnosticPage.close();
       }
-      expect(diagnostic).toContain(expectedError);
-    } else if (expectedError) {
+      expect({
+        diagnostic,
+        matches: expectedErrors.some((error) => diagnostic.includes(error)),
+      }).toMatchObject({ matches: true });
+    } else if (expectedErrors.length) {
       // Native TLS diagnostics distinguish validation from CORS/network failure.
       timer = setTimeout(() => observed.resolve(), OBSERVATION_MS);
       await observed.promise;
-      expect({ service, expectedError, nativeErrors }).toMatchObject({
-        nativeErrors: expect.arrayContaining([
-          expect.stringContaining(expectedError),
-        ]),
-      });
+      expect({
+        service,
+        expectedErrors,
+        nativeErrors,
+        matches: nativeErrors.some((error) =>
+          expectedErrors.some((expected) => error.includes(expected)),
+        ),
+      }).toMatchObject({ matches: true });
     }
-    expect(outcome).toBe(expectedError ? "rejected" : "accepted");
+    expect(outcome).toBe(expectedErrors.length ? "rejected" : "accepted");
+    expect(pageErrors).toEqual([]);
   } finally {
     clearTimeout(timer);
     await page.close();
   }
 }
 
+// RFC 7590 / RFC 8996 §§4–5 / RFC 9325 §§3.1.1/3.1.3: reject legacy
+// TLS, retain 1.2/1.3 and prefer 1.3. Native probes establish peer capability;
+// actual discovery/upgrade records, not the page load, establish client use.
+async function verifyVersions(
+  context: BrowserContext,
+  origin: string,
+  directory: string,
+  mode: Mode,
+  browser: string,
+) {
+  for (const [minimum, maximum, protocol, outcome] of [
+    ["TLSv1", "TLSv1", "TLSv1", "rejected"],
+    ["TLSv1.1", "TLSv1.1", "TLSv1.1", "rejected"],
+    ["TLSv1.2", "TLSv1.2", "TLSv1.2", "accepted"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted"],
+    ["TLSv1.2", "TLSv1.3", "TLSv1.3", "accepted"],
+  ] as const) {
+    const peer = Bun.spawn(
+      [
+        process.env.XMPP_TEST_NODE ?? "node",
+        "conformance/fixtures/tls-versions.mjs",
+        directory,
+        minimum,
+        maximum,
+      ],
+      {
+        stdin: "pipe",
+        stdout: "pipe",
+        stderr: "pipe",
+        timeout: PEER_TIMEOUT_MS,
+      },
+    );
+    const reader = peer.stdout.getReader();
+    const stderr = new Response(peer.stderr).text();
+    let pending = "";
+    let completed = false;
+    const receive = async () => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          (async () => {
+            while (!pending.includes("\n")) {
+              const { done, value } = await reader.read();
+              if (done) {
+                throw new Error(
+                  "Native TLS version peer exited before its response",
+                );
+              }
+              pending += new TextDecoder().decode(value);
+            }
+            const end = pending.indexOf("\n");
+            const message = JSON.parse(pending.slice(0, end)) as TLSMessage;
+            pending = pending.slice(end + 1);
+            return message;
+          })(),
+          new Promise<never>((_resolve, reject) => {
+            timer = setTimeout(
+              () =>
+                reject(new Error("Native TLS version peer response timed out")),
+              TOOL_TIMEOUT_MS,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+      }
+    };
+    try {
+      const ready = await receive();
+      expect(ready.type).toBe("ready");
+      expect(ready.node).toMatch(/^v\d+\./);
+      expect(Number.isInteger(ready.port) && ready.port > 0).toBe(true);
+      expect(ready.probe).toEqual({
+        accepted: true,
+        protocol,
+        authorized: true,
+        authorizationError: null,
+        receivedHTTP: true,
+      });
+      expect(ready.records).toEqual({
+        sessions: [protocol],
+        requests: [{ path: "/probe", protocol }],
+        upgrades: [],
+        errors: [],
+      });
+      const wss = `wss://localhost:${ready.port}/xmpp`;
+      const rejected = outcome === "rejected";
+      const expectedError = rejected
+        ? browser === "firefox"
+          ? ["SSL_ERROR_UNKNOWN", "SSL_ERROR_UNSUPPORTED_VERSION"]
+          : "ERR_SSL_VERSION_OR_CIPHER_MISMATCH"
+        : undefined;
+      // The peer omits CORS headers. Accepted discovery uses the same HTTPS
+      // origin; rejected attempts use HTTP so page navigation cannot fail first.
+      await connect(
+        context,
+        rejected ? origin : `https://localhost:${ready.port}/probe`,
+        mode === "direct WSS" ? wss : `localhost:${ready.port}`,
+        expectedError,
+        rejected && browser === "firefox" && mode === "direct WSS"
+          ? wss
+          : undefined,
+      );
+      peer.stdin.write("snapshot\n");
+      await peer.stdin.flush();
+      const observed = await receive();
+      expect(observed.type).toBe("snapshot");
+      const records = observed.records;
+      const sessions = records.sessions.slice(ready.records.sessions.length);
+      const requests = records.requests.slice(ready.records.requests.length);
+      if (rejected) {
+        // Firefox's generic diagnostic alone proves no cause. The capable peer
+        // must report only protocol refusal, before any TLS session or HTTP.
+        expect(records.errors.length).toBeGreaterThan(0);
+        expect(
+          records.errors.every((error) => PROTOCOL_VERSION_ERRORS.has(error)),
+        ).toBe(true);
+        expect({ sessions, requests, upgrades: records.upgrades }).toEqual({
+          sessions: [],
+          requests: [],
+          upgrades: [],
+        });
+      } else {
+        expect(sessions.length).toBeGreaterThan(0);
+        expect(sessions.every((version) => version === protocol)).toBe(true);
+        // Browser favicon requests are page traffic, not discovery evidence.
+        expect(requests.every((request) => request.protocol === protocol)).toBe(
+          true,
+        );
+        expect(requests.filter(({ path }) => path !== "/favicon.ico")).toEqual([
+          { path: "/probe", protocol },
+          ...(mode === "HTTPS discovery"
+            ? [{ path: "/.well-known/host-meta", protocol }]
+            : []),
+        ]);
+        expect(records.upgrades).toEqual([
+          { path: "/xmpp", protocol, subprotocol: "xmpp" },
+        ]);
+        expect(records.errors).toEqual([]);
+      }
+      completed = true;
+    } finally {
+      try {
+        if (completed) {
+          peer.stdin.write("stop\n");
+          await peer.stdin.flush();
+          peer.stdin.end();
+        } else if (peer.exitCode === null) {
+          peer.kill();
+        }
+        await peer.exited;
+        if (completed) {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            pending += new TextDecoder().decode(value);
+          }
+          expect({
+            exit: peer.exitCode,
+            stderr: await stderr,
+            trailing: pending,
+          }).toEqual({
+            exit: 0,
+            stderr: "",
+            trailing: "",
+          });
+        }
+      } finally {
+        if (peer.exitCode === null) {
+          peer.kill();
+          await peer.exited;
+        }
+        reader.releaseLock();
+      }
+    }
+  }
+}
+
 for (const browserType of [chromium, firefox]) {
   test.each(["direct WSS", "HTTPS discovery"] as const)(
-    `${browserType.name()} native CA/hostname/expiry validation through bundled client / %s`,
+    `${browserType.name()} native PKIX/TLS version policy through bundled client / %s`,
     async (mode: Mode) => {
       expect(process.platform).toBe("linux");
       const directory = await mkdtemp(join(tmpdir(), "xmpp-browser-trust-"));
@@ -399,6 +606,17 @@ for (const browserType of [chromium, firefox]) {
           const remote = endpoint(certificate);
           endpoints.push(remote);
           scenarios.set(scenario, remote);
+          if (scenario === "valid") {
+            await Promise.all(
+              [
+                ["ca.pem", authority.cert],
+                ["leaf.pem", certificate.cert],
+                ["key.pem", certificate.private],
+              ].map(([name, contents]) =>
+                writeFile(join(directory, name), contents),
+              ),
+            );
+          }
         }
         await mkdir(databaseDirectory, { recursive: true });
         const rootFile = join(directory, "root.pem");
@@ -456,6 +674,13 @@ for (const browserType of [chromium, firefox]) {
           discoveries: mode === "HTTPS discovery" ? 1 : 0,
           upgrades: 1,
         });
+        await verifyVersions(
+          context,
+          `http://127.0.0.1:${origin.port}`,
+          directory,
+          mode,
+          browserType.name(),
+        );
         for (const [scenario, error] of [
           ["wrong-name", certificateErrors.name],
           ["expired", certificateErrors.expired],
