@@ -71,6 +71,16 @@ portable browser check. This is an explicit profile limitation, not proof of
 literal compliance with the extra CA requirement or an exemption from other
 certificate constraints.
 
+Bun additionally rejects empty end-entity subjects and certificates identified
+as CAs by its native `X509Certificate` API (RFC 6120 §§13.7.1.1/13.7.2(4)).
+The checks use the authenticated leaf's DER, before HTTP or WebSocket upgrade;
+valid leaves without basicConstraints remain allowed. Bun's `ca` getter folds
+basicConstraints and keyUsage: `cA:true` without `keyCertSign` can report false.
+That raw flag and the extra CA `digitalSignature` requirement are not exposed
+reliably enough to enforce here. Browsers expose no certificate metadata.
+These are approved native-API boundaries, not evidence that those extra RFC
+constraints passed. The library does not add its own DER/path validator.
+
 The Bun disposable-CA tests exercise root trust, hostname and expiry rejection
 for direct WSS and HTTPS discovery. Intermediate-chain scenarios accept a valid
 chain and reject an untrusted, expired, non-CA or missing intermediate.

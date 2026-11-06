@@ -74,6 +74,11 @@ export default function getBunTLSOptions(): ConnectionOptions | undefined {
         // Parse DER, not the display SAN string: CN fallback and partial
         // wildcard matching must not turn an unrelated SAN into an identity.
         const parsed = new X509Certificate(certificate.raw);
+        // RFC 6120 §13.7.1.1: enforce the native end-entity profile metadata.
+        if (!parsed.subject || parsed.ca) {
+          return new Error("Invalid TLS end-entity certificate");
+        }
+
         const match = ip
           ? parsed.checkIP(hostname)
           : parsed.checkHost(hostname, {

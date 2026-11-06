@@ -70,6 +70,22 @@ const mutations = [
     test: "Bun source direct WSS / default",
   },
   {
+    name: "accept an empty TLS end-entity subject",
+    file: "src/util/bun-tls.ts",
+    before: "if (!parsed.subject || parsed.ca) {",
+    after: "if (parsed.ca) {",
+    suite: "conformance/rfc6120-certificates.test.ts",
+    test: "empty-subject / source / direct",
+  },
+  {
+    name: "accept a native CA as the TLS end entity",
+    file: "src/util/bun-tls.ts",
+    before: "if (!parsed.subject || parsed.ca) {",
+    after: "if (!parsed.subject) {",
+    suite: "conformance/rfc6120-certificates.test.ts",
+    test: "ca-leaf / source / direct",
+  },
+  {
     name: "break the native TLS13-only application policy",
     file: "src/util/bun-tls.ts",
     before: "ciphers: tls13Only ? undefined : `${ciphers}:${NO_RSA_KEY_EXCHANGE}`,",
@@ -3961,6 +3977,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395-outgoing-framing.test.ts",
       "conformance/rfc7395-tls.test.ts",
       "conformance/rfc10015-cipher-offers.test.ts",
+      "conformance/rfc6120-certificates.test.ts",
       "conformance/tls-offers.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
@@ -4029,7 +4046,8 @@ for (const mutation of mutations) {
     }
     if (
       mutation.suite === "conformance/rfc7395-tls.test.ts" ||
-      mutation.suite === "conformance/rfc10015-cipher-offers.test.ts"
+      mutation.suite === "conformance/rfc10015-cipher-offers.test.ts" ||
+      mutation.suite === "conformance/rfc6120-certificates.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });

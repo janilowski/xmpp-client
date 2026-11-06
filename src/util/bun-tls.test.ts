@@ -86,6 +86,47 @@ describe("Bun TLS endpoint policy", () => {
     ).toBeInstanceOf(Error);
   });
 
+  test.each(["empty subject", "CA"] as const)(
+    "RFC 6120 §13.7.1.1: rejects %s despite forged legacy metadata",
+    async (scenario) => {
+      const pair = await generate(
+        scenario === "empty subject"
+          ? []
+          : [{ name: "commonName", value: "localhost" }],
+        {
+          algorithm: "sha256",
+          extensions: [
+            { name: "basicConstraints", cA: scenario === "CA" },
+            {
+              name: "keyUsage",
+              digitalSignature: true,
+              keyCertSign: scenario === "CA",
+            },
+            {
+              name: "subjectAltName",
+              critical: true,
+              altNames: [{ type: 2, value: "localhost" }],
+            },
+          ],
+        },
+      );
+      const parsed = new X509Certificate(pair.cert);
+      expect(parsed.ca).toBe(scenario === "CA");
+      expect(parsed.subject ?? "").toBe(
+        scenario === "CA" ? "CN=localhost" : "",
+      );
+      const certificate = {
+        ...parsed.toLegacyObject(),
+        ca: false,
+        subject: { CN: "localhost" },
+      };
+      expect(tls.checkServerIdentity("localhost", certificate)).toBeUndefined();
+      expect(
+        getBunTLSOptions()!.checkServerIdentity!("localhost", certificate),
+      ).toBeInstanceOf(Error);
+    },
+  );
+
   test("retains delegated identity validation", () => {
     const certificate = {
       ...certificates[1],
