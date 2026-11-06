@@ -508,7 +508,7 @@ async function observeUnsafe(
   }
 }
 
-test.each(SCENARIOS)(
+test.each([...SCENARIOS])(
   "§3.5 native rejection control / %s",
   async (scenario) => {
     const { records } = await observeUnsafe("node", scenario);
@@ -559,7 +559,7 @@ test(
   TEST_TIMEOUT_MS,
 );
 
-test.each(SCENARIOS)(
+test.each([...SCENARIOS])(
   "§3.5 paired raw control: unsafe binding precedes the queued peer abort / %s",
   async (scenario) => {
     const { records } = await observeUnsafe("bun-control", scenario, "queued");
@@ -590,7 +590,7 @@ for (const artifact of ["source", "minified"] as const) {
     TEST_TIMEOUT_MS,
   );
 
-  test.each(SCENARIOS)(
+  test.each([...SCENARIOS])(
     `§3.5 / RFC 6120 §5.3.5: reject unsafe renegotiation without a peer alert or FIN / ${artifact} / %s`,
     async (scenario) => {
       const { records } = await observeUnsafe(artifact, scenario);
