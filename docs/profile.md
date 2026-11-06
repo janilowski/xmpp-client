@@ -208,6 +208,17 @@ an independent native control completes full secure renegotiation. Unsupported
 renegotiation may instead close immediately. This does not resolve the initial
 acknowledgement failure above or establish browser renegotiation behavior.
 
+Authenticated Bun TLS 1.3 tests complete XMPP before exercising KeyUpdate
+(RFC 9846 §4.7.3). Both valid request modes preserve bidirectional traffic;
+requested updates require a reciprocal update before subsequent application
+data. An invalid request byte must produce fatal `illegal_parameter`, close
+the connection and deliver no later XML. Bun 1.4.4 instead sends fatal
+`decode_error` (#106), while satisfying those closure/isolation checks.
+Exact-version expected failures retain the required alert; native APIs cannot
+replace an already emitted encrypted alert. The independent peer owns TLS
+encryption, not production JavaScript. Browser/discovery behavior, pre-Finished
+updates and key-usage limits remain unverified by this bounded matrix.
+
 Normal Bun TLS 1.2/1.3 closure is checked with an authenticated peer that waits
 for the client's `close_notify` before sending its own. Source/minified clients
 complete an XMPP exchange. A Linux `/proc` witness checks that the client retains

@@ -46,6 +46,22 @@ const mutations = [
     test: "ALPN refusal oracle rejects permissive outcomes",
   },
   {
+    name: "accept a missing reciprocal KeyUpdate",
+    file: "conformance/rfc9846-keyupdate.test.ts",
+    before: 'if (scenario === "requested") {',
+    after: "if (false) {",
+    suite: "conformance/rfc9846-keyupdate.test.ts",
+    test: "oracle rejects missing/late updates",
+  },
+  {
+    name: "record setup KeyUpdates as post-trigger evidence",
+    file: "conformance/fixtures/tls13-keyupdate.py",
+    before: "if observing and isinstance(message, KeyUpdate):",
+    after: "if isinstance(message, KeyUpdate):",
+    suite: "conformance/rfc9846-keyupdate.test.ts",
+    test: "KeyUpdate recorder excludes pre-trigger replies",
+  },
+  {
     name: "replace invalid report UTF-8 silently",
     file: "conformance/test-batches.ts",
     before: 'new TextDecoder("utf-8", { fatal: true })',
@@ -4070,6 +4086,7 @@ for (const mutation of mutations) {
       "conformance/rfc6120-certificates.test.ts",
       "conformance/rfc6066-sni.test.ts",
       "conformance/rfc7301-alpn.test.ts",
+      "conformance/rfc9846-keyupdate.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
@@ -4147,7 +4164,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc9325-cbc.test.ts" ||
       mutation.suite === "conformance/rfc6120-certificates.test.ts" ||
       mutation.suite === "conformance/rfc6066-sni.test.ts" ||
-      mutation.suite === "conformance/rfc7301-alpn.test.ts"
+      mutation.suite === "conformance/rfc7301-alpn.test.ts" ||
+      mutation.suite === "conformance/rfc9846-keyupdate.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });
@@ -4179,6 +4197,12 @@ for (const mutation of mutations) {
       cwd: directory,
       encoding: "utf8" as const,
       timeout: MUTATION_TIMEOUT_MS,
+      env: {
+        ...process.env,
+        XMPP_TEST_TLS_PEER: resolve(
+          process.env.XMPP_TEST_TLS_PEER ?? "server/.cache/tls-peer",
+        ),
+      },
     };
     const baseline = spawnSync(process.execPath, args, options);
     if (baseline.status !== 0 || !baseline.stderr.includes("(pass)")) {
