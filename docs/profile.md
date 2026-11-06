@@ -152,6 +152,14 @@ acknowledgement-present and native Node controls. The independent Python peer
 is test infrastructure only. No browser result or successful attack is claimed;
 Web APIs expose no renegotiation-policy control.
 
+Separate post-handshake Bun tests first complete authenticated XMPP, then check
+TLS 1.2 renegotiation binding (RFC 5746 §3.5 / RFC 6120 §5.3.5). Missing or
+incorrect previous Finished values produce a fatal alert and TCP closure without
+XML. The same peer's correct binding reaches a distinct controlled peer abort;
+an independent native control completes full secure renegotiation. Unsupported
+renegotiation may instead close immediately. This does not resolve the initial
+acknowledgement failure above or establish browser renegotiation behavior.
+
 Normal Bun TLS 1.2/1.3 closure is checked with an authenticated peer that waits
 for the client's `close_notify` before sending its own. Source/minified clients
 complete an XMPP exchange. A Linux `/proc` witness checks that the client retains
