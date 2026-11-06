@@ -38,6 +38,14 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept an unoffered ALPN selection in the oracle",
+    file: "conformance/rfc7301-alpn.test.ts",
+    before: "    result.accepted,\n    false,",
+    after: "    false,\n    false,",
+    suite: "conformance/rfc7301-alpn.test.ts",
+    test: "ALPN refusal oracle rejects permissive outcomes",
+  },
+  {
     name: "replace invalid report UTF-8 silently",
     file: "conformance/test-batches.ts",
     before: 'new TextDecoder("utf-8", { fatal: true })',
@@ -4061,6 +4069,7 @@ for (const mutation of mutations) {
       "conformance/rfc9325-cbc.test.ts",
       "conformance/rfc6120-certificates.test.ts",
       "conformance/rfc6066-sni.test.ts",
+      "conformance/rfc7301-alpn.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
@@ -4137,7 +4146,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc10015-cipher-offers.test.ts" ||
       mutation.suite === "conformance/rfc9325-cbc.test.ts" ||
       mutation.suite === "conformance/rfc6120-certificates.test.ts" ||
-      mutation.suite === "conformance/rfc6066-sni.test.ts"
+      mutation.suite === "conformance/rfc6066-sni.test.ts" ||
+      mutation.suite === "conformance/rfc7301-alpn.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });

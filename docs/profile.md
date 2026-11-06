@@ -67,6 +67,13 @@ Authenticated source/ESM/minified WSS/discovery tests check case/root-dot
 alternatives and omit literal-IP SNI. Browser SNI and actual IDNA SNI remain
 unverified by this bounded matrix; standard browser APIs are unchanged.
 
+Authenticated Bun source/ESM/minified tests also check native ALPN selection
+for WSS and HTTPS discovery (RFC 7301 §§3.1/3.2). TLS 1.2/1.3 accept an absent
+server selection or offered HTTP/1.1, and reject an unoffered selection with a
+fatal alert before HTTP. Serialized peer messages and native Node controls
+guard the selection oracle. This bounded matrix does not establish browser,
+unsolicited-extension or resumed-session behavior.
+
 For WSS and HTTPS discovery, the selected profile relies on native HTTPS/PKIX
 validation rather than adding RFC 6120 §13.7.1.1's extra CA `digitalSignature`
 requirement, imported by §13.7.2 step 4. RFC 5280 §4.2.1.3 assigns certificate
