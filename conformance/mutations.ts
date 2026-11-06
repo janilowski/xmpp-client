@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "drop suites while grouping conformance batches",
+    file: "conformance/test-batches.ts",
+    before: "suites.push(path);",
+    after: "/* suite omitted */",
+    suite: "conformance/test-batches.test.ts",
+    test: "runner groups standards",
+  },
+  {
+    name: "admit duplicate conformance suites",
+    file: "conformance/test-batches.ts",
+    before: "if (new Set(paths).size !== paths.length) {",
+    after: "if (false) {",
+    suite: "conformance/test-batches.test.ts",
+    test: "runner refuses duplicate suite admission",
+  },
+  {
+    name: "pass an empty conformance tree",
+    file: "conformance/test-batches.ts",
+    before: "if (!suites.length) {",
+    after: "if (false) {",
+    suite: "conformance/test-batches.test.ts",
+    test: "runner refuses an empty conformance tree",
+  },
+  {
     name: "retain the DNS root dot in Bun SNI",
     file: "src/util/bun-tls.ts",
     before: "{ servername: hostname.slice(0, -1) }",
@@ -4015,6 +4039,8 @@ for (const mutation of mutations) {
       "conformance/rfc6066-sni.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
+      "conformance/test-batches.ts",
+      "conformance/test-batches.test.ts",
       "conformance/rfc6120.test.ts",
       "conformance/rfc6120-stanza-routing.test.ts",
       "conformance/rfc6120-stanza-addressing.test.ts",

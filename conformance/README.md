@@ -34,6 +34,11 @@ JUnit results and environment metadata (revision, dirty flag, runtime, OS,
 command and exit status). CI uploads them even on failure. These describe the
 executed scenarios, not a completeness percentage.
 
+Suites run in separate RFC/XEP batches with a 90-second limit per batch;
+harness and transport units form another batch. Discovery retains every test
+file, including unknown prefixes. Reports record each executed command/result;
+a failed batch fails the gate without suppressing the remaining batches.
+
 The transcript normalizer shares `saxes` with production; agreement alone is not
 independent validation. Literal malformed inputs and Chromium's native DOMParser
 provide additional oracles. Saxes 6 is archived upstream; it is not certified by
