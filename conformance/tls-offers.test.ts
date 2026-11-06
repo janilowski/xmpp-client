@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test";
-import { validateOfferExtensions, type Hello } from "./tls-offers.ts";
+import {
+  validateOfferExtensions,
+  validateSignatureHashes,
+  type Hello,
+} from "./tls-offers.ts";
 
 const CHILD_TIMEOUT_MS = 5000;
 const OBSERVER_ERROR = "Native ClientHello observer exited before its response";
@@ -89,11 +93,65 @@ test.each([
       extensions: [...extensions],
     };
     expect(() => validateOfferExtensions([hello])).toThrow(error);
+    if (error !== "Missing SHA-256") {
+      expect(() => validateSignatureHashes([hello])).toThrow(error);
+    }
   },
 );
 
 test("RFC 9325 offer oracle rejects an empty observation", () => {
   expect(() => validateOfferExtensions([])).toThrow("No ClientHello");
+});
+
+// RFC 9155 §2 forbids weak signature hashes even beside a SHA-256 scheme.
+// These literal TLS 1.2 pairs are independent of runtime offers and the guard.
+test.each([
+  ["RSA MD5", "0101"],
+  ["RSA SHA-1", "0201"],
+  ["DSA SHA-1", "0202"],
+  ["ECDSA SHA-1", "0203"],
+] as const)(
+  "RFC 9155 §2 offer oracle rejects %s beside SHA-256",
+  (_name, weak) => {
+    for (const schemes of [`0401${weak}`, `${weak}0401`]) {
+      const hello: Hello = {
+        version: "0303",
+        ciphers: ["c02f", "1301"],
+        compression: "00",
+        extensions: [{ type: 13, value: `0004${schemes}` }],
+      };
+      expect(() => validateSignatureHashes([hello])).toThrow("MD5/SHA-1");
+    }
+  },
+);
+
+test("RFC 9155 §2 offer oracle preserves strong/unknown schemes and SHA-1 HMAC", () => {
+  const hello: Hello = {
+    version: "0303",
+    // SHA-1 record HMAC is distinct from a SHA-1 handshake signature.
+    ciphers: ["c013", "c02f", "1301"],
+    compression: "00",
+    extensions: [{ type: 13, value: "00080401080508070a0a" }],
+  };
+  expect(() => validateSignatureHashes([hello])).not.toThrow();
+});
+
+test("RFC 9155 §2 offer oracle checks every observed ClientHello", () => {
+  const hello: Hello = {
+    version: "0303",
+    ciphers: ["c02f", "1301"],
+    compression: "00",
+    extensions: [{ type: 13, value: "00020401" }],
+  };
+  const weak = {
+    ...hello,
+    extensions: [{ type: 13, value: "000404010201" }],
+  };
+  expect(() => validateSignatureHashes([hello, weak])).toThrow("MD5/SHA-1");
+});
+
+test("RFC 9155 §2 offer oracle rejects an empty observation", () => {
+  expect(() => validateSignatureHashes([])).toThrow("No ClientHello");
 });
 
 // Harness controls, not RFC requirements: failures must retain their cause,

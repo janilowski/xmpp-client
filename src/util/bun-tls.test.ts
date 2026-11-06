@@ -111,6 +111,21 @@ describe("Bun TLS endpoint policy", () => {
     expect(tls.DEFAULT_CIPHERS).toBe(configured);
   });
 
+  test("RFC 9155 §2: retains strong native signature schemes without SHA-1", () => {
+    expect(getBunTLSOptions()!.sigalgs?.split(":")).toEqual([
+      "ecdsa_secp256r1_sha256",
+      "rsa_pss_rsae_sha256",
+      "rsa_pkcs1_sha256",
+      "ecdsa_secp384r1_sha384",
+      "rsa_pss_rsae_sha384",
+      "rsa_pkcs1_sha384",
+      "rsa_pss_rsae_sha512",
+      "rsa_pkcs1_sha512",
+      "ed25519",
+      "ecdsa_secp521r1_sha512",
+    ]);
+  });
+
   test("reads the runtime boundary on every call", () => {
     const descriptor = Object.getOwnPropertyDescriptor(
       process.versions,

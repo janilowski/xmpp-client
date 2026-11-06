@@ -5,10 +5,67 @@ import {
   OFFER_TIMEOUT_MS,
   STATIC_RSA,
   observeOffers,
+  signatureAlgorithms,
   validateOfferControls,
   validateOfferExtensions,
+  validateSignatureHashes,
   type Hello,
 } from "./tls-offers.ts";
+
+const MD5_SIGNATURE_HASH = 1;
+const SHA1_SIGNATURE_HASH = 2;
+const nativeSignatures = new Map<string, number[]>();
+
+beforeAll(async () => {
+  for (const mode of OFFER_MODES) {
+    const hellos = await observeOffers(async (port) => {
+      // Observe each native API without the application adapter. Its actual
+      // strong defaults, not the production constant, are the maintenance oracle.
+      const child = Bun.spawn(
+        [
+          process.execPath,
+          "--eval",
+          `
+        if(${JSON.stringify(mode)} === 'direct WSS') {
+          await new Promise((resolve,reject)=>{
+            const socket=new WebSocket('wss://localhost:${port}/xmpp', {protocols:['xmpp'],tls:{rejectUnauthorized:true}});
+            socket.addEventListener('error',()=>resolve());
+            socket.addEventListener('open',()=>{socket.close();reject(Error('Raw observer cannot establish TLS'));});
+          });
+        } else {
+          try {await fetch('https://localhost:${port}/.well-known/host-meta',{tls:{rejectUnauthorized:true}});throw Error('Raw observer cannot establish TLS');}
+          catch(error) {if(error.message==='Raw observer cannot establish TLS'){throw error;}}
+        }
+      `,
+        ],
+        {
+          stdout: "pipe",
+          stderr: "pipe",
+          timeout: OFFER_TIMEOUT_MS,
+          env: { ...process.env, NODE_TLS_REJECT_UNAUTHORIZED: "1" },
+        },
+      );
+      const [exit, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ]);
+      expect({ exit, stdout, stderr }).toEqual({
+        exit: 0,
+        stdout: "",
+        stderr: "",
+      });
+    });
+    validateOfferControls(hellos);
+    validateOfferExtensions(hellos);
+    expect(hellos.length).toBeGreaterThan(0);
+    const signatures = signatureAlgorithms(hellos[0]);
+    for (const hello of hellos) {
+      expect(signatureAlgorithms(hello)).toEqual(signatures);
+    }
+    nativeSignatures.set(mode, signatures);
+  }
+}, OFFER_TIMEOUT_MS);
 
 // RFC 10015 §4 prohibits offering static-RSA suites, not only negotiating them.
 // https://www.rfc-editor.org/rfc/rfc10015.html#section-4
@@ -45,6 +102,15 @@ test("RFC 10015 offer oracle: independent fragmented ClientHello and malformed b
   }
   expect(hello?.ciphers).toEqual(["009c", "c02f", "1301"]);
   expect(hello?.compression).toBe("00");
+  // RFC 9155 §2: the independent reader preserves a weak scheme beside SHA-256.
+  expect(
+    parseHello(
+      Buffer.concat([
+        body.subarray(0, -2),
+        Buffer.from("000a000d0006000404010201", "hex"),
+      ]),
+    ).extensions,
+  ).toEqual([{ type: 13, value: "000404010201" }]);
   // Literal alternatives ensure the observer does not hardcode null support.
   for (const compression of ["01", "0100"]) {
     const alternate = Buffer.concat([
@@ -170,6 +236,23 @@ for (const mode of OFFER_MODES) {
 
         test("RFC 9325 §§4.2.1/4.5/4.6: safe point-format, SHA-256 and HMAC offers", () => {
           expect(() => validateOfferExtensions(hellos)).not.toThrow();
+        });
+
+        // RFC 9155 applies to TLS 1.2, not the TLS-1.3-only policy above.
+        if (policy !== "TLS_AES_128_GCM_SHA256") {
+          test("RFC 9155 §2: TLS 1.2 offers omit MD5/SHA-1 signature hashes", () => {
+            expect(() => validateSignatureHashes(hellos)).not.toThrow();
+          });
+        }
+
+        test("local maintenance policy: preserves current native strong signature order", () => {
+          const strong = nativeSignatures.get(mode)!.filter((scheme) => {
+            const hash = scheme >> 8;
+            return hash !== MD5_SIGNATURE_HASH && hash !== SHA1_SIGNATURE_HASH;
+          });
+          for (const hello of hellos) {
+            expect(signatureAlgorithms(hello)).toEqual(strong);
+          }
         });
 
         test("offers no static-RSA suites and preserves the application policy", () => {

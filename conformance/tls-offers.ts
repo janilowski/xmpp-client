@@ -9,6 +9,8 @@ const NULL_COMPRESSION = "00";
 const POINT_FORMATS = 11;
 const SIGNATURE_ALGORITHMS = 13;
 const TRUNCATED_HMAC = 4;
+const MD5_SIGNATURE_HASH = 1;
+const SHA1_SIGNATURE_HASH = 2;
 // SHA-256 schemes: RFC 9846 §4.3.3 and RFC 8734 §4 (Brainpool).
 const SHA256_SIGNATURES = new Set([0x0401, 0x0403, 0x0804, 0x0809, 0x081a]);
 
@@ -190,6 +192,30 @@ export function validateOfferControls(hellos: Hello[]) {
   }
 }
 
+export function signatureAlgorithms(hello: Hello) {
+  const signatures = hello.extensions.filter(
+    ({ type }) => type === SIGNATURE_ALGORITHMS,
+  );
+  assert.equal(
+    signatures.length,
+    1,
+    "Missing or duplicate signature_algorithms",
+  );
+  const bytes = Buffer.from(signatures[0].value, "hex");
+  assert.ok(bytes.length >= 4, "Empty or truncated signature algorithms");
+  assert.equal(
+    bytes.readUInt16BE(0),
+    bytes.length - 2,
+    "Invalid signature vector length",
+  );
+  assert.equal((bytes.length - 2) % 2, 0, "Partial signature scheme");
+  const schemes = [];
+  for (let index = 2; index < bytes.length; index += 2) {
+    schemes.push(bytes.readUInt16BE(index));
+  }
+  return schemes;
+}
+
 // Initial offers only: RFC 9325 §§4.2.1, 4.5, 4.6; signature scheme IDs and
 // vectors follow RFC 9846 §4.3.3. This does not establish negotiated behavior.
 export function validateOfferExtensions(hellos: Hello[]) {
@@ -212,28 +238,29 @@ export function validateOfferExtensions(hellos: Hello[]) {
       "Truncated HMAC is prohibited",
     );
 
-    const signatures = hello.extensions.filter(
-      ({ type }) => type === SIGNATURE_ALGORITHMS,
+    // Accept valid SHA-256 alternatives without prescribing scheme order.
+    assert.ok(
+      signatureAlgorithms(hello).some((scheme) =>
+        SHA256_SIGNATURES.has(scheme),
+      ),
+      "Missing SHA-256 signature algorithm",
     );
-    assert.equal(
-      signatures.length,
-      1,
-      "Missing or duplicate signature_algorithms",
+  }
+}
+
+// RFC 9155 §2: TLS 1.2-capable offers, not record HMAC, certificate-chain
+// hashes or CertificateVerify. Callers establish version applicability.
+export function validateSignatureHashes(hellos: Hello[]) {
+  assert.ok(hellos.length > 0, "No ClientHello to validate");
+  for (const hello of hellos) {
+    const weak = signatureAlgorithms(hello).filter((scheme) => {
+      const hash = scheme >> 8;
+      return hash === MD5_SIGNATURE_HASH || hash === SHA1_SIGNATURE_HASH;
+    });
+    assert.deepEqual(
+      weak.map((scheme) => scheme.toString(16).padStart(4, "0")),
+      [],
+      "MD5/SHA-1 signature hashes are prohibited",
     );
-    const bytes = Buffer.from(signatures[0].value, "hex");
-    assert.ok(bytes.length >= 4, "Empty or truncated signature algorithms");
-    assert.equal(
-      bytes.readUInt16BE(0),
-      bytes.length - 2,
-      "Invalid signature vector length",
-    );
-    assert.equal((bytes.length - 2) % 2, 0, "Partial signature scheme");
-    let sha256 = false;
-    for (let index = 2; index < bytes.length; index += 2) {
-      // Accept PKCS1, ECDSA and both PSS key types; do not prescribe order or
-      // reject unknown/GREASE algorithms alongside a valid SHA-256 offer.
-      sha256 ||= SHA256_SIGNATURES.has(bytes.readUInt16BE(index));
-    }
-    assert.ok(sha256, "Missing SHA-256 signature algorithm");
   }
 }

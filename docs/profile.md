@@ -145,6 +145,18 @@ when present, list only uncompressed EC points (RFC 9325 §§4.2.1/4.5/4.6).
 Literal malformed-vector and valid-alternative controls guard the offer checks;
 these checks do not establish negotiated algorithms or key-usage limits.
 
+RFC 9155 §§2/4 prohibits MD5/SHA-1 handshake signatures in TLS 1.2, independently
+of record HMAC or certificate signatures. Bun 1.4.4's private adapter removes
+RSA/SHA-1 through native signature selection, preserving its ten strong defaults.
+Actual native offers guard against future default drift; configured cipher and
+TLS-1.3-only policies remain intact. Authenticated source/ESM/minified peers
+accept SHA-256 and require fatal `illegal_parameter` before HTTP for genuine
+RSA/SHA-1/MD5 ServerKeyExchange signatures, independently verified with native RSA.
+Firefox 157.0 still offers ECDSA/SHA-1 and RSA/SHA-1 (#101), including the official
+Mozilla release outside automation. Its exact-version expected failures retain
+the prohibition; standard Web APIs expose no signature-selection control.
+Chromium 156.0.8078.4 passes this offer check, not a complete RFC 9155 audit.
+
 Bun 1.4.4 also completes TLS 1.2 without the server's `renegotiation_info`
 acknowledgement, contrary to RFC 9325 §3.5 (#91). Authenticated full-handshake
 WSS/discovery tests retain a strict, version-bounded expected failure with

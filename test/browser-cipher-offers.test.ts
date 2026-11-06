@@ -10,6 +10,7 @@ import {
   observeOffers,
   validateOfferControls,
   validateOfferExtensions,
+  validateSignatureHashes,
   type Hello,
 } from "../conformance/tls-offers.ts";
 
@@ -101,6 +102,10 @@ for (const mode of OFFER_MODES) {
       expect(() => validateOfferExtensions(hellos)).not.toThrow();
     });
 
+    test("RFC 9155 §2: TLS 1.2 offers omit MD5/SHA-1 signature hashes", () => {
+      expect(() => validateSignatureHashes(hellos)).not.toThrow();
+    });
+
     const knownFailure = version === "156.0.8078.4";
     test.failingIf(knownFailure)(
       `offers no static-RSA suites${knownFailure ? " [expected Chromium 156.0.8078.4 violation #86]" : ""}`,
@@ -183,6 +188,13 @@ for (const mode of OFFER_MODES) {
     });
 
     const knownFailure = firefoxVersion === "157.0";
+    test.failingIf(knownFailure)(
+      `RFC 9155 §2: TLS 1.2 offers omit MD5/SHA-1 signature hashes${knownFailure ? " [expected Firefox 157.0 violation #101]" : ""}`,
+      () => {
+        expect(() => validateSignatureHashes(hellos)).not.toThrow();
+      },
+    );
+
     test.failingIf(knownFailure)(
       `offers no static-RSA suites${knownFailure ? " [expected Firefox 157.0 violation #86]" : ""}`,
       () => {

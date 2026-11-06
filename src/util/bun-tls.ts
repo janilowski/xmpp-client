@@ -3,6 +3,20 @@ import type { ConnectionOptions } from "node:tls";
 // RFC 9525 §§2, 6.3; RFC 10015 §4: tighten Bun's compatibility defaults
 // on the same verified connection, without changing browser-owned TLS.
 const NO_RSA_KEY_EXCHANGE = "!kRSA";
+// RFC 9155 §2: Bun 1.4.4's native order without SHA-1. BoringSSL has no
+// defaults-minus-hash expression; actual-offer tests detect upstream drift.
+const SIGNATURE_ALGORITHMS = [
+  "ecdsa_secp256r1_sha256",
+  "rsa_pss_rsae_sha256",
+  "rsa_pkcs1_sha256",
+  "ecdsa_secp384r1_sha384",
+  "rsa_pss_rsae_sha384",
+  "rsa_pkcs1_sha384",
+  "rsa_pss_rsae_sha512",
+  "rsa_pkcs1_sha512",
+  "ed25519",
+  "ecdsa_secp521r1_sha512",
+].join(":");
 const TLS13_CIPHERS = new Set([
   "TLS_AES_256_GCM_SHA384",
   "TLS_CHACHA20_POLY1305_SHA256",
@@ -35,6 +49,7 @@ export default function getBunTLSOptions(): ConnectionOptions | undefined {
 
   return {
     ciphers: tls13Only ? undefined : `${ciphers}:${NO_RSA_KEY_EXCHANGE}`,
+    sigalgs: SIGNATURE_ALGORITHMS,
     rejectUnauthorized: true,
     checkServerIdentity(hostname, certificate) {
       try {

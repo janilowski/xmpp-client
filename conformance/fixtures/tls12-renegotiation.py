@@ -7,14 +7,18 @@ import sys
 import threading
 import time
 
-dependencies, directory, acknowledgement = sys.argv[1:]
+dependencies, directory, acknowledgement, *signature_mode = sys.argv[1:]
 sys.path.insert(0, dependencies)
 import tlslite
 from tlslite.api import TLSConnection, X509, X509CertChain, parsePEMKey, HandshakeSettings
 from tlslite.messages import ServerHello, ServerKeyExchange
+from tlslite.keyexchange import KeyExchange
 
 assert tlslite.__version__ == "0.8.2", "Unexpected TLS peer version"
 assert acknowledgement in ("empty", "absent"), "Invalid acknowledgement mode"
+assert len(signature_mode) <= 1, "Unexpected signature arguments"
+signature_hash = signature_mode[0] if signature_mode else None
+assert signature_hash in (None, "sha256", "sha1", "md5"), "Invalid signature hash"
 TLS_ALERT = 21
 TLS_CHANGE_CIPHER_SPEC = 20
 TLS_RECORD_HEADER_BYTES = 5
@@ -28,6 +32,20 @@ SERVER_HELLO_PAUSE_SECONDS = 0.05
 RENEGOTIATION_INFO = 65281
 X25519 = "x25519"
 records = {"hellos": [], "sessions": [], "requests": [], "upgrades": [], "alerts": [], "errors": []}
+if signature_hash:
+    records["signatures"] = []
+
+    # Sign the actual parameters, even when the client did not offer this hash.
+    # Changing before serialization preserves the authenticated transcript.
+    original_sign = KeyExchange.signServerKeyExchange
+    def sign_exchange(self, message, sigHash=None):
+        original_sign(self, message, signature_hash)
+        records["signatures"].append({
+            "scheme": [message.hashAlg, message.signAlg],
+            "input": bytes(self.clientHello.random + self.serverHello.random + message.writeParams()).hex(),
+            "signature": bytes(message.signature).hex(),
+        })
+    KeyExchange.signServerKeyExchange = sign_exchange
 condition = threading.Condition()
 sockets = set()
 
