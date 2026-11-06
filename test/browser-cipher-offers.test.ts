@@ -9,6 +9,7 @@ import {
   STATIC_RSA,
   observeOffers,
   validateOfferControls,
+  validateOfferExtensions,
   type Hello,
 } from "../conformance/tls-offers.ts";
 
@@ -96,6 +97,10 @@ for (const mode of OFFER_MODES) {
       validateOfferControls(hellos);
     }, OFFER_TIMEOUT_MS);
 
+    test("RFC 9325 §§4.2.1/4.5/4.6: safe point-format, SHA-256 and HMAC offers", () => {
+      expect(() => validateOfferExtensions(hellos)).not.toThrow();
+    });
+
     const knownFailure = version === "156.0.8078.4";
     test.failingIf(knownFailure)(
       `offers no static-RSA suites${knownFailure ? " [expected Chromium 156.0.8078.4 violation #86]" : ""}`,
@@ -110,7 +115,7 @@ for (const mode of OFFER_MODES) {
   });
 }
 
-// RFC 9325 §3.3 (TLS 1.2 SHOULD NOT) / RFC 9846 §4.1.2 (TLS 1.3 MUST).
+// RFC 9325 §3.3 (TLS 1.2 SHOULD NOT) / RFC 9846 §4.2.2 (TLS 1.3 MUST).
 // Only initial TLS record-compression offers: not certificate compression,
 // WebSocket permessage-deflate, negotiated refusal or full Firefox TLS coverage.
 for (const mode of OFFER_MODES) {
@@ -171,6 +176,10 @@ for (const mode of OFFER_MODES) {
       expect(hellos.map((hello) => hello.compression)).toEqual(
         hellos.map(() => "00"),
       );
+    });
+
+    test("RFC 9325 §§4.2.1/4.5/4.6: safe point-format, SHA-256 and HMAC offers", () => {
+      expect(() => validateOfferExtensions(hellos)).not.toThrow();
     });
 
     const knownFailure = firefoxVersion === "157.0";

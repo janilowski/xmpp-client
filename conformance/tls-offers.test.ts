@@ -1,7 +1,100 @@
 import { expect, test } from "bun:test";
+import { validateOfferExtensions, type Hello } from "./tls-offers.ts";
 
 const CHILD_TIMEOUT_MS = 5000;
 const OBSERVER_ERROR = "Native ClientHello observer exited before its response";
+
+// Independent literal vectors, not values produced by the TLS runtime or
+// validator. EC point formats are optional; SHA-256 has several valid schemes.
+test.each([
+  ["PKCS1 SHA-256", "00020401"],
+  ["ECDSA SHA-256", "00020403"],
+  ["Brainpool ECDSA SHA-256", "0002081a"],
+  ["PSS RSAE SHA-256", "00020804"],
+  ["PSS PSS SHA-256", "00020809"],
+  ["unknown and stronger alternatives", "00060a0a08050403"],
+] as const)("RFC 9325 offer oracle accepts %s", (_name, value) => {
+  const hello: Hello = {
+    version: "0303",
+    ciphers: ["c02f", "1301"],
+    compression: "00",
+    extensions: [{ type: 13, value }],
+  };
+  expect(() => validateOfferExtensions([hello])).not.toThrow();
+  hello.extensions.push({ type: 11, value: "0100" });
+  expect(() => validateOfferExtensions([hello])).not.toThrow();
+});
+
+test.each([
+  ["compressed points", [{ type: 11, value: "0101" }], "uncompressed"],
+  ["extra point format", [{ type: 11, value: "020001" }], "uncompressed"],
+  ["empty point list", [{ type: 11, value: "00" }], "uncompressed"],
+  ["bad point list length", [{ type: 11, value: "0200" }], "uncompressed"],
+  [
+    "duplicate point formats",
+    [
+      { type: 11, value: "0100" },
+      { type: 11, value: "0100" },
+    ],
+    "Duplicate ec_point_formats",
+  ],
+  ["truncated HMAC", [{ type: 4, value: "" }], "Truncated HMAC"],
+] as const)("RFC 9325 offer oracle rejects %s", (_name, extensions, error) => {
+  const hello: Hello = {
+    version: "0303",
+    ciphers: ["c02f", "1301"],
+    compression: "00",
+    extensions: [{ type: 13, value: "00020401" }, ...extensions],
+  };
+  expect(() => validateOfferExtensions([hello])).toThrow(error);
+});
+
+test.each([
+  ["absent algorithms", [], "Missing or duplicate"],
+  [
+    "duplicate algorithms",
+    [
+      { type: 13, value: "00020401" },
+      { type: 13, value: "00020401" },
+    ],
+    "Missing or duplicate",
+  ],
+  ["empty algorithms", [{ type: 13, value: "0000" }], "Empty or truncated"],
+  ["truncated length", [{ type: 13, value: "00" }], "Empty or truncated"],
+  ["truncated vector", [{ type: 13, value: "00040401" }], "vector length"],
+  [
+    "trailing vector bytes",
+    [{ type: 13, value: "000204010805" }],
+    "vector length",
+  ],
+  ["partial scheme", [{ type: 13, value: "0003040108" }], "Partial signature"],
+  ["no SHA-256", [{ type: 13, value: "000408050603" }], "Missing SHA-256"],
+  [
+    "SHA-256 only in length bytes",
+    [{ type: 13, value: "0401" }],
+    "Empty or truncated",
+  ],
+  [
+    "SHA-256 split across schemes",
+    [{ type: 13, value: "000406040108" }],
+    "Missing SHA-256",
+  ],
+] as const)(
+  "RFC 9325 signature oracle rejects %s",
+  (_name, extensions, error) => {
+    const hello: Hello = {
+      version: "0303",
+      ciphers: ["c02f", "1301"],
+      compression: "00",
+      extensions: [...extensions],
+    };
+    expect(() => validateOfferExtensions([hello])).toThrow(error);
+  },
+);
+
+test("RFC 9325 offer oracle rejects an empty observation", () => {
+  expect(() => validateOfferExtensions([])).toThrow("No ClientHello");
+});
 
 // Harness controls, not RFC requirements: failures must retain their cause,
 // reap their observer and release its reader without weakening successful runs.

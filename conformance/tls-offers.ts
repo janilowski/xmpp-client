@@ -6,6 +6,11 @@ export const OFFER_MODES = ["direct WSS", "HTTPS discovery"] as const;
 export type OfferMode = (typeof OFFER_MODES)[number];
 export type Hello = NonNullable<ReturnType<ClientHello["feed"]>>;
 const NULL_COMPRESSION = "00";
+const POINT_FORMATS = 11;
+const SIGNATURE_ALGORITHMS = 13;
+const TRUNCATED_HMAC = 4;
+// SHA-256 schemes: RFC 9846 §4.3.3 and RFC 8734 §4 (Brainpool).
+const SHA256_SIGNATURES = new Set([0x0401, 0x0403, 0x0804, 0x0809, 0x081a]);
 
 // RFC 10015 §4 / Table 4, IANA TLS Cipher Suites (reviewed 2026-10-30).
 // Independent static-RSA inventory, not all registry entries marked "D".
@@ -154,7 +159,7 @@ export async function observeOffers(exercise: (port: number) => Promise<void>) {
 export function validateOfferControls(hellos: Hello[]) {
   for (const hello of hellos) {
     // RFC 9325 §3.3: TLS 1.2 SHOULD NOT support record compression.
-    // RFC 9846 §4.1.2: a TLS 1.3 ClientHello MUST offer exactly null.
+    // RFC 9846 §4.2.2: a TLS 1.3 ClientHello MUST offer exactly null.
     // Initial offers only, not proof of hostile selection/resumption handling.
     assert.equal(hello.compression, NULL_COMPRESSION);
     assert.equal(hello.version, "0303");
@@ -182,5 +187,53 @@ export function validateOfferControls(hellos: Hello[]) {
       offered.includes("0304"),
       "Missing TLS 1.3 applicability control",
     );
+  }
+}
+
+// Initial offers only: RFC 9325 §§4.2.1, 4.5, 4.6; signature scheme IDs and
+// vectors follow RFC 9846 §4.3.3. This does not establish negotiated behavior.
+export function validateOfferExtensions(hellos: Hello[]) {
+  assert.ok(hellos.length > 0, "No ClientHello to validate");
+  for (const hello of hellos) {
+    const formats = hello.extensions.filter(
+      ({ type }) => type === POINT_FORMATS,
+    );
+    assert.ok(formats.length <= 1, "Duplicate ec_point_formats");
+    if (formats.length) {
+      assert.equal(
+        formats[0].value,
+        "0100",
+        "Only uncompressed EC points allowed",
+      );
+    }
+    assert.equal(
+      hello.extensions.some(({ type }) => type === TRUNCATED_HMAC),
+      false,
+      "Truncated HMAC is prohibited",
+    );
+
+    const signatures = hello.extensions.filter(
+      ({ type }) => type === SIGNATURE_ALGORITHMS,
+    );
+    assert.equal(
+      signatures.length,
+      1,
+      "Missing or duplicate signature_algorithms",
+    );
+    const bytes = Buffer.from(signatures[0].value, "hex");
+    assert.ok(bytes.length >= 4, "Empty or truncated signature algorithms");
+    assert.equal(
+      bytes.readUInt16BE(0),
+      bytes.length - 2,
+      "Invalid signature vector length",
+    );
+    assert.equal((bytes.length - 2) % 2, 0, "Partial signature scheme");
+    let sha256 = false;
+    for (let index = 2; index < bytes.length; index += 2) {
+      // Accept PKCS1, ECDSA and both PSS key types; do not prescribe order or
+      // reject unknown/GREASE algorithms alongside a valid SHA-256 offer.
+      sha256 ||= SHA256_SIGNATURES.has(bytes.readUInt16BE(index));
+    }
+    assert.ok(sha256, "Missing SHA-256 signature algorithm");
   }
 }

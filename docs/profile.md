@@ -131,9 +131,13 @@ key-exchange or certificate requirements; this mandatory runtime gap remains ope
 
 Initial Bun, Chromium and Firefox ClientHellos offer only null TLS record
 compression. Independent non-null/list parser controls guard that observation.
-This is bounded offer evidence for RFC 9325 §3.3 and RFC 9846 §4.1.2, not proof
+This is bounded offer evidence for RFC 9325 §3.3 and RFC 9846 §4.2.2, not proof
 of hostile server-selection or resumed-session handling. Certificate compression
 and WebSocket permessage-deflate are separate mechanisms.
+The same initial offers request SHA-256 signatures, omit Truncated HMAC and,
+when present, list only uncompressed EC points (RFC 9325 §§4.2.1/4.5/4.6).
+Literal malformed-vector and valid-alternative controls guard the offer checks;
+these checks do not establish negotiated algorithms or key-usage limits.
 
 Bun 1.4.4 also completes TLS 1.2 without the server's `renegotiation_info`
 acknowledgement, contrary to RFC 9325 §3.5 (#91). Authenticated full-handshake

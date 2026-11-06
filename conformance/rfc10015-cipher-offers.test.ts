@@ -6,6 +6,7 @@ import {
   STATIC_RSA,
   observeOffers,
   validateOfferControls,
+  validateOfferExtensions,
   type Hello,
 } from "./tls-offers.ts";
 
@@ -166,6 +167,10 @@ for (const mode of OFFER_MODES) {
             }
           }
         }, OFFER_TIMEOUT_MS);
+
+        test("RFC 9325 §§4.2.1/4.5/4.6: safe point-format, SHA-256 and HMAC offers", () => {
+          expect(() => validateOfferExtensions(hellos)).not.toThrow();
+        });
 
         test("offers no static-RSA suites and preserves the application policy", () => {
           expect(
