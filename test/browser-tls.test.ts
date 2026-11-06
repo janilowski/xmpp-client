@@ -35,6 +35,7 @@ type Scenario = "valid" | "wrong-name" | "expired" | "CN-only";
 type Certificate = Awaited<ReturnType<typeof generate>>;
 type TLSRecords = {
   sessions: string[];
+  handshakes?: { protocol: string; reused: boolean }[];
   requests: { path: string; protocol: string }[];
   upgrades: { path: string; protocol: string; subprotocol: string }[];
   errors: string[];
@@ -43,7 +44,15 @@ type TLSMessage = {
   type: string;
   node?: string;
   port: number;
-  probe?: object;
+  probe?: {
+    accepted: boolean;
+    protocol?: string;
+    authorized?: boolean;
+    authorizationError?: unknown;
+    receivedHTTP?: boolean;
+    key?: { type?: string; name?: string };
+    reused?: boolean;
+  };
   records: TLSRecords;
 };
 
@@ -305,19 +314,24 @@ async function connect(
 // RFC 7590 / RFC 8996 §§4–5 / RFC 9325 §§3.1.1/3.1.3: reject legacy
 // TLS, retain 1.2/1.3 and prefer 1.3. Native probes establish peer capability;
 // actual discovery/upgrade records, not the page load, establish client use.
-async function verifyVersions(
+// RFC 9846 §9.1 requires TLS 1.3 P-256 support and recommends X25519, absent
+// an overriding application profile. Single-group peers test actual exchange,
+// not preferences, certificate curves or HelloRetryRequest completeness.
+async function verifyTLS(
   context: BrowserContext,
   origin: string,
   directory: string,
   mode: Mode,
   browser: string,
 ) {
-  for (const [minimum, maximum, protocol, outcome] of [
-    ["TLSv1", "TLSv1", "TLSv1", "rejected"],
-    ["TLSv1.1", "TLSv1.1", "TLSv1.1", "rejected"],
-    ["TLSv1.2", "TLSv1.2", "TLSv1.2", "accepted"],
-    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted"],
-    ["TLSv1.2", "TLSv1.3", "TLSv1.3", "accepted"],
+  for (const [minimum, maximum, protocol, outcome, group] of [
+    ["TLSv1", "TLSv1", "TLSv1", "rejected", "default"],
+    ["TLSv1.1", "TLSv1.1", "TLSv1.1", "rejected", "default"],
+    ["TLSv1.2", "TLSv1.2", "TLSv1.2", "accepted", "default"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "default"],
+    ["TLSv1.2", "TLSv1.3", "TLSv1.3", "accepted", "default"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "P-256"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "X25519"],
   ] as const) {
     const peer = Bun.spawn(
       [
@@ -326,6 +340,7 @@ async function verifyVersions(
         directory,
         minimum,
         maximum,
+        ...(group === "default" ? [] : [group]),
       ],
       {
         stdin: "pipe",
@@ -374,18 +389,32 @@ async function verifyVersions(
       expect(ready.type).toBe("ready");
       expect(ready.node).toMatch(/^v\d+\./);
       expect(Number.isInteger(ready.port) && ready.port > 0).toBe(true);
+      if (group !== "default") {
+        expect(["ECDH", "TLSGroup"]).toContain(ready.probe?.key?.type ?? "");
+        expect(
+          group === "P-256"
+            ? ["prime256v1", "secp256r1", "P-256"]
+            : ["X25519", "x25519"],
+        ).toContain(ready.probe?.key?.name ?? "");
+      }
       expect(ready.probe).toEqual({
         accepted: true,
         protocol,
         authorized: true,
         authorizationError: null,
         receivedHTTP: true,
+        ...(group === "default"
+          ? {}
+          : { key: ready.probe?.key, reused: false }),
       });
       expect(ready.records).toEqual({
         sessions: [protocol],
         requests: [{ path: "/probe", protocol }],
         upgrades: [],
         errors: [],
+        ...(group === "default"
+          ? {}
+          : { handshakes: [{ protocol, reused: false }] }),
       });
       const wss = `wss://localhost:${ready.port}/xmpp`;
       const rejected = outcome === "rejected";
@@ -427,6 +456,11 @@ async function verifyVersions(
       } else {
         expect(sessions.length).toBeGreaterThan(0);
         expect(sessions.every((version) => version === protocol)).toBe(true);
+        if (group !== "default") {
+          expect(records.handshakes).toEqual(
+            records.sessions.map((protocol) => ({ protocol, reused: false })),
+          );
+        }
         // Browser favicon requests are page traffic, not discovery evidence.
         expect(requests.every((request) => request.protocol === protocol)).toBe(
           true,
@@ -484,7 +518,7 @@ async function verifyVersions(
 
 for (const browserType of [chromium, firefox]) {
   test.each(["direct WSS", "HTTPS discovery"] as const)(
-    `${browserType.name()} native PKIX/TLS version policy through bundled client / %s`,
+    `${browserType.name()} native PKIX/TLS version and group policy through bundled client / %s`,
     async (mode: Mode) => {
       expect(process.platform).toBe("linux");
       const directory = await mkdtemp(join(tmpdir(), "xmpp-browser-trust-"));
@@ -674,7 +708,7 @@ for (const browserType of [chromium, firefox]) {
           discoveries: mode === "HTTPS discovery" ? 1 : 0,
           upgrades: 1,
         });
-        await verifyVersions(
+        await verifyTLS(
           context,
           `http://127.0.0.1:${origin.port}`,
           directory,

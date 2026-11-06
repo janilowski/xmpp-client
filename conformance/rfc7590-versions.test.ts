@@ -19,6 +19,7 @@ const SNAPSHOT = "snapshot\n";
 const STOP = "stop\n";
 type Records = {
   sessions: string[];
+  handshakes?: { protocol: string; reused: boolean }[];
   requests: { path: string; protocol: string }[];
   upgrades: { path: string; protocol: string; subprotocol: string }[];
   errors: string[];
@@ -34,6 +35,8 @@ type Message = {
     authorized?: boolean;
     authorizationError?: unknown;
     receivedHTTP?: boolean;
+    key?: { type?: string; name?: string };
+    reused?: boolean;
   };
 };
 let directory: string;
@@ -133,14 +136,23 @@ async function receive(reader: AsyncGenerator<Message>): Promise<Message> {
 }
 
 test.each([
-  ["TLSv1", "TLSv1", "TLSv1", "rejected"],
-  ["TLSv1.1", "TLSv1.1", "TLSv1.1", "rejected"],
-  ["TLSv1.2", "TLSv1.2", "TLSv1.2", "accepted"],
-  ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted"],
-  ["TLSv1.2", "TLSv1.3", "TLSv1.3", "accepted"],
+  ["TLSv1", "TLSv1", "TLSv1", "rejected", "default", "source"],
+  ["TLSv1.1", "TLSv1.1", "TLSv1.1", "rejected", "default", "source"],
+  ["TLSv1.2", "TLSv1.2", "TLSv1.2", "accepted", "default", "source"],
+  ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "default", "source"],
+  ["TLSv1.2", "TLSv1.3", "TLSv1.3", "accepted", "default", "source"],
+  // RFC 9846 §9.1: absent an overriding application profile, TLS 1.3 MUST
+  // support P-256 and SHOULD support X25519. These are key exchanges, not
+  // certificate curves or a requirement to prefer one group over another.
+  ...(["P-256", "X25519"] as const).flatMap((group) =>
+    (["source", "ESM", "minified"] as const).map(
+      (artifact) =>
+        ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", group, artifact] as const,
+    ),
+  ),
 ] as const)(
-  "RFC 7590 / BCP 195: peer %s–%s, capability probe %s, client %s",
-  async (minimum, maximum, protocol, outcome) => {
+  "RFC 7590 / RFC 9846 §9.1: peer %s–%s, probe %s, client %s / %s / %s",
+  async (minimum, maximum, protocol, outcome, group, artifact) => {
     const peer = Bun.spawn(
       [
         process.env.XMPP_TEST_NODE ?? "node",
@@ -148,6 +160,7 @@ test.each([
         directory,
         minimum,
         maximum,
+        ...(group === "default" ? [] : [group]),
       ],
       {
         stdin: "pipe",
@@ -162,6 +175,16 @@ test.each([
       const ready = await receive(reader);
       expect(ready.node).toMatch(/^v\d+\./);
       expect(ready.port).toBeNumber();
+      if (group !== "default") {
+        // Node exposes ephemeral keys only on its client probe. The server's
+        // single configured group and fresh handshakes establish client use.
+        expect(["ECDH", "TLSGroup"]).toContain(ready.probe?.key?.type ?? "");
+        expect(
+          group === "P-256"
+            ? ["prime256v1", "secp256r1", "P-256"]
+            : ["X25519", "x25519"],
+        ).toContain(ready.probe?.key?.name ?? "");
+      }
       expect(ready).toEqual({
         type: "ready",
         node: ready.node,
@@ -172,12 +195,18 @@ test.each([
           authorized: true,
           authorizationError: null,
           receivedHTTP: true,
+          ...(group === "default"
+            ? {}
+            : { key: ready.probe?.key, reused: false }),
         },
         records: {
           sessions: [protocol],
           requests: [{ path: "/probe", protocol }],
           upgrades: [],
           errors: [],
+          ...(group === "default"
+            ? {}
+            : { handshakes: [{ protocol, reused: false }] }),
         },
       });
       // Probe success proves the old-version server works before client rejection.
@@ -194,7 +223,13 @@ test.each([
             process.execPath,
             "--eval",
             `
-          import { client } from "./src/client/index.js";
+          const {client}=${
+            artifact === "source"
+              ? 'await import("./src/client/index.js")'
+              : artifact === "ESM"
+                ? 'await import("./dist/index.js")'
+                : 'Function((await Bun.file("./dist/xmpp.min.js").text())+"\\n;return XMPP;")()'
+          };
           const xmpp = client({ service: ${JSON.stringify(service)}, domain: "different-xmpp-domain.test", timeout: ${CLIENT_TIMEOUT_MS} });
           xmpp.reconnect.stop();
           xmpp.on("error", () => {});
@@ -261,6 +296,11 @@ test.each([
         expect(sessions).toEqual(
           mode === "direct" ? [protocol] : [protocol, protocol],
         );
+        if (group !== "default") {
+          expect(
+            after.records.handshakes?.slice(before.records.handshakes!.length),
+          ).toEqual(sessions.map((protocol) => ({ protocol, reused: false })));
+        }
         expect(requests).toEqual(
           mode === "direct"
             ? []

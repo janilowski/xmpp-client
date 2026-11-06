@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import assert from "node:assert/strict";
+import { constants, createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer } from "node:https";
 import { createInterface } from "node:readline";
@@ -15,7 +16,12 @@ const HTTP_NOT_FOUND = 404;
 const PROBE_TIMEOUT_MS = 5000;
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const WEBSOCKET_CLOSE = 8;
-const [directory, minVersion, maxVersion] = process.argv.slice(2);
+const [directory, minVersion, maxVersion, group] = process.argv.slice(2);
+if (group) {
+  assert.ok(["P-256", "X25519"].includes(group));
+  assert.equal(minVersion, "TLSv1.3");
+  assert.equal(maxVersion, "TLSv1.3");
+}
 const [key, cert, ca] = await Promise.all(
   ["key.pem", "leaf.pem", "ca.pem"].map((name) =>
     readFile(`${directory}/${name}`),
@@ -27,10 +33,24 @@ const ciphers =
   minVersion === maxVersion && ["TLSv1", "TLSv1.1"].includes(minVersion)
     ? "AES128-SHA:@SECLEVEL=0"
     : undefined;
-const records = { sessions: [], requests: [], upgrades: [], errors: [] };
+const records = {
+  sessions: [],
+  requests: [],
+  upgrades: [],
+  errors: [],
+  ...(group ? { handshakes: [] } : {}),
+};
 const sockets = new Set();
 const server = createServer(
-  { key, cert, minVersion, maxVersion, ciphers },
+  {
+    key,
+    cert,
+    minVersion,
+    maxVersion,
+    ciphers,
+    ecdhCurve: group,
+    secureOptions: group ? constants.SSL_OP_NO_TICKET : undefined,
+  },
   (request, response) => {
     records.requests.push({
       path: request.url,
@@ -59,9 +79,22 @@ server.on("connection", (socket) => {
   sockets.add(socket);
   socket.on("close", () => sockets.delete(socket));
 });
-server.on("secureConnection", (socket) =>
-  records.sessions.push(socket.getProtocol()),
-);
+server.on("secureConnection", (socket) => {
+  records.sessions.push(socket.getProtocol());
+  if (group) {
+    // getEphemeralKeyInfo is client-only; no fabricated server group witness.
+    records.handshakes.push({
+      protocol: socket.getProtocol(),
+      reused: socket.isSessionReused(),
+    });
+  }
+});
+if (group) {
+  // TLS 1.3 NO_TICKET uses stateful tickets. Retain none and refuse resumption
+  // so every application connection must exchange the sole configured group.
+  server.on("newSession", (_id, _data, callback) => callback());
+  server.on("resumeSession", (_id, callback) => callback(null, null));
+}
 server.on("tlsClientError", (error) => records.errors.push(error.code));
 server.on("upgrade", (request, socket) => {
   records.upgrades.push({
@@ -107,6 +140,12 @@ const probe = await new Promise((resolve) => {
         protocol: socket.getProtocol(),
         authorized: socket.authorized,
         authorizationError: socket.authorizationError,
+        ...(group
+          ? {
+              key: socket.getEphemeralKeyInfo(),
+              reused: socket.isSessionReused(),
+            }
+          : {}),
       };
       socket.write(
         "GET /probe HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",
