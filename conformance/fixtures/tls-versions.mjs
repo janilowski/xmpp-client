@@ -16,12 +16,24 @@ const HTTP_NOT_FOUND = 404;
 const PROBE_TIMEOUT_MS = 5000;
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const WEBSOCKET_CLOSE = 8;
-const [directory, minVersion, maxVersion, group] = process.argv.slice(2);
+const [directory, minVersion, maxVersion, group, algorithm] =
+  process.argv.slice(2);
 if (group) {
   assert.ok(["P-256", "X25519"].includes(group));
   assert.equal(minVersion, "TLSv1.3");
   assert.equal(maxVersion, "TLSv1.3");
 }
+if (algorithm) {
+  assert.ok(["rsa-pkcs1", "ecdsa-p256", "rsa-pss"].includes(algorithm));
+  assert.equal(minVersion, "TLSv1.3");
+  assert.equal(maxVersion, "TLSv1.3");
+}
+const fresh = Boolean(group || algorithm);
+const sigalgs = algorithm
+  ? algorithm === "ecdsa-p256"
+    ? "ecdsa_secp256r1_sha256"
+    : "rsa_pss_rsae_sha256"
+  : undefined;
 const [key, cert, ca] = await Promise.all(
   ["key.pem", "leaf.pem", "ca.pem"].map((name) =>
     readFile(`${directory}/${name}`),
@@ -32,13 +44,15 @@ const [key, cert, ca] = await Promise.all(
 const ciphers =
   minVersion === maxVersion && ["TLSv1", "TLSv1.1"].includes(minVersion)
     ? "AES128-SHA:@SECLEVEL=0"
-    : undefined;
+    : algorithm
+      ? "TLS_AES_128_GCM_SHA256"
+      : undefined;
 const records = {
   sessions: [],
   requests: [],
   upgrades: [],
   errors: [],
-  ...(group ? { handshakes: [] } : {}),
+  ...(fresh ? { handshakes: [] } : {}),
 };
 const sockets = new Set();
 const server = createServer(
@@ -48,13 +62,15 @@ const server = createServer(
     minVersion,
     maxVersion,
     ciphers,
-    ecdhCurve: group,
-    secureOptions: group ? constants.SSL_OP_NO_TICKET : undefined,
+    sigalgs,
+    ecdhCurve: group || undefined,
+    secureOptions: fresh ? constants.SSL_OP_NO_TICKET : undefined,
   },
   (request, response) => {
     records.requests.push({
       path: request.url,
       protocol: request.socket.getProtocol(),
+      ...(algorithm ? { cipher: request.socket.getCipher().standardName } : {}),
     });
     if (request.url === "/probe") {
       response.writeHead(HTTP_OK);
@@ -81,17 +97,18 @@ server.on("connection", (socket) => {
 });
 server.on("secureConnection", (socket) => {
   records.sessions.push(socket.getProtocol());
-  if (group) {
+  if (fresh) {
     // getEphemeralKeyInfo is client-only; no fabricated server group witness.
     records.handshakes.push({
       protocol: socket.getProtocol(),
       reused: socket.isSessionReused(),
+      ...(algorithm ? { cipher: socket.getCipher().standardName } : {}),
     });
   }
 });
-if (group) {
+if (fresh) {
   // TLS 1.3 NO_TICKET uses stateful tickets. Retain none and refuse resumption
-  // so every application connection must exchange the sole configured group.
+  // so every application connection performs a complete authenticated handshake.
   server.on("newSession", (_id, _data, callback) => callback());
   server.on("resumeSession", (_id, callback) => callback(null, null));
 }
@@ -101,6 +118,7 @@ server.on("upgrade", (request, socket) => {
     path: request.url,
     protocol: request.socket.getProtocol(),
     subprotocol: request.headers["sec-websocket-protocol"],
+    ...(algorithm ? { cipher: request.socket.getCipher().standardName } : {}),
   });
   const accept = createHash("sha1")
     .update(request.headers["sec-websocket-key"] + WEBSOCKET_GUID)
@@ -132,6 +150,11 @@ const probe = await new Promise((resolve) => {
       minVersion,
       maxVersion,
       ciphers,
+      // PKCS1 remains legal for RSA certificate signatures, never TLS 1.3 CV.
+      sigalgs:
+        algorithm && algorithm !== "ecdsa-p256"
+          ? `${sigalgs}:rsa_pkcs1_sha256`
+          : sigalgs,
       rejectUnauthorized: true,
     },
     () => {
@@ -140,12 +163,13 @@ const probe = await new Promise((resolve) => {
         protocol: socket.getProtocol(),
         authorized: socket.authorized,
         authorizationError: socket.authorizationError,
-        ...(group
+        ...(fresh
           ? {
-              key: socket.getEphemeralKeyInfo(),
               reused: socket.isSessionReused(),
             }
           : {}),
+        ...(group ? { key: socket.getEphemeralKeyInfo() } : {}),
+        ...(algorithm ? { cipher: socket.getCipher().standardName } : {}),
       };
       socket.write(
         "GET /probe HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n",

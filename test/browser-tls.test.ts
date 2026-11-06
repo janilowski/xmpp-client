@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium, firefox, type BrowserContext } from "playwright";
 import { generate } from "selfsigned";
+import { createTLSCertificates } from "../conformance/tls-certificates.ts";
 
 // RFC 7395 §§3.9/6; RFC 7590 §3.4; RFC 9525 §§4/6; RFC 5280 §6.1.3.
 // Linux Chromium local trust: https://chromium.googlesource.com/chromium/src/+/main/docs/linux/cert_management.md
@@ -25,6 +26,7 @@ const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const STREAM = "http://etherx.jabber.org/streams";
 const ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
 const CA_NICKNAME = "Disposable XMPP browser CA";
+const AES128_GCM_SHA256 = "TLS_AES_128_GCM_SHA256";
 // Either the server refuses the version or the client returns protocol_version.
 const PROTOCOL_VERSION_ERRORS = new Set([
   "ERR_SSL_UNSUPPORTED_PROTOCOL",
@@ -35,9 +37,14 @@ type Scenario = "valid" | "wrong-name" | "expired" | "CN-only";
 type Certificate = Awaited<ReturnType<typeof generate>>;
 type TLSRecords = {
   sessions: string[];
-  handshakes?: { protocol: string; reused: boolean }[];
-  requests: { path: string; protocol: string }[];
-  upgrades: { path: string; protocol: string; subprotocol: string }[];
+  handshakes?: { protocol: string; reused: boolean; cipher?: string }[];
+  requests: { path: string; protocol: string; cipher?: string }[];
+  upgrades: {
+    path: string;
+    protocol: string;
+    subprotocol: string;
+    cipher?: string;
+  }[];
   errors: string[];
 };
 type TLSMessage = {
@@ -52,6 +59,7 @@ type TLSMessage = {
     receivedHTTP?: boolean;
     key?: { type?: string; name?: string };
     reused?: boolean;
+    cipher?: string;
   };
   records: TLSRecords;
 };
@@ -323,24 +331,36 @@ async function verifyTLS(
   directory: string,
   mode: Mode,
   browser: string,
+  certificates: Awaited<ReturnType<typeof createTLSCertificates>>,
 ) {
-  for (const [minimum, maximum, protocol, outcome, group] of [
-    ["TLSv1", "TLSv1", "TLSv1", "rejected", "default"],
-    ["TLSv1.1", "TLSv1.1", "TLSv1.1", "rejected", "default"],
-    ["TLSv1.2", "TLSv1.2", "TLSv1.2", "accepted", "default"],
-    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "default"],
-    ["TLSv1.2", "TLSv1.3", "TLSv1.3", "accepted", "default"],
-    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "P-256"],
-    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "X25519"],
+  for (const [minimum, maximum, protocol, outcome, group, algorithm] of [
+    ["TLSv1", "TLSv1", "TLSv1", "rejected", "default", "default"],
+    ["TLSv1.1", "TLSv1.1", "TLSv1.1", "rejected", "default", "default"],
+    ["TLSv1.2", "TLSv1.2", "TLSv1.2", "accepted", "default", "default"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "default", "default"],
+    ["TLSv1.2", "TLSv1.3", "TLSv1.3", "accepted", "default", "default"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "P-256", "default"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "X25519", "default"],
+    // RFC 9846 §9.1: independent mandatory algorithm profiles, not a group /
+    // signature Cartesian product. Fresh sockets use the sole cipher and CV scheme.
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "default", "rsa-pkcs1"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "default", "ecdsa-p256"],
+    ["TLSv1.3", "TLSv1.3", "TLSv1.3", "accepted", "default", "rsa-pss"],
   ] as const) {
+    const certificate = certificates.find(({ name }) => name === algorithm);
+    const fresh = group !== "default" || algorithm !== "default";
     const peer = Bun.spawn(
       [
         process.env.XMPP_TEST_NODE ?? "node",
         "conformance/fixtures/tls-versions.mjs",
-        directory,
+        algorithm === "default" ? directory : certificate!.directory,
         minimum,
         maximum,
-        ...(group === "default" ? [] : [group]),
+        ...(algorithm === "default"
+          ? group === "default"
+            ? []
+            : [group]
+          : ["", algorithm]),
       ],
       {
         stdin: "pipe",
@@ -403,18 +423,34 @@ async function verifyTLS(
         authorized: true,
         authorizationError: null,
         receivedHTTP: true,
-        ...(group === "default"
-          ? {}
-          : { key: ready.probe?.key, reused: false }),
+        ...(fresh ? { reused: false } : {}),
+        ...(group !== "default" ? { key: ready.probe?.key } : {}),
+        ...(algorithm !== "default" ? { cipher: AES128_GCM_SHA256 } : {}),
       });
       expect(ready.records).toEqual({
         sessions: [protocol],
-        requests: [{ path: "/probe", protocol }],
+        requests: [
+          {
+            path: "/probe",
+            protocol,
+            ...(algorithm !== "default" ? { cipher: AES128_GCM_SHA256 } : {}),
+          },
+        ],
         upgrades: [],
         errors: [],
-        ...(group === "default"
+        ...(!fresh
           ? {}
-          : { handshakes: [{ protocol, reused: false }] }),
+          : {
+              handshakes: [
+                {
+                  protocol,
+                  reused: false,
+                  ...(algorithm !== "default"
+                    ? { cipher: AES128_GCM_SHA256 }
+                    : {}),
+                },
+              ],
+            }),
       });
       const wss = `wss://localhost:${ready.port}/xmpp`;
       const rejected = outcome === "rejected";
@@ -456,23 +492,48 @@ async function verifyTLS(
       } else {
         expect(sessions.length).toBeGreaterThan(0);
         expect(sessions.every((version) => version === protocol)).toBe(true);
-        if (group !== "default") {
+        if (fresh) {
           expect(records.handshakes).toEqual(
-            records.sessions.map((protocol) => ({ protocol, reused: false })),
+            records.sessions.map((protocol) => ({
+              protocol,
+              reused: false,
+              ...(algorithm !== "default" ? { cipher: AES128_GCM_SHA256 } : {}),
+            })),
           );
         }
         // Browser favicon requests are page traffic, not discovery evidence.
-        expect(requests.every((request) => request.protocol === protocol)).toBe(
-          true,
-        );
+        expect(
+          requests.every(
+            (request) =>
+              request.protocol === protocol &&
+              (algorithm === "default" || request.cipher === AES128_GCM_SHA256),
+          ),
+        ).toBe(true);
         expect(requests.filter(({ path }) => path !== "/favicon.ico")).toEqual([
-          { path: "/probe", protocol },
+          {
+            path: "/probe",
+            protocol,
+            ...(algorithm !== "default" ? { cipher: AES128_GCM_SHA256 } : {}),
+          },
           ...(mode === "HTTPS discovery"
-            ? [{ path: "/.well-known/host-meta", protocol }]
+            ? [
+                {
+                  path: "/.well-known/host-meta",
+                  protocol,
+                  ...(algorithm !== "default"
+                    ? { cipher: AES128_GCM_SHA256 }
+                    : {}),
+                },
+              ]
             : []),
         ]);
         expect(records.upgrades).toEqual([
-          { path: "/xmpp", protocol, subprotocol: "xmpp" },
+          {
+            path: "/xmpp",
+            protocol,
+            subprotocol: "xmpp",
+            ...(algorithm !== "default" ? { cipher: AES128_GCM_SHA256 } : {}),
+          },
         ]);
         expect(records.errors).toEqual([]);
       }
@@ -567,6 +628,9 @@ for (const browserType of [chromium, firefox]) {
           },
         );
         const parsedCA = new X509Certificate(authority.cert);
+        const algorithmCertificates = await createTLSCertificates(
+          join(directory, "algorithms"),
+        );
         const now = Date.now();
         expect(parsedCA.ca).toBe(true);
         expect(parsedCA.issuer).toBe(parsedCA.subject);
@@ -698,6 +762,30 @@ for (const browserType of [chromium, firefox]) {
           certutil(["-L", "-d", database, "-n", CA_NICKNAME, "-a"]),
         );
         expect(imported.fingerprint256).toBe(parsedCA.fingerprint256);
+        const importedAuthorities = new Set<string>();
+        for (const certificate of algorithmCertificates) {
+          const authority = new X509Certificate(certificate.ca);
+          if (importedAuthorities.has(authority.fingerprint256)) {
+            continue;
+          }
+          const nickname = `${CA_NICKNAME} ${certificate.name}`;
+          certutil([
+            "-A",
+            "-d",
+            database,
+            "-n",
+            nickname,
+            "-t",
+            "C,,",
+            "-i",
+            join(certificate.directory, "ca.pem"),
+          ]);
+          const imported = new X509Certificate(
+            certutil(["-L", "-d", database, "-n", nickname, "-a"]),
+          );
+          expect(imported.fingerprint256).toBe(authority.fingerprint256);
+          importedAuthorities.add(authority.fingerprint256);
+        }
         context = await launch("fixture-ca-present");
         await connect(
           context,
@@ -714,6 +802,7 @@ for (const browserType of [chromium, firefox]) {
           directory,
           mode,
           browserType.name(),
+          algorithmCertificates,
         );
         for (const [scenario, error] of [
           ["wrong-name", certificateErrors.name],
