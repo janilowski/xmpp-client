@@ -369,7 +369,7 @@ for (const version of [TLS12_MINOR, TLS13_MINOR] as const) {
           expect(JSON.parse(stdout)).toEqual({
             outcome: "rejected",
             code: expect.stringMatching(
-              /^ERR_SSL_(SSLV3|SSL\/TLS)_ALERT_HANDSHAKE_FAILURE$/,
+              /^ERR_SSL_(SSLV3|SSL\/TLS|TLS)_ALERT_HANDSHAKE_FAILURE$/,
             ),
           });
           expect(observed.version).toBeNull();

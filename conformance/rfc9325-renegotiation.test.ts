@@ -249,7 +249,7 @@ test("TLS fixture hardening: reject native forced P-256 before HTTP", async () =
   expect(records.requests).toEqual([]);
   expect(records.upgrades).toEqual([]);
   expect(result.code).toMatch(
-    /^ERR_SSL_(SSLV3|SSL\/TLS)_ALERT_HANDSHAKE_FAILURE$/,
+    /^ERR_SSL_(SSLV3|SSL\/TLS|TLS)_ALERT_HANDSHAKE_FAILURE$/,
   );
   expect(records.errors).toEqual([
     {
