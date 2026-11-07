@@ -9,6 +9,7 @@ const NULL_COMPRESSION = "00";
 const POINT_FORMATS = 11;
 const SIGNATURE_ALGORITHMS = 13;
 const TRUNCATED_HMAC = 4;
+const RENEGOTIATION_INFO = 65281;
 const MD5_SIGNATURE_HASH = 1;
 const SHA1_SIGNATURE_HASH = 2;
 // SHA-256 schemes: RFC 9846 §4.3.3 and RFC 8734 §4 (Brainpool).
@@ -414,5 +415,22 @@ export function validateFiniteFieldDHOffers(hellos: Hello[]) {
       [],
       "Finite-field DH cipher suites are prohibited",
     );
+  }
+}
+
+// RFC 9325 §3.5 requires RI, stricter than RFC 5746's SCSV alternative.
+// Callers establish TLS 1.2 applicability; TLS-1.3-only offers are excluded.
+export function validateRenegotiationOffers(hellos: Hello[]) {
+  assert.ok(hellos.length > 0, "No ClientHello to validate");
+  for (const hello of hellos) {
+    const extensions = hello.extensions.filter(
+      ({ type }) => type === RENEGOTIATION_INFO,
+    );
+    assert.equal(
+      extensions.length,
+      1,
+      "Missing or duplicate initial renegotiation_info",
+    );
+    assert.equal(extensions[0].value, "00", "Nonempty initial RI binding");
   }
 }

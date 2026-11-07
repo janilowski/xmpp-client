@@ -38,6 +38,25 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept SCSV without the required RI extension",
+    file: "conformance/tls-offers.ts",
+    before:
+      '    assert.equal(\n      extensions.length,\n      1,\n      "Missing or duplicate initial renegotiation_info",',
+    after:
+      '    if (!extensions.length && hello.ciphers.includes("00ff")) { continue; }\n    assert.equal(\n      extensions.length,\n      1,\n      "Missing or duplicate initial renegotiation_info",',
+    suite: "conformance/rfc10015-cipher-offers.test.ts",
+    test: "initial RI is unique",
+  },
+  {
+    name: "accept nonempty initial RI binding",
+    file: "conformance/tls-offers.ts",
+    before:
+      'assert.equal(extensions[0].value, "00", "Nonempty initial RI binding");',
+    after: "/* binding check omitted */",
+    suite: "conformance/rfc10015-cipher-offers.test.ts",
+    test: "initial RI is unique",
+  },
+  {
     name: "accept prohibited finite-field DH offers",
     file: "conformance/tls-offers.ts",
     before: "hello.ciphers.filter((id) => FINITE_FIELD_DH.has(id)),",

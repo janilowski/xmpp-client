@@ -11,6 +11,7 @@ import {
   validateOfferControls,
   validateOfferExtensions,
   validateFiniteFieldDHOffers,
+  validateRenegotiationOffers,
   validateSignatureHashes,
   type Hello,
 } from "./tls-offers.ts";
@@ -214,6 +215,30 @@ test("RFC 10015 §§2–3 oracle: complete DH/DHE inventory without banning ECDH
   }
 });
 
+test("RFC 9325 §3.5 oracle: initial RI is unique and empty; SCSV alone is insufficient", () => {
+  const hello: Hello = {
+    version: "0303",
+    compression: "00",
+    ciphers: ["c02f"],
+    extensions: [{ type: 65281, value: "00" }],
+  };
+  expect(() => validateRenegotiationOffers([hello])).not.toThrow();
+  expect(() => validateRenegotiationOffers([])).toThrow("No ClientHello");
+  for (const extensions of [
+    [],
+    [{ type: 65280, value: "00" }],
+    [hello.extensions[0], hello.extensions[0]],
+    ...["", "01ff", "0000"].map((value) => [{ type: 65281, value }]),
+  ]) {
+    expect(() =>
+      validateRenegotiationOffers([
+        hello,
+        { ...hello, ciphers: ["c02f", "00ff"], extensions },
+      ]),
+    ).toThrow();
+  }
+});
+
 for (const mode of OFFER_MODES) {
   for (const artifact of ["source", "ESM", "minified"] as const) {
     for (const policy of [
@@ -290,6 +315,9 @@ for (const mode of OFFER_MODES) {
           });
           test("RFC 10015 §§2–3: TLS 1.2 offers omit finite-field DH/DHE suites", () => {
             expect(() => validateFiniteFieldDHOffers(hellos)).not.toThrow();
+          });
+          test("RFC 9325 §3.5: initial TLS 1.2-capable offers contain empty RI", () => {
+            expect(() => validateRenegotiationOffers(hellos)).not.toThrow();
           });
         }
 

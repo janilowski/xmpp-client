@@ -215,6 +215,13 @@ acknowledgement-present and native Node controls. The independent Python peer
 is test infrastructure only. No browser result or successful attack is claimed;
 Web APIs expose no renegotiation-policy control.
 
+Separate initial-offer tests require exactly one empty `renegotiation_info`
+extension whenever TLS 1.2 is offered, for Bun and both browsers. This is
+stricter than RFC 5746's permitted SCSV-only signaling, which remains valid for
+the independent OpenSSL capability control. TLS-1.3-only offers are excluded.
+Correct client signaling does not repair the missing server-acknowledgement
+refusal above or establish all renegotiation behavior.
+
 Separate post-handshake Bun tests first complete authenticated XMPP, then check
 TLS 1.2 renegotiation binding (RFC 5746 §3.5 / RFC 6120 §5.3.5). Missing or
 incorrect previous Finished values produce a fatal alert and TCP closure without

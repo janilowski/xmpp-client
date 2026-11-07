@@ -11,6 +11,7 @@ import {
   validateOfferControls,
   validateOfferExtensions,
   validateFiniteFieldDHOffers,
+  validateRenegotiationOffers,
   validateSignatureHashes,
   type Hello,
 } from "../conformance/tls-offers.ts";
@@ -107,6 +108,10 @@ for (const mode of OFFER_MODES) {
       expect(() => validateFiniteFieldDHOffers(hellos)).not.toThrow();
     });
 
+    test("RFC 9325 §3.5: initial TLS 1.2-capable offers contain empty RI", () => {
+      expect(() => validateRenegotiationOffers(hellos)).not.toThrow();
+    });
+
     test("RFC 9155 §2: TLS 1.2 offers omit MD5/SHA-1 signature hashes", () => {
       expect(() => validateSignatureHashes(hellos)).not.toThrow();
     });
@@ -194,6 +199,10 @@ for (const mode of OFFER_MODES) {
 
     test("RFC 10015 §§2–3: TLS 1.2 offers omit finite-field DH/DHE suites", () => {
       expect(() => validateFiniteFieldDHOffers(hellos)).not.toThrow();
+    });
+
+    test("RFC 9325 §3.5: initial TLS 1.2-capable offers contain empty RI", () => {
+      expect(() => validateRenegotiationOffers(hellos)).not.toThrow();
     });
 
     const knownFailure = firefoxVersion === "157.0";

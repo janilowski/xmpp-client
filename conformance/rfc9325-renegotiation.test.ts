@@ -10,9 +10,9 @@ import { generate } from "selfsigned";
 // explicit-CRL capability in rfc9325-revocation.test.ts; CBC/ALPN/SNI in
 // rfc9325-cbc.test.ts, rfc7301-alpn.test.ts and rfc6066-sni.test.ts.
 // Remaining gaps: #8/#10.
+// Initial client RI offers are checked separately in rfc10015-cipher-offers.test.ts.
 // RFC 9325 §3.5 strengthens RFC 5746 §§3.4/4.1: a TLS 1.2 client must
 // emit fatal handshake_failure if the server omits renegotiation_info.
-// The separate RFC 9325 ClientHello-extension requirement is not established here.
 // This peer completes authenticated TLS, not merely a partial ServerHello.
 // https://www.rfc-editor.org/rfc/rfc9325.html#section-3.5
 // https://www.rfc-editor.org/rfc/rfc5746.html#section-3.4
