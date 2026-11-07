@@ -102,6 +102,14 @@ Version tests reject TLS 1.0/1.1, accept TLS 1.2/1.3 and prefer TLS 1.3 for both
 paths. Native Node peers and authenticated capability probes independently
 confirm the offered protocols; only the legacy test peer/probe permits obsolete
 crypto. These are Bun integration checks, not browser-version or cipher audits.
+
+Separate Bun source/ESM/minified WSS/discovery cases verify both exact TLS 1.3
+downgrade sentinels in a TLS 1.2 ServerHello (RFC 9846 §4.2.3): fatal
+`illegal_parameter` precedes HTTP, while ordinary and near-match randoms
+preserve authenticated TLS 1.2. Native TLS-1.2-only controls authenticate the
+same marked peers, guarding transcript/signature integrity. Browser, HRR and
+resumption behavior remain unverified by this bounded matrix.
+
 Separate Linux Chromium/Firefox tests use a disposable CA with isolated browser
 home, XDG paths and profiles, without certificate-error exceptions. Chromium's
 NSS database is under its isolated home; Firefox's is inside its profile.

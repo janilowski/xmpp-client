@@ -38,6 +38,32 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept a downgrade sentinel in the refusal oracle",
+    file: "conformance/rfc9846-downgrade.test.ts",
+    before:
+      'assert.equal(result.accepted, false, "Client accepted a downgrade sentinel");',
+    after:
+      'assert.equal(false, false, "Client accepted a downgrade sentinel");',
+    suite: "conformance/rfc9846-downgrade.test.ts",
+    test: "downgrade refusal oracle rejects acceptance",
+  },
+  {
+    name: "mistake a near-match random for the required sentinel",
+    file: "conformance/fixtures/tls-downgrade.py",
+    before: "self.random[-8:] = TLS12_SENTINEL",
+    after: "self.random[-8:] = NEAR_MATCH",
+    suite: "conformance/rfc9846-downgrade.test.ts",
+    test: "source direct, tls12-sentinel",
+  },
+  {
+    name: "discard plaintext alerts after a compatibility CCS",
+    file: "conformance/fixtures/tls-downgrade.py",
+    before: "if kind == ContentType.alert and length == TLS_ALERT_BYTES:",
+    after: "if False:",
+    suite: "conformance/rfc9846-downgrade.test.ts",
+    test: "downgrade alert recorder retains plaintext fatal",
+  },
+  {
     name: "accept an unoffered ALPN selection in the oracle",
     file: "conformance/rfc7301-alpn.test.ts",
     before: "    result.accepted,\n    false,",
@@ -4087,6 +4113,7 @@ for (const mutation of mutations) {
       "conformance/rfc6066-sni.test.ts",
       "conformance/rfc7301-alpn.test.ts",
       "conformance/rfc9846-keyupdate.test.ts",
+      "conformance/rfc9846-downgrade.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
@@ -4165,7 +4192,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc6120-certificates.test.ts" ||
       mutation.suite === "conformance/rfc6066-sni.test.ts" ||
       mutation.suite === "conformance/rfc7301-alpn.test.ts" ||
-      mutation.suite === "conformance/rfc9846-keyupdate.test.ts"
+      mutation.suite === "conformance/rfc9846-keyupdate.test.ts" ||
+      mutation.suite === "conformance/rfc9846-downgrade.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });

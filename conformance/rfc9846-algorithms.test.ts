@@ -8,6 +8,7 @@ import { createTLSCertificates } from "./tls-certificates.ts";
 // P-256/X25519 key exchange: rfc7590-versions.test.ts; initial offers:
 // rfc10015-cipher-offers.test.ts. Native browser use: ../test/browser-tls.test.ts.
 // Authenticated post-handshake updates: rfc9846-keyupdate.test.ts.
+// TLS 1.2 downgrade sentinels: rfc9846-downgrade.test.ts.
 // A sole configured server signature scheme + fresh authenticated handshake
 // establishes CertificateVerify use; getSharedSigalgs is not a selection getter.
 // https://www.rfc-editor.org/rfc/rfc9846.html#section-9.1
