@@ -19,7 +19,10 @@ const TLS12_CIPHER = 0xc02f;
 const TLS12_SENTINEL = "444f574e47524401";
 const TLS11_SENTINEL = "444f574e47524400";
 const NEAR_MATCH = "444f574e47524402";
-const FATAL_ILLEGAL_PARAMETER = [2, 47];
+const FATAL = 2;
+const ILLEGAL_PARAMETER = 47;
+const GENERAL_ERROR = 117;
+const FATAL_ILLEGAL_PARAMETER = [FATAL, ILLEGAL_PARAMETER];
 const X25519 = 29;
 const RSA_KEY_BITS = 2048;
 const CHILD_TIMEOUT_MS = 8000;
@@ -201,10 +204,13 @@ function verifyRefusal(result: Result, records: Connection[]) {
       [],
       "WebSocket upgraded despite downgrade",
     );
-    assert.deepEqual(
-      record.alerts,
-      [FATAL_ILLEGAL_PARAMETER],
-      "Missing fatal illegal_parameter",
+    assert.equal(record.alerts.length, 1, "Missing or repeated fatal alert");
+    assert.equal(record.alerts[0].length, 2, "Malformed fatal alert");
+    assert.equal(record.alerts[0][0], FATAL);
+    // RFC 9846 §6.2 also permits concealing this specific rejection reason.
+    assert.ok(
+      [ILLEGAL_PARAMETER, GENERAL_ERROR].includes(record.alerts[0][1]),
+      "Incorrect fatal downgrade alert",
     );
   }
 }
@@ -221,6 +227,9 @@ test("downgrade refusal oracle rejects acceptance, timeouts, application leaks a
     errors: [],
   };
   expect(() => verifyRefusal({ accepted: false }, [record])).not.toThrow();
+  expect(() =>
+    verifyRefusal({ accepted: false }, [{ ...record, alerts: [[2, 117]] }]),
+  ).not.toThrow();
   expect(() => verifyRefusal({ accepted: true }, [record])).toThrow();
   expect(() =>
     verifyRefusal({ accepted: false, name: "TimeoutError" }, [record]),
@@ -229,6 +238,8 @@ test("downgrade refusal oracle rejects acceptance, timeouts, application leaks a
   for (const broken of [
     { ...record, alerts: [] },
     { ...record, alerts: [[1, 47]] },
+    { ...record, alerts: [[1, 117]] },
+    { ...record, alerts: [[2, 50]] },
     { ...record, alerts: [[2, 40]] },
     { ...record, requests: ["/.well-known/host-meta"] },
     { ...record, upgrades: [{ path: "/xmpp", protocol: "xmpp" }] },

@@ -21,6 +21,7 @@ const HANDSHAKE = 22;
 const APPLICATION_DATA = 23;
 const ALERT = 21;
 const FATAL_ILLEGAL_PARAMETER = "022f";
+const FATAL_GENERAL_ERROR = "0275";
 const FATAL_DECODE_ERROR = "0232";
 const NOT_REQUESTED = "1800000100";
 const REQUESTED = "1800000101";
@@ -43,6 +44,42 @@ type Records = {
   errors: { name: string; message: string }[];
 };
 let directory: string;
+
+function verifyKeyUpdateAlert(received: Event[]) {
+  const alerts = received.filter(({ type }) => type === ALERT);
+  assert.equal(alerts.length, 1, "Missing or repeated KeyUpdate alert");
+  // RFC 9846 §6.2 permits deliberate generic errors, not a different diagnosis.
+  assert.ok(
+    [FATAL_ILLEGAL_PARAMETER, FATAL_GENERAL_ERROR].includes(alerts[0]!.bytes),
+    "Incorrect fatal KeyUpdate alert",
+  );
+}
+
+test.each([
+  ["specific", "022f"],
+  ["generic", "0275"],
+])(
+  "RFC 9846 §6.2: KeyUpdate refusal permits the %s fatal alert",
+  (_name, bytes) => {
+    expect(() => verifyKeyUpdateAlert([{ type: 21, bytes }])).not.toThrow();
+  },
+);
+
+test("RFC 9846 §6.2: KeyUpdate refusal does not permit arbitrary, warning or missing alerts", () => {
+  for (const received of [
+    [],
+    [{ type: 21, bytes: "0232" }],
+    [{ type: 21, bytes: "012f" }],
+    [{ type: 21, bytes: "0175" }],
+    [{ type: 21, bytes: "02ff" }],
+    [
+      { type: 21, bytes: "022f" },
+      { type: 21, bytes: "0275" },
+    ],
+  ]) {
+    expect(() => verifyKeyUpdateAlert(received)).toThrow();
+  }
+});
 
 function verifyExchange(
   records: Records,
@@ -366,9 +403,7 @@ beforeAll(async () => {
     const { records, client } = await exchange("native", scenario);
     verifyExchange(records, scenario, "native");
     if (scenario === "invalid") {
-      expect(records.received.filter(({ type }) => type === ALERT)).toEqual([
-        { type: ALERT, bytes: FATAL_ILLEGAL_PARAMETER },
-      ]);
+      expect(() => verifyKeyUpdateAlert(records.received)).not.toThrow();
     }
     expect(client.authorized).toBe(true);
     expect(client.protocol).toBe("TLSv1.3");
@@ -557,7 +592,11 @@ for (const artifact of ["source", "ESM", "minified"] as const) {
         verifyExchange(records, scenario, "xmpp");
         if (scenario === "invalid" && Bun.version === "1.4.4") {
           // Keep the known failure narrow: other fatal outcomes are not #106.
-          expect([FATAL_ILLEGAL_PARAMETER, FATAL_DECODE_ERROR]).toContain(
+          expect([
+            FATAL_ILLEGAL_PARAMETER,
+            FATAL_GENERAL_ERROR,
+            FATAL_DECODE_ERROR,
+          ]).toContain(
             records.received.find(({ type }) => type === ALERT)!.bytes,
           );
         }
@@ -568,11 +607,11 @@ for (const artifact of ["source", "ESM", "minified"] as const) {
         // application isolation above remain unconditional requirements.
         const verify = Bun.version === "1.4.4" ? test.failing : test;
         verify(
-          `emits fatal illegal_parameter${Bun.version === "1.4.4" ? " [expected Bun 1.4.4 violation #106]" : ""}`,
+          `emits fatal illegal_parameter or general_error${Bun.version === "1.4.4" ? " [expected Bun 1.4.4 violation #106]" : ""}`,
           () => {
-            expect(
-              observed.records.received.filter(({ type }) => type === ALERT),
-            ).toEqual([{ type: ALERT, bytes: FATAL_ILLEGAL_PARAMETER }]);
+            expect(() =>
+              verifyKeyUpdateAlert(observed.records.received),
+            ).not.toThrow();
           },
         );
       }

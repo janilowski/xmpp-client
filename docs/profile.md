@@ -74,6 +74,12 @@ fatal alert before HTTP. Serialized peer messages and native Node controls
 guard the selection oracle. This bounded matrix does not establish browser,
 unsolicited-extension or resumed-session behavior.
 
+TLS 1.3 error-alert checks permit RFC 9846 §6.2's deliberate `general_error`
+alternative to a specific diagnosis; unrelated alert codes remain invalid.
+The tests expect the recommended alert on a reachable fixture independently
+of mandatory connection closure and data isolation. A silent close alone is
+not proof of a mandatory alert-code violation or an acceptable timeout oracle.
+
 For WSS and HTTPS discovery, the selected profile relies on native HTTPS/PKIX
 validation rather than adding RFC 6120 §13.7.1.1's extra CA `digitalSignature`
 requirement, imported by §13.7.2 step 4. RFC 5280 §4.2.1.3 assigns certificate
@@ -105,9 +111,10 @@ crypto. These are Bun integration checks, not browser-version or cipher audits.
 
 Separate Bun source/ESM/minified WSS/discovery cases verify both exact TLS 1.3
 downgrade sentinels in a TLS 1.2 ServerHello (RFC 9846 §4.2.3): fatal
-`illegal_parameter` precedes HTTP, while ordinary and near-match randoms
-preserve authenticated TLS 1.2. Native TLS-1.2-only controls authenticate the
-same marked peers, guarding transcript/signature integrity. Browser, HRR and
+`illegal_parameter` (or permitted `general_error`) precedes HTTP, while ordinary
+and near-match randoms preserve authenticated TLS 1.2. Native TLS-1.2-only
+controls authenticate the same marked peers, guarding transcript/signature
+integrity. Browser, HRR and
 resumption behavior remain unverified by this bounded matrix.
 
 Separate Linux Chromium/Firefox tests use a disposable CA with isolated browser
@@ -233,11 +240,12 @@ acknowledgement failure above or establish browser renegotiation behavior.
 Authenticated Bun TLS 1.3 tests complete XMPP before exercising KeyUpdate
 (RFC 9846 §4.7.3). Both valid request modes preserve bidirectional traffic;
 requested updates require a reciprocal update before subsequent application
-data. An invalid request byte must produce fatal `illegal_parameter`, close
-the connection and deliver no later XML. Bun 1.4.4 instead sends fatal
-`decode_error` (#106), while satisfying those closure/isolation checks.
-Exact-version expected failures retain the required alert; native APIs cannot
-replace an already emitted encrypted alert. The independent peer owns TLS
+data. Invalid requests require closure without later XML; the error-alert
+check accepts fatal `illegal_parameter` or permitted `general_error`.
+Bun 1.4.4 instead sends fatal `decode_error` (#106), while satisfying those
+closure/isolation checks. Exact-version expected failures retain the permitted
+alert codes; native APIs cannot replace an already emitted encrypted alert.
+The independent peer owns TLS
 encryption, not production JavaScript. Browser/discovery behavior, pre-Finished
 updates and key-usage limits remain unverified by this bounded matrix.
 

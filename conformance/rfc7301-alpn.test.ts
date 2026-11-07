@@ -19,6 +19,7 @@ const ENCRYPTED_EXTENSIONS = 8;
 const HTTP_PROTOCOL = "http/1.1";
 const FATAL = 2;
 const ILLEGAL_PARAMETER = 47;
+const GENERAL_ERROR = 117;
 const X25519 = 29;
 const TLS12_CIPHER = 0xc02f;
 const TLS13_CIPHER = 0x1301;
@@ -194,7 +195,10 @@ function validateRefusal(
     assert.equal(record.alerts[0][0], FATAL, "ALPN refusal must be fatal");
     if (version === 4) {
       // RFC 9846 §6: syntactically valid but semantically invalid parameters.
-      assert.equal(record.alerts[0][1], ILLEGAL_PARAMETER);
+      // RFC 9846 §6.2 permits concealing a specific error with general_error.
+      assert.ok(
+        [ILLEGAL_PARAMETER, GENERAL_ERROR].includes(record.alerts[0][1]),
+      );
     }
   }
 }
@@ -412,6 +416,29 @@ test("ALPN refusal oracle rejects permissive outcomes, missing alerts and applic
     },
   ]) {
     expect(() => validateRefusal({ accepted: false }, [broken], 4)).toThrow();
+  }
+});
+
+test("RFC 9846 §6.2: ALPN refusal permits general_error, not an arbitrary fatal alert", () => {
+  const record: Connection = {
+    hellos: [],
+    responses: [],
+    session: null,
+    group: null,
+    requests: [],
+    upgrades: [],
+    alerts: [[2, 117]],
+    errors: [],
+  };
+  expect(() => validateRefusal({ accepted: false }, [record], 4)).not.toThrow();
+  for (const description of [0, 50, 51, 255]) {
+    expect(() =>
+      validateRefusal(
+        { accepted: false },
+        [{ ...record, alerts: [[2, description]] }],
+        4,
+      ),
+    ).toThrow();
   }
 });
 

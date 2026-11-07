@@ -38,6 +38,55 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "reject permitted generic ALPN errors",
+    file: "conformance/rfc7301-alpn.test.ts",
+    before: "[ILLEGAL_PARAMETER, GENERAL_ERROR].includes(",
+    after: "[ILLEGAL_PARAMETER].includes(",
+    suite: "conformance/rfc7301-alpn.test.ts",
+    test: "ALPN refusal permits general_error",
+  },
+  {
+    name: "accept an unrelated fatal ALPN error",
+    file: "conformance/rfc7301-alpn.test.ts",
+    before: "[ILLEGAL_PARAMETER, GENERAL_ERROR].includes(",
+    after: "[ILLEGAL_PARAMETER, GENERAL_ERROR, 50].includes(",
+    suite: "conformance/rfc7301-alpn.test.ts",
+    test: "ALPN refusal permits general_error",
+  },
+  {
+    name: "reject permitted generic downgrade errors",
+    file: "conformance/rfc9846-downgrade.test.ts",
+    before: "[ILLEGAL_PARAMETER, GENERAL_ERROR].includes(",
+    after: "[ILLEGAL_PARAMETER].includes(",
+    suite: "conformance/rfc9846-downgrade.test.ts",
+    test: "downgrade refusal oracle rejects acceptance",
+  },
+  {
+    name: "accept an unrelated fatal downgrade error",
+    file: "conformance/rfc9846-downgrade.test.ts",
+    before: "[ILLEGAL_PARAMETER, GENERAL_ERROR].includes(",
+    after: "[ILLEGAL_PARAMETER, GENERAL_ERROR, 50].includes(",
+    suite: "conformance/rfc9846-downgrade.test.ts",
+    test: "downgrade refusal oracle rejects acceptance",
+  },
+  {
+    name: "reject permitted generic KeyUpdate errors",
+    file: "conformance/rfc9846-keyupdate.test.ts",
+    before: "[FATAL_ILLEGAL_PARAMETER, FATAL_GENERAL_ERROR].includes(",
+    after: "[FATAL_ILLEGAL_PARAMETER].includes(",
+    suite: "conformance/rfc9846-keyupdate.test.ts",
+    test: "KeyUpdate refusal permits the",
+  },
+  {
+    name: "accept the incorrect KeyUpdate decode_error",
+    file: "conformance/rfc9846-keyupdate.test.ts",
+    before: "[FATAL_ILLEGAL_PARAMETER, FATAL_GENERAL_ERROR].includes(",
+    after:
+      "[FATAL_ILLEGAL_PARAMETER, FATAL_GENERAL_ERROR, FATAL_DECODE_ERROR].includes(",
+    suite: "conformance/rfc9846-keyupdate.test.ts",
+    test: "KeyUpdate refusal does not permit",
+  },
+  {
     name: "accept SCSV without the required RI extension",
     file: "conformance/tls-offers.ts",
     before:
