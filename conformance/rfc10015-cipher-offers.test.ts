@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from "bun:test";
+import { createHash } from "node:crypto";
 import { ClientHello, parseHello } from "./fixtures/client-hello.mjs";
 import {
+  FINITE_FIELD_DH,
   OFFER_MODES,
   OFFER_TIMEOUT_MS,
   STATIC_RSA,
@@ -8,6 +10,7 @@ import {
   signatureAlgorithms,
   validateOfferControls,
   validateOfferExtensions,
+  validateFiniteFieldDHOffers,
   validateSignatureHashes,
   type Hello,
 } from "./tls-offers.ts";
@@ -170,10 +173,52 @@ test("RFC 10015 offer oracle: native OpenSSL independently constrained ECDHE con
   expect(hellos[0].ciphers.filter((id) => id !== "00ff")).toEqual(["c02f"]);
 });
 
+test("RFC 10015 §§2–3 oracle: complete DH/DHE inventory without banning ECDH or TLS 1.3 groups", () => {
+  // Independent RFC table-name/IANA-ID cross-check: 62 + 69 entries, no gaps.
+  expect(FINITE_FIELD_DH.size).toBe(131);
+  expect(
+    createHash("sha256")
+      .update([...FINITE_FIELD_DH].toSorted().join(":"))
+      .digest("hex"),
+  ).toBe("a61f68ff3b2ee7ca7a33b92f66bc879a6149aac145b841e14b750d7ecdbb6038");
+  const hello: Hello = {
+    version: "0303",
+    compression: "00",
+    // ECDHE, TLS 1.3, static ECDH, SCSV and GREASE are distinct from FFDH.
+    ciphers: ["c02f", "1301", "c02d", "00ff", "0a0a"],
+    extensions: [
+      { type: 43, value: "0403040303" },
+      { type: 10, value: "000401000101" }, // ffdhe2048 and ffdhe3072.
+    ],
+  };
+  expect(() => validateFiniteFieldDHOffers([hello])).not.toThrow();
+  expect(() => validateFiniteFieldDHOffers([])).toThrow("No ClientHello");
+  // Literal samples cover static/anonymous/DSS/RSA/PSK and legacy/AEAD suites.
+  for (const cipher of [
+    "000b",
+    "0017",
+    "00a0",
+    "c07e",
+    "0011",
+    "009e",
+    "00aa",
+    "c0a6",
+    "ccad",
+  ]) {
+    expect(() =>
+      validateFiniteFieldDHOffers([
+        hello,
+        { ...hello, ciphers: [...hello.ciphers, cipher] },
+      ]),
+    ).toThrow("Finite-field DH cipher suites are prohibited");
+  }
+});
+
 for (const mode of OFFER_MODES) {
   for (const artifact of ["source", "ESM", "minified"] as const) {
     for (const policy of [
       "default",
+      "ALL",
       "ECDHE-RSA-AES128-GCM-SHA256",
       "TLS_AES_128_GCM_SHA256",
     ]) {
@@ -243,6 +288,9 @@ for (const mode of OFFER_MODES) {
           test("RFC 9155 §2: TLS 1.2 offers omit MD5/SHA-1 signature hashes", () => {
             expect(() => validateSignatureHashes(hellos)).not.toThrow();
           });
+          test("RFC 10015 §§2–3: TLS 1.2 offers omit finite-field DH/DHE suites", () => {
+            expect(() => validateFiniteFieldDHOffers(hellos)).not.toThrow();
+          });
         }
 
         test("local maintenance policy: preserves current native strong signature order", () => {
@@ -271,7 +319,7 @@ for (const mode of OFFER_MODES) {
               expect(
                 hello.extensions.find(({ type }) => type === 43)?.value,
               ).toBe("020304");
-            } else if (policy !== "default") {
+            } else if (policy === "ECDHE-RSA-AES128-GCM-SHA256") {
               expect(
                 hello.ciphers.filter(
                   (id) => !["1301", "1302", "1303"].includes(id),

@@ -167,6 +167,13 @@ conformance passes. Standard Web APIs expose no cipher-selection control.
 Server-side RSA refusal does not repair the client offer. These tests do not certify other cipher,
 key-exchange or certificate requirements; this mandatory runtime gap remains open.
 
+Independent RFC 10015 Tables 1/3 and IANA inventories also check initial
+finite-field DH/DHE cipher offers (§§2–3) for Bun source/ESM/minified
+WSS/discovery, including configured `ALL`, and both browsers. Static ECDH's
+separate SHOULD policy and permitted TLS 1.3 finite-field groups are not
+misclassified as those forbidden suites. Negotiation and client-certificate
+types remain outside this bounded offer check.
+
 The approved Bun policy also rejects CBC suites rather than implementing EtM
 (RFC 9325 §4.2 / #102). Bun 1.4.4 offers no native EtM enforcement; its generic
 `!CBC` cipher selector is ignored. The adapter excludes CBC-SHA1 MAC suites and

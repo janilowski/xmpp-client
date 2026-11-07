@@ -38,6 +38,22 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept prohibited finite-field DH offers",
+    file: "conformance/tls-offers.ts",
+    before: "hello.ciphers.filter((id) => FINITE_FIELD_DH.has(id)),",
+    after: "[],",
+    suite: "conformance/rfc10015-cipher-offers.test.ts",
+    test: "complete DH/DHE inventory",
+  },
+  {
+    name: "omit a prohibited finite-field DH cipher",
+    file: "conformance/tls-offers.ts",
+    before: '  "000b",',
+    after: "",
+    suite: "conformance/rfc10015-cipher-offers.test.ts",
+    test: "complete DH/DHE inventory",
+  },
+  {
     name: "accept a downgrade sentinel in the refusal oracle",
     file: "conformance/rfc9846-downgrade.test.ts",
     before:
