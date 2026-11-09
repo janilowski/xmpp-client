@@ -38,6 +38,33 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept an absent required CertificateRequest witness",
+    file: "conformance/rfc9846-client-auth.test.ts",
+    before:
+      '  assert.equal(record.requests.length, scenario === "optional" ? 1 : 0);',
+    after: "/* Request count check omitted */",
+    suite: "conformance/rfc9846-client-auth.test.ts",
+    test: "authentication oracle rejects missing",
+  },
+  {
+    name: "accept a nonempty client certificate without an identity",
+    file: "conformance/rfc9846-client-auth.test.ts",
+    before:
+      '    assert.equal(\n      record.authentication[0],\n      EMPTY_CERTIFICATE,\n      "Client certificate must have empty context and list",\n    );',
+    after: "/* Empty certificate check omitted */",
+    suite: "conformance/rfc9846-client-auth.test.ts",
+    test: "authentication oracle rejects missing",
+  },
+  {
+    name: "omit decrypted client Certificate observations",
+    file: "conformance/fixtures/tls13-client-auth.py",
+    before: "                    if data[0] in (HandshakeType.certificate,",
+    after:
+      "                    if data[0] != HandshakeType.certificate and data[0] in (HandshakeType.certificate,",
+    suite: "conformance/rfc9846-client-auth.test.ts",
+    test: "source direct, optional client authentication",
+  },
+  {
     name: "reject permitted generic ALPN errors",
     file: "conformance/rfc7301-alpn.test.ts",
     before: "[ILLEGAL_PARAMETER, GENERAL_ERROR].includes(",
@@ -4198,6 +4225,7 @@ for (const mutation of mutations) {
       "conformance/rfc7301-alpn.test.ts",
       "conformance/rfc9846-keyupdate.test.ts",
       "conformance/rfc9846-downgrade.test.ts",
+      "conformance/rfc9846-client-auth.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
@@ -4277,7 +4305,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc6066-sni.test.ts" ||
       mutation.suite === "conformance/rfc7301-alpn.test.ts" ||
       mutation.suite === "conformance/rfc9846-keyupdate.test.ts" ||
-      mutation.suite === "conformance/rfc9846-downgrade.test.ts"
+      mutation.suite === "conformance/rfc9846-downgrade.test.ts" ||
+      mutation.suite === "conformance/rfc9846-client-auth.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });
