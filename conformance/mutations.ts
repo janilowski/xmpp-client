@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "accept a reused client key share",
+    file: "conformance/rfc9846-keyshare.test.ts",
+    before: "!previous.has(value),",
+    after: "true,",
+    suite: "conformance/rfc9846-keyshare.test.ts",
+    test: "oracle: compare connections",
+  },
+  {
+    name: "accept unordered or duplicate client shares",
+    file: "conformance/rfc9846-keyshare.test.ts",
+    before: "position > previous,",
+    after: "position >= 0,",
+    suite: "conformance/rfc9846-keyshare.test.ts",
+    test: "oracle: reject duplicate",
+  },
+  {
+    name: "mistake repeated GREASE for reused key material",
+    file: "conformance/rfc9846-keyshare.test.ts",
+    before: "if ((group & 0x0f0f) === 0x0a0a && group >> 8 === (group & 255)) {",
+    after: "if (false) {",
+    suite: "conformance/rfc9846-keyshare.test.ts",
+    test: "oracle: compare connections",
+  },
+  {
     name: "accept an absent required CertificateRequest witness",
     file: "conformance/rfc9846-client-auth.test.ts",
     before:
@@ -4226,6 +4250,7 @@ for (const mutation of mutations) {
       "conformance/rfc9846-keyupdate.test.ts",
       "conformance/rfc9846-downgrade.test.ts",
       "conformance/rfc9846-client-auth.test.ts",
+      "conformance/rfc9846-keyshare.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
@@ -4306,7 +4331,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc7301-alpn.test.ts" ||
       mutation.suite === "conformance/rfc9846-keyupdate.test.ts" ||
       mutation.suite === "conformance/rfc9846-downgrade.test.ts" ||
-      mutation.suite === "conformance/rfc9846-client-auth.test.ts"
+      mutation.suite === "conformance/rfc9846-client-auth.test.ts" ||
+      mutation.suite === "conformance/rfc9846-keyshare.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });
