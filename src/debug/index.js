@@ -34,14 +34,20 @@ function hide(element) {
 }
 
 export function hideSensitive(element) {
+  // Match every qualified field; foreign lookalikes must not hide real secrets.
   if (isSensitive(element)) {
     hide(element);
   } else if (element.is("authenticate", NS_SASL2)) {
-    hide(element.getChild("initial-response"));
+    for (const response of element.getChildren("initial-response", NS_SASL2)) {
+      hide(response);
+    }
   } else if (element.getNS() === NS_SASL2) {
-    hide(element.getChild("additional-data"));
-    const token = element.getChild("token", NS_FAST);
-    token && (token.attrs.token = "hidden by xmpp-client");
+    for (const data of element.getChildren("additional-data", NS_SASL2)) {
+      hide(data);
+    }
+    for (const token of element.getChildren("token", NS_FAST)) {
+      token.attrs.token = "hidden by xmpp-client";
+    }
   }
 
   return element;

@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "redact only the first unqualified SASL2 initial response",
+    file: "src/debug/index.js",
+    before: 'element.getChildren("initial-response", NS_SASL2)',
+    after: '[element.getChild("initial-response")]',
+    suite: "src/debug/redaction.test.ts",
+    test: "redact SASL2 initial-response",
+  },
+  {
+    name: "redact only the first unqualified SASL2 additional data",
+    file: "src/debug/index.js",
+    before: 'element.getChildren("additional-data", NS_SASL2)',
+    after: '[element.getChild("additional-data")]',
+    suite: "src/debug/redaction.test.ts",
+    test: "redact SASL2 additional-data",
+  },
+  {
+    name: "leave a later FAST token visible in debug output",
+    file: "src/debug/index.js",
+    before: 'element.getChildren("token", NS_FAST)',
+    after: 'element.getChildren("token", NS_FAST).slice(0, 1)',
+    suite: "src/debug/redaction.test.ts",
+    test: "redact FAST tokens",
+  },
+  {
     name: "match IQ helper replies by lexical prefix",
     file: "src/iq/caller.js",
     before: "const name = element.getName();",
