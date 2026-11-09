@@ -7,6 +7,7 @@ import { readFrame } from "./xml.ts";
 const FRAMING = "urn:ietf:params:xml:ns:xmpp-framing";
 const STREAM = "http://etherx.jabber.org/streams";
 const STREAM_ERRORS = "urn:ietf:params:xml:ns:xmpp-streams";
+const FOREIGN = "urn:test:redirect-extension";
 const SASL = "urn:ietf:params:xml:ns:xmpp-sasl";
 const BIND = "urn:ietf:params:xml:ns:xmpp-bind";
 const OPTIONS = { domain: "example.test", lang: "pl" };
@@ -343,3 +344,142 @@ test("RFC 6120 §4.9.3.19: successful negotiation ends a redirect sequence", asy
     await Promise.all(peers.map((peer) => peer.stop()));
   }
 });
+
+const namespaceRedirects: [
+  string,
+  "genuine" | "safe" | "error",
+  (genuine: string, foreign: string) => string,
+][] = [
+  [
+    "defined condition before foreign application detail",
+    "genuine",
+    (genuine, foreign) =>
+      `<stream:error xmlns:stream="${STREAM}"><see-other-host xmlns="${STREAM_ERRORS}">${genuine}</see-other-host><see-other-host xmlns="${FOREIGN}">${foreign}</see-other-host></stream:error>`,
+  ],
+  [
+    "prefixed condition before foreign application detail",
+    "genuine",
+    (genuine, foreign) =>
+      `<stream:error xmlns:stream="${STREAM}"><e:see-other-host xmlns:e="${STREAM_ERRORS}">${genuine}</e:see-other-host><see-other-host xmlns="${FOREIGN}">${foreign}</see-other-host></stream:error>`,
+  ],
+  [
+    "condition inherits the default namespace",
+    "genuine",
+    (genuine, foreign) =>
+      `<stream:error xmlns:stream="${STREAM}" xmlns="${STREAM_ERRORS}"><see-other-host>${genuine}</see-other-host><f:see-other-host xmlns:f="${FOREIGN}">${foreign}</f:see-other-host></stream:error>`,
+  ],
+  [
+    "condition inherits its prefix declaration",
+    "genuine",
+    (genuine, foreign) =>
+      `<stream:error xmlns:stream="${STREAM}" xmlns:e="${STREAM_ERRORS}"><e:see-other-host>${genuine}</e:see-other-host><see-other-host xmlns="${FOREIGN}">${foreign}</see-other-host></stream:error>`,
+  ],
+  [
+    "hostile foreign-before-defined ordering",
+    "safe",
+    (genuine, foreign) =>
+      `<stream:error xmlns:stream="${STREAM}"><see-other-host xmlns="${FOREIGN}">${foreign}</see-other-host><see-other-host xmlns="${STREAM_ERRORS}">${genuine}</see-other-host></stream:error>`,
+  ],
+  [
+    "foreign-only namesake",
+    "error",
+    (_genuine, foreign) =>
+      `<stream:error xmlns:stream="${STREAM}"><see-other-host xmlns="${FOREIGN}">${foreign}</see-other-host></stream:error>`,
+  ],
+];
+
+// RFC 6120 §§4.9.2/4.9.3.19: only the defined condition can supply routing
+// authority. Foreign-before-defined violates the normal error ordering; either
+// handling the genuine condition or deterministic safe refusal is acceptable.
+test.each(namespaceRedirects)(
+  "RFC 6120 §§4.9.2/4.9.3.19: redirect uses the condition namespace / %s",
+  async (_name, expected, makeError) => {
+    type Outcome =
+      | { kind: "genuine" | "foreign"; frame: string }
+      | { kind: "error"; error: Error };
+    const outcome = Promise.withResolvers<Outcome>();
+    const destinations = new Map(
+      (["genuine", "foreign"] as const).map((kind) => [
+        kind,
+        new ScriptedPeer((frame, peer) => {
+          const [root] = readFrame(frame);
+          if ("open" in root && root.open === `{${FRAMING}}open`) {
+            outcome.resolve({ kind, frame });
+            peer.send(
+              `<open xmlns="${FRAMING}" from="example.test" version="1.0" id="${kind}"/>`,
+            );
+          } else if ("open" in root && root.open === `{${FRAMING}}close`) {
+            peer.send(`<close xmlns="${FRAMING}"/>`);
+          }
+        }),
+      ]),
+    );
+    const genuine = destinations.get("genuine")!;
+    const foreign = destinations.get("foreign")!;
+    const source = new ScriptedPeer((frame, peer) => {
+      const [root] = readFrame(frame);
+      if ("open" in root && root.open === `{${FRAMING}}open`) {
+        peer.send(
+          `<open xmlns="${FRAMING}" from="example.test" version="1.0" id="source"/>`,
+        );
+        peer.send(makeError(target(genuine), target(foreign)));
+      } else if ("open" in root && root.open === `{${FRAMING}}close`) {
+        peer.send(`<close xmlns="${FRAMING}"/>`);
+      }
+    });
+    const xmpp = client({ ...OPTIONS, service: source.url });
+    xmpp.reconnect.stop();
+    const errors: Error[] = [];
+    xmpp.on("error", (error: Error) => {
+      errors.push(error);
+      outcome.resolve({ kind: "error", error });
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await xmpp.connect(source.url);
+      await xmpp.open(OPTIONS);
+      const result = await Promise.race([
+        outcome.promise,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("No decisive redirect outcome")),
+            EVENT_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      // The permissive foreign peer completes the old path: failure is the
+      // actual contact assertion, never an unavailable server or timeout.
+      expect(result.kind).not.toBe("foreign");
+      expect(foreign.requests).toEqual([]);
+      expect(foreign.transcript).toEqual([]);
+      if (expected !== "safe") {
+        expect(result.kind).toBe(expected);
+      }
+      if (result.kind === "error") {
+        expect(result.error).toBeInstanceOf(Error);
+        expect(result.error.name).not.toBe("TimeoutError");
+        expect(genuine.requests).toEqual([]);
+      } else {
+        expect(readFrame(result.frame)[0]).toMatchObject({
+          open: `{${FRAMING}}open`,
+          attributes: { "{}to": OPTIONS.domain },
+        });
+        expect(genuine.requests).toHaveLength(1);
+        expect(new URL(genuine.requestUrls[0]).pathname).toBe("/xmpp");
+        expect(errors).toEqual([]);
+      }
+      await source.waitForClose();
+      await xmpp.stop();
+      expect(foreign.requests).toEqual([]);
+      expect(foreign.transcript).toEqual([]);
+      expect(source.errors).toEqual([]);
+      expect(genuine.errors).toEqual([]);
+      expect(foreign.errors).toEqual([]);
+    } finally {
+      clearTimeout(timer);
+      await xmpp.stop().catch(() => {});
+      await source.stop();
+      await Promise.all([...destinations.values()].map((peer) => peer.stop()));
+    }
+  },
+);

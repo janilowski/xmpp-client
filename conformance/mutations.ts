@@ -38,6 +38,14 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "read a redirect from a foreign namespace",
+    file: "src/connection/index.js",
+    before: 'getChildText("see-other-host", NS_STREAM)',
+    after: 'getChildText("see-other-host")',
+    suite: "conformance/rfc6120-see-other-host.test.ts",
+    test: "hostile foreign-before-defined ordering",
+  },
+  {
     name: "disable namespace processing for parsed documents",
     file: "src/xml/lib/parseDocument.js",
     before: "new SaxesParser({ xmlns: true })",

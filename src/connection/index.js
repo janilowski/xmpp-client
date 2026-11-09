@@ -299,7 +299,7 @@ class Connection extends EventEmitter {
       return;
     }
 
-    const host = error.element.getChildText("see-other-host");
+    const host = error.element.getChildText("see-other-host", NS_STREAM);
     let service;
     let redirectCount;
 
