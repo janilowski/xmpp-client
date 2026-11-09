@@ -7,16 +7,20 @@ import sys
 import threading
 import time
 
-dependencies, directory, version, mode = sys.argv[1:]
+assert len(sys.argv) in (5, 6)
+dependencies, directory, version, mode = sys.argv[1:5]
+fault = sys.argv[5] if len(sys.argv) == 6 else "none"
 sys.path.insert(0, dependencies)
 import tlslite
 from tlslite.api import HandshakeSettings, TLSConnection, X509, X509CertChain, parsePEMKey
 from tlslite.constants import ContentType, ExtensionType, HandshakeType
 from tlslite.extensions import ALPNExtension
-from tlslite.messages import EncryptedExtensions, ServerHello, ServerKeyExchange
+from tlslite.messages import EncryptedExtensions, Finished, ServerHello, ServerKeyExchange
 
 assert tlslite.__version__ == "0.8.2", "Run bun run test:tls:setup"
 assert version in ("3", "4") and mode in ("none", "offered", "unoffered")
+assert fault in ("none", "finished")
+assert fault == "none" or (version == "4" and mode == "offered")
 SOCKET_TIMEOUT_SECONDS = 4
 ALERT_DRAIN_SECONDS = 0.2
 SERVER_HELLO_PAUSE_SECONDS = 0.05
@@ -30,6 +34,7 @@ WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 records = []
 condition = threading.Condition()
 sockets = set()
+held_sockets = set()
 with open(directory + "/leaf.pem") as source:
     leaf = X509().parse(source.read())
 with open(directory + "/ca.pem") as source:
@@ -121,6 +126,21 @@ class ObservedTLS(TLSConnection):
     def _queue_message(self, message):
         if isinstance(message, EncryptedExtensions):
             self._select_protocol(message)
+        elif isinstance(message, Finished):
+            self.record["group"] = self.ecdhCurve
+            original_write = message.write
+
+            def serialize_finished():
+                original = original_write()
+                sent = bytearray(original)
+                if fault == "finished":
+                    # Corrupt only Finished authentication data. CertificateVerify
+                    # is already signed; tlslite still owns transcript and AEAD.
+                    sent[-1] ^= 1
+                self.record["finished"].append({"original": bytes(original).hex(),
+                                                 "sent": bytes(sent).hex()})
+                return sent
+            message.write = serialize_finished
         super()._queue_message(message)
 
 
@@ -142,7 +162,7 @@ port = listener.getsockname()[1]
 
 def serve(raw):
     record = {"hellos": [], "responses": [], "session": None, "group": None,
-              "requests": [], "upgrades": [], "alerts": [], "errors": []}
+              "requests": [], "upgrades": [], "alerts": [], "errors": [], "finished": []}
     records.append(record)
     raw.settimeout(SOCKET_TIMEOUT_SECONDS)
     observed = ObservedSocket(raw, record)
@@ -195,8 +215,13 @@ def serve(raw):
             except (OSError, TimeoutError):
                 pass
     finally:
-        raw.close()
         with condition:
+            if fault == "finished":
+                # Keep the peer's descriptor open until parent release. Neither
+                # fixture cleanup nor a server FIN may manufacture refusal.
+                held_sockets.add(raw)
+            else:
+                raw.close()
             sockets.discard(raw)
             condition.notify_all()
 
@@ -221,9 +246,10 @@ for command in sys.stdin:
             while sockets and time.monotonic() < deadline:
                 condition.wait(max(0, deadline - time.monotonic()))
             assert not sockets, "ALPN peer did not settle"
-        print(json.dumps({"type": "snapshot", "records": records}), flush=True)
+        print(json.dumps({"type": "snapshot", "records": records,
+                          "held": len(held_sockets)}), flush=True)
     elif command.strip() == "stop":
         break
 listener.close()
-for raw in list(sockets):
+for raw in list(sockets | held_sockets):
     raw.close()

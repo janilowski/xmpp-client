@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "omit server Finished corruption",
+    file: "conformance/fixtures/tls-alpn.py",
+    before: "sent[-1] ^= 1",
+    after: "sent[-1] ^= 0",
+    suite: "conformance/rfc9846-finished.test.ts",
+    test: "source direct, invalid server Finished",
+  },
+  {
+    name: "accept an unrelated fatal Finished alert",
+    file: "conformance/rfc9846-finished.test.ts",
+    before: "[DECRYPT_ERROR, GENERAL_ERROR].includes(",
+    after: "[DECRYPT_ERROR, GENERAL_ERROR, 50].includes(",
+    suite: "conformance/rfc9846-finished.test.ts",
+    test: "refusal oracle rejects acceptance",
+  },
+  {
+    name: "reject the permitted generic Finished alert",
+    file: "conformance/rfc9846-finished.test.ts",
+    before: "[DECRYPT_ERROR, GENERAL_ERROR].includes(",
+    after: "[DECRYPT_ERROR].includes(",
+    suite: "conformance/rfc9846-finished.test.ts",
+    test: "refusal oracle rejects acceptance",
+  },
+  {
     name: "accept a reused client key share",
     file: "conformance/rfc9846-keyshare.test.ts",
     before: "!previous.has(value),",
@@ -4251,6 +4275,7 @@ for (const mutation of mutations) {
       "conformance/rfc9846-downgrade.test.ts",
       "conformance/rfc9846-client-auth.test.ts",
       "conformance/rfc9846-keyshare.test.ts",
+      "conformance/rfc9846-finished.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
@@ -4332,7 +4357,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc9846-keyupdate.test.ts" ||
       mutation.suite === "conformance/rfc9846-downgrade.test.ts" ||
       mutation.suite === "conformance/rfc9846-client-auth.test.ts" ||
-      mutation.suite === "conformance/rfc9846-keyshare.test.ts"
+      mutation.suite === "conformance/rfc9846-keyshare.test.ts" ||
+      mutation.suite === "conformance/rfc9846-finished.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });
