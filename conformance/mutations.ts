@@ -38,6 +38,22 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "disable namespace processing for parsed documents",
+    file: "src/xml/lib/parseDocument.js",
+    before: "new SaxesParser({ xmlns: true })",
+    after: "new SaxesParser({ xmlns: false })",
+    suite: "conformance/xml-namespaces.test.ts",
+    test: "input and output reject xml rebound",
+  },
+  {
+    name: "interpret xml-like prefixes as the reserved xml prefix",
+    file: "node_modules/ltx/lib/Element.js",
+    before: 'if (prefix === "xml") {',
+    after: 'if (prefix?.toLowerCase().startsWith("xml")) {',
+    suite: "conformance/xml-namespaces.test.ts",
+    test: "preserve legal xml-like prefix xmlfoo",
+  },
+  {
     name: "omit server Finished corruption",
     file: "conformance/fixtures/tls-alpn.py",
     before: "sent[-1] ^= 1",
@@ -4276,6 +4292,7 @@ for (const mutation of mutations) {
       "conformance/rfc9846-client-auth.test.ts",
       "conformance/rfc9846-keyshare.test.ts",
       "conformance/rfc9846-finished.test.ts",
+      "conformance/xml-namespaces.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
