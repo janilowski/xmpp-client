@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "match IQ helper replies by lexical prefix",
+    file: "src/iq/caller.js",
+    before: "const name = element.getName();",
+    after: "const name = element.name;",
+    suite: "conformance/rfc6120-iq-payloads.test.ts",
+    test: "IQ get prefixed payload accepts",
+  },
+  {
+    name: "ignore a prefixed IQ payload namespace",
+    file: "src/iq/caller.js",
+    before: "const xmlns = element.getNS();",
+    after: "const xmlns = element.attrs.xmlns;",
+    suite: "conformance/rfc6120-iq-payloads.test.ts",
+    test: "IQ get prefixed helper does not return a foreign",
+  },
+  {
+    name: "retarget an IQ helper after caller mutation",
+    file: "src/iq/caller.js",
+    before: "(stanza) => stanza.getChild(name, xmlns),",
+    after: "(stanza) => stanza.getChild(element.getName(), element.getNS()),",
+    suite: "conformance/rfc6120-iq-payloads.test.ts",
+    test: "helper snapshots the request expanded name",
+  },
+  {
     name: "read a redirect from a foreign namespace",
     file: "src/connection/index.js",
     before: 'getChildText("see-other-host", NS_STREAM)',
@@ -4301,6 +4325,7 @@ for (const mutation of mutations) {
       "conformance/rfc9846-keyshare.test.ts",
       "conformance/rfc9846-finished.test.ts",
       "conformance/xml-namespaces.test.ts",
+      "conformance/rfc6120-iq-payloads.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",

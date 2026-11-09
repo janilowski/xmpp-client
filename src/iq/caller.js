@@ -127,10 +127,8 @@ class IQCaller {
   }
 
   _childRequest(type, element, to, ...args) {
-    const {
-      name,
-      attrs: { xmlns },
-    } = element;
+    const name = element.getName();
+    const xmlns = element.getNS();
     return this.request(xml("iq", { type, to }, element), ...args).then(
       (stanza) => stanza.getChild(name, xmlns),
     );
