@@ -38,6 +38,23 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "normalize distinct XML element names",
+    file: "src/xml/lib/parseDocument.js",
+    before: "      tag.name,",
+    after: '      tag.name.normalize("NFC"),',
+    suite: "conformance/xml1.0.test.ts",
+    test: "names preserve code-point and case distinctions",
+  },
+  {
+    name: "re-expand decoded XML text",
+    file: "src/xml/lib/parseDocument.js",
+    before: 'parser.on("text", (text) => {\n    cursor?.t(text);\n  });',
+    after:
+      'parser.on("text", (text) => {\n    cursor?.t(text.replaceAll("&lt;", "<"));\n  });',
+    suite: "conformance/xml1.0.test.ts",
+    test: "retain predefined entities and non-reexpansion",
+  },
+  {
     name: "redact only the first unqualified SASL2 initial response",
     file: "src/debug/index.js",
     before: 'element.getChildren("initial-response", NS_SASL2)',
@@ -4349,6 +4366,7 @@ for (const mutation of mutations) {
       "conformance/rfc9846-keyshare.test.ts",
       "conformance/rfc9846-finished.test.ts",
       "conformance/xml-namespaces.test.ts",
+      "conformance/xml1.0.test.ts",
       "conformance/rfc6120-iq-payloads.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
