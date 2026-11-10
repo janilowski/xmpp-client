@@ -38,6 +38,30 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "probe an IPv4-only TLS peer through localhost DNS",
+    file: "conformance/fixtures/tls-versions.mjs",
+    before: '      host: "127.0.0.1",',
+    after: '      host: "localhost",',
+    suite: "conformance/tls-versions-peer.test.ts",
+    test: "strict localhost authentication / valid",
+  },
+  {
+    name: "disable native TLS probe verification",
+    file: "conformance/fixtures/tls-versions.mjs",
+    before: "      rejectUnauthorized: true,",
+    after: "      rejectUnauthorized: false,",
+    suite: "conformance/tls-versions-peer.test.ts",
+    test: "strict localhost authentication / (wrong-name|untrusted-ca)",
+  },
+  {
+    name: "replace the TLS probe DNS identity with its dial address",
+    file: "conformance/fixtures/tls-versions.mjs",
+    before: '      servername: "localhost",',
+    after: "      servername: undefined,",
+    suite: "conformance/tls-versions-peer.test.ts",
+    test: "strict localhost authentication / valid",
+  },
+  {
     name: "normalize distinct XML element names",
     file: "src/xml/lib/parseDocument.js",
     before: "      tag.name,",
@@ -4367,6 +4391,7 @@ for (const mutation of mutations) {
       "conformance/rfc9846-finished.test.ts",
       "conformance/xml-namespaces.test.ts",
       "conformance/xml1.0.test.ts",
+      "conformance/tls-versions-peer.test.ts",
       "conformance/rfc6120-iq-payloads.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
@@ -4450,7 +4475,8 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc9846-downgrade.test.ts" ||
       mutation.suite === "conformance/rfc9846-client-auth.test.ts" ||
       mutation.suite === "conformance/rfc9846-keyshare.test.ts" ||
-      mutation.suite === "conformance/rfc9846-finished.test.ts"
+      mutation.suite === "conformance/rfc9846-finished.test.ts" ||
+      mutation.suite === "conformance/tls-versions-peer.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.
       cpSync("dist", join(directory, "dist"), { recursive: true });

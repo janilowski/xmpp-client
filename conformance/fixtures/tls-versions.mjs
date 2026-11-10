@@ -143,7 +143,7 @@ const probe = await new Promise((resolve) => {
   let response = "";
   const socket = connect(
     {
-      host: "localhost",
+      host: "127.0.0.1",
       port,
       servername: "localhost",
       ca,
