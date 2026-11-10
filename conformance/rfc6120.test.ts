@@ -41,6 +41,7 @@ import { readFrame } from "./xml.ts";
 // Post-handshake TLS renegotiation binding/refusal (§5.3.5): rfc5746-renegotiation.test.ts.
 // Prepared optional stanza-error by addresses (§8.3.1): rfc7622-error-by.test.ts.
 // Deterministic retry timing: ../src/reconnect/test.js (§3.3).
+// Real failed openings, authenticated retry and cancellation: rfc6120-reconnection.test.ts.
 
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="session"/>';

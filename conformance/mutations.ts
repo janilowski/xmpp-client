@@ -54,6 +54,23 @@ const mutations = [
     test: "malformed native bytes cannot enter public XML dispatch",
   },
   {
+    name: "reset real retry backoff before authentication",
+    file: "src/reconnect/index.js",
+    before: 'if (status === "online") {',
+    after: 'if (status === "connect" || status === "online") {',
+    suite: "conformance/rfc6120-reconnection.test.ts",
+    test: "real failed openings back off, recover and cancel stale retries",
+  },
+  {
+    name: "let a cancelled real retry enter a later generation",
+    file: "src/reconnect/index.js",
+    before:
+      "async () => {\n        if (generation !== this.#generation) {\n          return;\n        }\n        this._timeout = null;",
+    after: "async () => {\n        this._timeout = null;",
+    suite: "conformance/rfc6120-reconnection.test.ts",
+    test: "real failed openings back off, recover and cancel stale retries",
+  },
+  {
     name: "probe an IPv4-only TLS peer through localhost DNS",
     file: "conformance/fixtures/tls-versions.mjs",
     before: '      host: "127.0.0.1",',
@@ -4410,6 +4427,7 @@ for (const mutation of mutations) {
       "conformance/xml1.0.test.ts",
       "conformance/tls-versions-peer.test.ts",
       "conformance/rfc6120-iq-payloads.test.ts",
+      "conformance/rfc6120-reconnection.test.ts",
       "conformance/tls-certificates.ts",
       "conformance/tls-offers.ts",
       "conformance/test-batches.ts",
