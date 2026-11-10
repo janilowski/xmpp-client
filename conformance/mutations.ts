@@ -38,6 +38,22 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "replace hostile UTF-8 with a valid scalar",
+    file: "conformance/rfc7395-utf8.test.ts",
+    before: '["two-byte overlong", [0xc0, 0xaf]],',
+    after: '["two-byte overlong", [0xc2, 0xaf]],',
+    suite: "conformance/rfc7395-utf8.test.ts",
+    test: "rejects two-byte overlong, split 1,",
+  },
+  {
+    name: "replace the public XML byte fault with valid UTF-8",
+    file: "conformance/rfc7395-utf8.test.ts",
+    before: 'const first = [...Buffer.from(HEAD, "ascii"), 0xed];',
+    after: 'const first = [...Buffer.from(HEAD, "ascii"), 0xee];',
+    suite: "conformance/rfc7395-utf8.test.ts",
+    test: "malformed native bytes cannot enter public XML dispatch",
+  },
+  {
     name: "probe an IPv4-only TLS peer through localhost DNS",
     file: "conformance/fixtures/tls-versions.mjs",
     before: '      host: "127.0.0.1",',
@@ -4378,6 +4394,7 @@ for (const mutation of mutations) {
       "conformance/rfc7395-opening.test.ts",
       "conformance/rfc7395-properties.test.ts",
       "conformance/rfc7395-outgoing-framing.test.ts",
+      "conformance/rfc7395-utf8.test.ts",
       "conformance/rfc7395-tls.test.ts",
       "conformance/rfc10015-cipher-offers.test.ts",
       "conformance/rfc9325-cbc.test.ts",
@@ -4460,6 +4477,7 @@ for (const mutation of mutations) {
       "conformance/rfc7622-service-domain.test.ts",
       "conformance/rfc7622-error-by.test.ts",
       "conformance/peer.ts",
+      "conformance/raw-peer.ts",
       "conformance/xml.ts",
     ]) {
       cpSync(file, join(directory, file));

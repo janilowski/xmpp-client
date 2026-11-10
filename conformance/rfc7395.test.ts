@@ -7,6 +7,7 @@ import { once } from "node:events";
 // Outgoing boundaries, raw writes and SM rejection: rfc7395-outgoing-framing.test.ts.
 // Opening dispatch failure, cancellation and races: rfc7395-opening.test.ts.
 // Native PKIX leaf signature/purpose and endpoint checks: rfc7395-tls.test.ts.
+// Native text decoding across continuation frames: rfc7395-utf8.test.ts.
 
 const OPEN =
   '<open xmlns="urn:ietf:params:xml:ns:xmpp-framing" from="example.test" version="1.0" id="peer-1"/>';

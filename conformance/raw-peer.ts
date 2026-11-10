@@ -68,6 +68,15 @@ export class RawPeer {
     return `ws://127.0.0.1:${address.port}/xmpp`;
   }
 
+  /** Inject bytes after the client reaches the intended protocol state. */
+  send(...frames: Uint8Array[]) {
+    for (const socket of this.sockets) {
+      for (const frame of frames) {
+        socket.write(frame);
+      }
+    }
+  }
+
   async stop() {
     for (const socket of this.sockets) {
       socket.destroy();
