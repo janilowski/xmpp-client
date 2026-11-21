@@ -19,14 +19,17 @@ from tlslite.messages import EncryptedExtensions, Finished, ServerHello, ServerK
 
 assert tlslite.__version__ == "0.8.2", "Run bun run test:tls:setup"
 assert version in ("3", "4") and mode in ("none", "offered", "unoffered")
-assert fault in ("none", "finished")
-assert fault == "none" or (version == "4" and mode == "offered")
+assert fault in ("none", "finished", "compression")
+assert fault != "finished" or (version == "4" and mode == "offered")
 SOCKET_TIMEOUT_SECONDS = 4
 ALERT_DRAIN_SECONDS = 0.2
 SERVER_HELLO_PAUSE_SECONDS = 0.05
 MAX_HTTP_BYTES = 16384
 MAX_TLS_RECORD_BYTES = 18432
+MAX_TLS_CAPTURE_BYTES = 262144
 TLS_RECORD_HEADER_BYTES = 5
+SERVER_HELLO_COMPRESSION_OFFSET = 41
+DEFLATE_COMPRESSION = 1
 HTTP_PROTOCOL = b"http/1.1"
 UNOFFERED_PROTOCOL = b"audit-unoffered"
 X25519 = "x25519"
@@ -50,6 +53,7 @@ class ObservedSocket:
         self.record = record
         self.pending = bytearray()
         self.encrypted = False
+        self.captured = 0
 
     def __getattr__(self, name):
         return getattr(self.raw, name)
@@ -60,7 +64,16 @@ class ObservedSocket:
         pass
 
     def recv(self, size):
-        data = self.raw.recv(size)
+        try:
+            data = self.raw.recv(size)
+        except ConnectionResetError:
+            self.record["closed"] = "reset"
+            raise
+        if not data:
+            self.record["closed"] = "eof"
+        if fault == "compression":
+            self.captured += len(data)
+            assert self.captured <= MAX_TLS_CAPTURE_BYTES, "Unbounded TLS capture"
         self.pending.extend(data)
         while len(self.pending) >= TLS_RECORD_HEADER_BYTES:
             length = int.from_bytes(self.pending[3:TLS_RECORD_HEADER_BYTES], "big")
@@ -69,12 +82,19 @@ class ObservedSocket:
                 break
             kind = self.pending[0]
             payload = self.pending[TLS_RECORD_HEADER_BYTES:TLS_RECORD_HEADER_BYTES + length]
-            if version == "3" and kind == ContentType.alert and not self.encrypted:
+            if fault == "compression":
+                self.record["wire"].append({"kind": kind, "payload": bytes(payload).hex()})
+            # TLS 1.3 compatibility CCS does not encrypt later type-21 records;
+            # protected TLS 1.3 alerts have outer type application_data.
+            plaintext_alert = ((version == "3" and not self.encrypted) or
+                               (version == "4" and fault == "compression"))
+            if plaintext_alert and kind == ContentType.alert:
                 assert len(payload) == 2, "Malformed plaintext alert"
                 self.record["alerts"].append(list(payload))
             if kind == ContentType.change_cipher_spec:
                 self.encrypted = True
             del self.pending[:TLS_RECORD_HEADER_BYTES + length]
+        self.record["wire_pending"] = len(self.pending)
         return data
 
 
@@ -83,6 +103,19 @@ class ObservedTLS(TLSConnection):
         super().__init__(raw)
         self.record = record
 
+    def _getNextRecordFromSocket(self):
+        # Pinned tlslite marks decrypted TLS 1.3 inner records with version3.4
+        # before defragmentation; plaintext alert records retain legacy3.3.
+        for result in super()._getNextRecordFromSocket():
+            if isinstance(result, tuple) and version == "4":
+                header, parser = result
+                if header.type == ContentType.alert and header.version == (3, 4):
+                    data = list(parser.bytes[parser.index:])
+                    self.record["protected_alerts"].append(data)
+                    if fault == "compression":
+                        self.record["alerts"].append(data)
+            yield result
+
     def _getNextRecord(self):
         # Observe the defragmented ClientHello and authenticated TLS 1.3 alerts
         # before parsers consume them; no application implementation is involved.
@@ -90,9 +123,11 @@ class ObservedTLS(TLSConnection):
             if isinstance(result, tuple):
                 header, parser = result
                 data = bytes(parser.bytes[parser.index:])
-                if header.type == ContentType.handshake and data[0] == HandshakeType.client_hello:
-                    self.record["hellos"].append(data.hex())
-                elif version == "4" and header.type == ContentType.alert:
+                if header.type == ContentType.handshake:
+                    self.record["client_messages"].append(data[0])
+                    if data[0] == HandshakeType.client_hello:
+                        self.record["hellos"].append(data.hex())
+                elif version == "4" and fault != "compression" and header.type == ContentType.alert:
                     self.record["alerts"].append(list(data))
             yield result
 
@@ -112,8 +147,24 @@ class ObservedTLS(TLSConnection):
         message.write = serialize
 
     def _sendMsg(self, message, *args, **kwargs):
-        if isinstance(message, ServerHello) and version == "3":
-            self._select_protocol(message)
+        if isinstance(message, ServerHello):
+            if version == "3":
+                self._select_protocol(message)
+            original_write = message.write
+
+            def serialize_hello():
+                original = original_write()
+                sent = bytearray(original)
+                if fault == "compression":
+                    # Change only the selected compression byte, before the
+                    # ordinary transcript hash and record processing.
+                    offset = SERVER_HELLO_COMPRESSION_OFFSET + len(message.session_id)
+                    assert sent[offset] == 0
+                    sent[offset] = DEFLATE_COMPRESSION
+                self.record["server_hellos"].append({"original": bytes(original).hex(),
+                                                     "sent": bytes(sent).hex()})
+                return sent
+            message.write = serialize_hello
         yield from super()._sendMsg(message, *args, **kwargs)
         if isinstance(message, ServerHello) and version == "3":
             # Let a client report a plaintext fatal alert before the remaining
@@ -161,7 +212,9 @@ port = listener.getsockname()[1]
 
 
 def serve(raw):
-    record = {"hellos": [], "responses": [], "session": None, "group": None,
+    record = {"hellos": [], "responses": [], "server_hellos": [], "wire": [],
+              "wire_pending": 0, "protected_alerts": [],
+              "client_messages": [], "closed": None, "session": None, "group": None,
               "requests": [], "upgrades": [], "alerts": [], "errors": [], "finished": []}
     records.append(record)
     raw.settimeout(SOCKET_TIMEOUT_SECONDS)
@@ -207,7 +260,7 @@ def serve(raw):
                               f"Content-Length: {len(body)}\r\nConnection: close\r\n\r\n").encode() + body)
     except Exception as error:
         record["errors"].append({"name": type(error).__name__, "message": str(error)})
-        if version == "3":
+        if version == "3" or fault == "compression":
             try:
                 raw.settimeout(ALERT_DRAIN_SECONDS)
                 while observed.recv(MAX_HTTP_BYTES):
@@ -216,7 +269,7 @@ def serve(raw):
                 pass
     finally:
         with condition:
-            if fault == "finished":
+            if fault in ("finished", "compression"):
                 # Keep the peer's descriptor open until parent release. Neither
                 # fixture cleanup nor a server FIN may manufacture refusal.
                 held_sockets.add(raw)

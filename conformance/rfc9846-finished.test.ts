@@ -36,6 +36,7 @@ type Connection = {
   requests: string[];
   upgrades: { path: string; protocol: string }[];
   alerts: number[][];
+  protected_alerts: number[][];
   errors: { name: string; message: string }[];
 };
 type Result = {
@@ -120,6 +121,11 @@ function verifyRefusal(result: Result, records: Connection[]) {
       [DECRYPT_ERROR, GENERAL_ERROR].includes(record.alerts[0][1]),
       "Wrong Finished refusal alert",
     );
+    assert.deepEqual(
+      record.protected_alerts,
+      record.alerts,
+      "Protected record observation lost the authenticated refusal alert",
+    );
     assert.equal(record.errors.length, 1);
     assert.equal(
       record.errors[0].name,
@@ -190,12 +196,15 @@ test("RFC 9846 §§4.5.3/6.2: refusal oracle rejects acceptance, wrong alerts an
     requests: [],
     upgrades: [],
     alerts: [[2, 51]],
+    protected_alerts: [[2, 51]],
     errors: [{ name: "TLSRemoteAlert", message: "decrypt_error" }],
   };
   const refused: Result = { phase: "result", accepted: false };
   expect(() => verifyRefusal(refused, [record])).not.toThrow();
   expect(() =>
-    verifyRefusal(refused, [{ ...record, alerts: [[2, 117]] }]),
+    verifyRefusal(refused, [
+      { ...record, alerts: [[2, 117]], protected_alerts: [[2, 117]] },
+    ]),
   ).not.toThrow();
   expect(() =>
     verifyRefusal({ ...refused, accepted: true }, [record]),
@@ -205,17 +214,24 @@ test("RFC 9846 §§4.5.3/6.2: refusal oracle rejects acceptance, wrong alerts an
   ).toThrow();
   expect(() => verifyRefusal(refused, [])).toThrow();
   for (const broken of [
-    { ...record, alerts: [] },
-    { ...record, alerts: [[1, 51]] },
-    { ...record, alerts: [[1, 117]] },
-    { ...record, alerts: [[2, 51, 0]] },
+    { ...record, protected_alerts: [] },
+    { ...record, protected_alerts: [[2, 50]] },
+    { ...record, alerts: [], protected_alerts: [] },
+    { ...record, alerts: [[1, 51]], protected_alerts: [[1, 51]] },
+    { ...record, alerts: [[1, 117]], protected_alerts: [[1, 117]] },
+    { ...record, alerts: [[2, 51, 0]], protected_alerts: [[2, 51, 0]] },
     ...[0, 20, 47, 50, 255].map((description) => ({
       ...record,
       alerts: [[2, description]],
+      protected_alerts: [[2, description]],
     })),
     {
       ...record,
       alerts: [
+        [2, 51],
+        [2, 51],
+      ],
+      protected_alerts: [
         [2, 51],
         [2, 51],
       ],

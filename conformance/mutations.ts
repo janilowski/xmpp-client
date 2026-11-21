@@ -38,6 +38,46 @@ const XML_ORDER_DISPATCH = `      if (!resumed) {
 
 const mutations = [
   {
+    name: "omit the server compression fault",
+    file: "conformance/fixtures/tls-alpn.py",
+    before: "sent[offset] = DEFLATE_COMPRESSION",
+    after: "sent[offset] = 0",
+    suite: "conformance/rfc9846-compression.test.ts",
+    test: "source direct, TLS 1.3 invalid compression$",
+  },
+  {
+    name: "accept an unrelated compression refusal alert",
+    file: "conformance/rfc9846-compression.test.ts",
+    before: "[ILLEGAL_PARAMETER, GENERAL_ERROR].includes(",
+    after: "[ILLEGAL_PARAMETER, GENERAL_ERROR, DECODE_ERROR].includes(",
+    suite: "conformance/rfc9846-compression.test.ts",
+    test: "compression alerts permit general_error",
+  },
+  {
+    name: "reject the permitted generic compression alert",
+    file: "conformance/rfc9846-compression.test.ts",
+    before: "[ILLEGAL_PARAMETER, GENERAL_ERROR].includes(",
+    after: "[ILLEGAL_PARAMETER].includes(",
+    suite: "conformance/rfc9846-compression.test.ts",
+    test: "compression alerts permit general_error",
+  },
+  {
+    name: "ignore trailing client handshake records after refusal",
+    file: "conformance/rfc9846-compression.test.ts",
+    before: 'Buffer.concat(handshake).toString("hex"),',
+    after: 'record.hellos.join(""),',
+    suite: "conformance/rfc9846-compression.test.ts",
+    test: "Compression refusal oracle rejects acceptance",
+  },
+  {
+    name: "lose the protected TLS alert observation",
+    file: "conformance/fixtures/tls-alpn.py",
+    before: 'self.record["protected_alerts"].append(data)',
+    after: "pass",
+    suite: "conformance/rfc9846-finished.test.ts",
+    test: "source direct, invalid server Finished",
+  },
+  {
     name: "replace hostile UTF-8 with a valid scalar",
     file: "conformance/rfc7395-utf8.test.ts",
     before: '["two-byte overlong", [0xc0, 0xaf]],',
@@ -4423,6 +4463,7 @@ for (const mutation of mutations) {
       "conformance/rfc9846-client-auth.test.ts",
       "conformance/rfc9846-keyshare.test.ts",
       "conformance/rfc9846-finished.test.ts",
+      "conformance/rfc9846-compression.test.ts",
       "conformance/xml-namespaces.test.ts",
       "conformance/xml1.0.test.ts",
       "conformance/tls-versions-peer.test.ts",
@@ -4512,6 +4553,7 @@ for (const mutation of mutations) {
       mutation.suite === "conformance/rfc9846-client-auth.test.ts" ||
       mutation.suite === "conformance/rfc9846-keyshare.test.ts" ||
       mutation.suite === "conformance/rfc9846-finished.test.ts" ||
+      mutation.suite === "conformance/rfc9846-compression.test.ts" ||
       mutation.suite === "conformance/tls-versions-peer.test.ts"
     ) {
       // Source mutations retain an independently built artifact as a control.

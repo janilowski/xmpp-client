@@ -196,7 +196,14 @@ not established by these Bun tests; there is no Web API cipher-policy control.
 Initial Bun, Chromium and Firefox ClientHellos offer only null TLS record
 compression. Independent non-null/list parser controls guard that observation.
 This is bounded offer evidence for RFC 9325 §3.3 and RFC 9846 §4.2.2, not proof
-of hostile server-selection or resumed-session handling. Certificate compression
+of resumed-session handling. Separate Bun source/ESM/minified WSS/discovery
+tests reject an unoffered nonzero ServerHello compression choice in TLS 1.2/1.3,
+before further handshake/application traffic, with client closure observed
+before cleanup. Trusted null-compression and native Node controls remain valid.
+Bun 1.4.4 sends `decode_error` instead of the required TLS 1.3
+`illegal_parameter` or permitted `general_error` (#112). Only that exact alert
+code has a versioned expected failure; abort and isolation checks remain strict.
+Browser hostile-selection behavior is unverified. Certificate compression
 and WebSocket permessage-deflate are separate mechanisms.
 The same initial offers request SHA-256 signatures, omit Truncated HMAC and,
 when present, list only uncompressed EC points (RFC 9325 §§4.2.1/4.5/4.6).
